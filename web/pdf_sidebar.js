@@ -25,6 +25,7 @@ const SidebarView = {
   OUTLINE: 2,
   ATTACHMENTS: 3,
   LAYERS: 4,
+  ANNOTATIONS: 9
 };
 
 /**
@@ -92,10 +93,12 @@ class PDFSidebar {
     this.thumbnailButton = elements.thumbnailButton;
     this.outlineButton = elements.outlineButton;
     this.attachmentsButton = elements.attachmentsButton;
+    this.annotationsButton = elements.annotationsButton;
 
     this.thumbnailView = elements.thumbnailView;
     this.outlineView = elements.outlineView;
     this.attachmentsView = elements.attachmentsView;
+    this.annotationsView = elements.annotationsView;
 
     this.eventBus = eventBus;
     this.l10n = l10n;
@@ -196,6 +199,11 @@ class PDFSidebar {
           return false;
         }
         break;
+      case SidebarView.ANNOTATIONS:
+        if (this.annotationsButton.disabled) {
+          return false;
+        }
+        break;
       default:
         console.error(`PDFSidebar._switchView: "${view}" is not a valid view.`);
         return false;
@@ -205,25 +213,21 @@ class PDFSidebar {
     this.active = view;
 
     // Update the CSS classes, for all buttons...
-    this.thumbnailButton.classList.toggle(
-      "toggled",
-      view === SidebarView.THUMBS
-    );
-    this.outlineButton.classList.toggle(
-      "toggled",
-      view === SidebarView.OUTLINE
-    );
-    this.attachmentsButton.classList.toggle(
-      "toggled",
-      view === SidebarView.ATTACHMENTS
-    );
+    this.thumbnailButton.classList.toggle('toggled',
+      view === SidebarView.THUMBS);
+    this.outlineButton.classList.toggle('toggled',
+      view === SidebarView.OUTLINE);
+    this.attachmentsButton.classList.toggle('toggled',
+      view === SidebarView.ATTACHMENTS);
+    this.annotationsButton.classList.toggle('toggled',
+      view === SidebarView.ANNOTATIONS);
     // ... and for all views.
-    this.thumbnailView.classList.toggle("hidden", view !== SidebarView.THUMBS);
-    this.outlineView.classList.toggle("hidden", view !== SidebarView.OUTLINE);
-    this.attachmentsView.classList.toggle(
-      "hidden",
-      view !== SidebarView.ATTACHMENTS
-    );
+    this.thumbnailView.classList.toggle('hidden', view !== SidebarView.THUMBS);
+    this.outlineView.classList.toggle('hidden', view !== SidebarView.OUTLINE);
+    this.attachmentsView.classList.toggle('hidden',
+      view !== SidebarView.ATTACHMENTS);
+    this.annotationsView.classList.toggle('hidden',
+      view !== SidebarView.ANNOTATIONS);
 
     if (forceOpen && !this.isOpen) {
       this.open();
@@ -427,6 +431,10 @@ class PDFSidebar {
 
     this.attachmentsButton.addEventListener("click", () => {
       this.switchView(SidebarView.ATTACHMENTS);
+    });
+    
+    this.annotationsButton.addEventListener('click', () => {
+      this.switchView(SidebarView.ANNOTATIONS);
     });
 
     // Disable/enable views.

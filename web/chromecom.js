@@ -246,10 +246,9 @@ if (window === top) {
     // If the runtime is still available, the unload is most likely a normal
     // tab closure. Otherwise it is most likely an extension reload.
     if (!isRuntimeAvailable()) {
-      localStorage.setItem(
-        "unload-" + Date.now() + "-" + document.hidden + "-" + location.href,
-        JSON.stringify(history.state)
-      );
+      // localStorage.setItem(
+      //   'unload-' + Date.now() + '-' + document.hidden + '-' + location.href,
+      //   JSON.stringify(history.state));
     }
   });
 }

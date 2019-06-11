@@ -1844,18 +1844,35 @@ var PartialEvaluator = (function PartialEvaluatorClosure() {
             ty = w1 * textState.fontSize + charSpacing;
             height += ty;
           }
+  
+          function matrixToDegrees(matrix) {
+            let radians = Math.atan2(matrix[1], matrix[0]);
+            if (radians < 0) {
+              radians += (2 * Math.PI);
+            }
+            let degrees = Math.round(radians * (180 / Math.PI));
+            degrees = degrees % 360;
+            if (degrees < 0) {
+              degrees += 360;
+            }
+            return degrees;
+          }
+  
+          let charWidth = textChunk.width + width - prevWidth;
+          let charHeight = textState.fontSize;
+          let rect = Util.getAxialAlignedBoundingBox(
+            [0, 0, charWidth, charHeight], textState.textMatrix);
+  
+          textChunk.chars.push({
+            c: glyphUnicode,
+            rect,
+            fontSize: textState.fontSize * textChunk.textAdvanceScale,
+            rotation: matrixToDegrees(textState.textMatrix)
+          });
+          
           textState.translateTextMatrix(tx, ty);
 
           textChunk.str.push(glyphUnicode);
-          textChunk.chars.push({
-            glyphUnicode,
-            vertical: !!font.vertical,
-            x1: textChunk.transform[4]+prevWidth*textChunk.textAdvanceScale,
-            x2: textChunk.transform[4]+(textChunk.width+width)*textChunk.textAdvanceScale,
-            y1: textChunk.transform[5],
-            y2: textChunk.transform[5]+textState.fontSize*textChunk.textAdvanceScale,
-            fs: textState.fontSize*textChunk.textAdvanceScale
-          });
         }
 
         if (!font.vertical) {

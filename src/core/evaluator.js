@@ -1831,7 +1831,6 @@ var PartialEvaluator = (function PartialEvaluatorClosure() {
           }
   
           let prevWidth = textChunk.width + width;
-          let prevHeight = textChunk.height + height;
           
           var tx = 0;
           var ty = 0;
@@ -1858,17 +1857,44 @@ var PartialEvaluator = (function PartialEvaluatorClosure() {
             return degrees;
           }
   
-          let charWidth = textChunk.width + width - prevWidth;
-          let charHeight = textState.fontSize;
           let m = Util.transform(textState.ctm, textState.textMatrix);
+          let rotation = matrixToDegrees(m);
+  
+          let ascent = font.ascent;
+          let descent = font.descent;
+          if (ascent && descent) {
+            if (ascent > 1) {
+              ascent = 0.75;
+            }
+            if (descent < -0.5) {
+              descent = -0.25;
+            }
+          }
+          else {
+            ascent = 0.75;
+            descent = -0.25;
+          }
+  
+          let charWidth = textChunk.width + width - prevWidth;
           let rect = Util.getAxialAlignedBoundingBox(
-            [0, 0, charWidth, charHeight], m);
+            [0, textState.fontSize * descent,
+              charWidth, textState.fontSize * ascent], m);
+  
+          let baselineRect = Util.getAxialAlignedBoundingBox([0, 0, 0, 0], m);
+          let baseline = 0;
+          if (rotation === 0 || rotation === 180) {
+            baseline = baselineRect[1];
+          }
+          else if (rotation === 90 || rotation === 270) {
+            baseline = baselineRect[0];
+          }
   
           textChunk.chars.push({
             c: glyphUnicode,
             rect,
             fontSize: textState.fontSize * textChunk.textAdvanceScale,
-            rotation: matrixToDegrees(m)
+            baseline,
+            rotation
           });
           
           textState.translateTextMatrix(tx, ty);

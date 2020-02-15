@@ -117,6 +117,26 @@ var WorkerMessageHandler = {
       );
     }
 
+    if (typeof PDFJSDev === "undefined" || PDFJSDev.test("GENERIC")) {
+      // Fail early, and predictably, rather than having (some) fonts fail to
+      // load/render with slightly cryptic error messages in environments where
+      // the `Array.prototype` has been *incorrectly* extended.
+      //
+      // PLEASE NOTE: We do *not* want to slow down font parsing by adding
+      //              `hasOwnProperty` checks all over the code-base.
+      const enumerableProperties = [];
+      for (const property in []) {
+        enumerableProperties.push(property);
+      }
+      if (enumerableProperties.length) {
+        throw new Error(
+          "The `Array.prototype` contains unexpected enumerable properties: " +
+            enumerableProperties.join(", ") +
+            "; thus breaking e.g. `for...in` iteration of `Array`s."
+        );
+      }
+    }
+
     var docId = docParams.docId;
     var docBaseUrl = docParams.docBaseUrl;
     var workerHandlerName = docParams.docId + "_worker";
@@ -593,16 +613,22 @@ var WorkerMessageHandler = {
 
     handler.on("Terminate", function wphTerminate(data) {
       terminated = true;
+
+      const waitOn = [];
       if (pdfManager) {
         pdfManager.terminate(new AbortException("Worker was terminated."));
+
+        const cleanupPromise = pdfManager.cleanup();
+        waitOn.push(cleanupPromise);
+
         pdfManager = null;
+      } else {
+        clearPrimitiveCaches();
       }
       if (cancelXHRs) {
         cancelXHRs(new AbortException("Worker was terminated."));
       }
-      clearPrimitiveCaches();
 
-      var waitOn = [];
       WorkerTasks.forEach(function(task) {
         waitOn.push(task.finished);
         task.terminate();

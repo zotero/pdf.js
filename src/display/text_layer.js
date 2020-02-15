@@ -594,26 +594,26 @@ var renderTextLayer = (function renderTextLayerClosure() {
     },
 
     _render: function TextLayer_render(timeout) {
-      let capability = createPromiseCapability();
+      const capability = createPromiseCapability();
       let styleCache = Object.create(null);
 
       // The temporary canvas is used to measure text length in the DOM.
-      let canvas = document.createElement("canvas");
+      const canvas = document.createElement("canvas");
       if (
         typeof PDFJSDev === "undefined" ||
-        PDFJSDev.test("FIREFOX || MOZCENTRAL || GENERIC")
+        PDFJSDev.test("MOZCENTRAL || GENERIC")
       ) {
         canvas.mozOpaque = true;
       }
       this._layoutTextCtx = canvas.getContext("2d", { alpha: false });
 
       if (this._textContent) {
-        let textItems = this._textContent.items;
-        let textStyles = this._textContent.styles;
+        const textItems = this._textContent.items;
+        const textStyles = this._textContent.styles;
         this._processItems(textItems, textStyles);
         capability.resolve();
       } else if (this._textContentStream) {
-        let pump = () => {
+        const pump = () => {
           this._reader.read().then(({ value, done }) => {
             if (done) {
               capability.resolve();
@@ -658,7 +658,6 @@ var renderTextLayer = (function renderTextLayerClosure() {
         expand(this);
         this._bounds = null;
       }
-      const NO_PADDING = "0 0 0 0";
       const transformBuf = [],
         paddingBuf = [];
 
@@ -701,10 +700,7 @@ var renderTextLayer = (function renderTextLayerClosure() {
             paddingBuf.push(0);
           }
 
-          const padding = paddingBuf.join(" ");
-          if (padding !== NO_PADDING) {
-            div.style.padding = padding;
-          }
+          div.style.padding = paddingBuf.join(" ");
           if (transformBuf.length) {
             div.style.transform = transformBuf.join(" ");
           }

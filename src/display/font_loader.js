@@ -271,17 +271,17 @@ if (typeof PDFJSDev !== "undefined" && PDFJSDev.test("MOZCENTRAL")) {
         );
       }
       function spliceString(s, offset, remove, insert) {
-        let chunk1 = s.substring(0, offset);
-        let chunk2 = s.substring(offset + remove);
+        const chunk1 = s.substring(0, offset);
+        const chunk2 = s.substring(offset + remove);
         return chunk1 + insert + chunk2;
       }
       let i, ii;
 
       // The temporary canvas is used to determine if fonts are loaded.
-      let canvas = document.createElement("canvas");
+      const canvas = document.createElement("canvas");
       canvas.width = 1;
       canvas.height = 1;
-      let ctx = canvas.getContext("2d");
+      const ctx = canvas.getContext("2d");
 
       let called = 0;
       function isFontReady(name, callback) {
@@ -294,7 +294,7 @@ if (typeof PDFJSDev !== "undefined" && PDFJSDev.test("MOZCENTRAL")) {
         }
         ctx.font = "30px " + name;
         ctx.fillText(".", 0, 20);
-        let imageData = ctx.getImageData(0, 0, 1, 1);
+        const imageData = ctx.getImageData(0, 0, 1, 1);
         if (imageData.data[3] > 0) {
           callback();
           return;
@@ -309,7 +309,7 @@ if (typeof PDFJSDev !== "undefined" && PDFJSDev.test("MOZCENTRAL")) {
       // TODO: This could maybe be made faster by avoiding the btoa of the full
       // font by splitting it in chunks before hand and padding the font id.
       let data = this._loadTestFont;
-      let COMMENT_OFFSET = 976; // has to be on 4 byte boundary (for checksum)
+      const COMMENT_OFFSET = 976; // has to be on 4 byte boundary (for checksum)
       data = spliceString(
         data,
         COMMENT_OFFSET,
@@ -317,8 +317,8 @@ if (typeof PDFJSDev !== "undefined" && PDFJSDev.test("MOZCENTRAL")) {
         loadTestFontId
       );
       // CFF checksum is important for IE, adjusting it
-      let CFF_CHECKSUM_OFFSET = 16;
-      let XXXX_VALUE = 0x58585858; // the "comment" filled with 'X'
+      const CFF_CHECKSUM_OFFSET = 16;
+      const XXXX_VALUE = 0x58585858; // the "comment" filled with 'X'
       let checksum = int32(data, CFF_CHECKSUM_OFFSET);
       for (i = 0, ii = loadTestFontId.length - 3; i < ii; i += 4) {
         checksum = (checksum - XXXX_VALUE + int32(loadTestFontId, i)) | 0;
@@ -334,21 +334,20 @@ if (typeof PDFJSDev !== "undefined" && PDFJSDev.test("MOZCENTRAL")) {
       const rule = `@font-face {font-family:"${loadTestFontId}";src:${url}}`;
       this.insertRule(rule);
 
-      let names = [];
+      const names = [];
       for (i = 0, ii = fonts.length; i < ii; i++) {
         names.push(fonts[i].loadedName);
       }
       names.push(loadTestFontId);
 
-      let div = document.createElement("div");
-      div.setAttribute(
-        "style",
-        "visibility: hidden;" +
-          "width: 10px; height: 10px;" +
-          "position: absolute; top: 0px; left: 0px;"
-      );
+      const div = document.createElement("div");
+      div.style.visibility = "hidden";
+      div.style.width = div.style.height = "10px";
+      div.style.position = "absolute";
+      div.style.top = div.style.left = "0px";
+
       for (i = 0, ii = names.length; i < ii; ++i) {
-        let span = document.createElement("span");
+        const span = document.createElement("span");
         span.textContent = "Hi";
         span.style.fontFamily = names[i];
         div.appendChild(span);
@@ -383,7 +382,7 @@ class FontFaceObject {
   ) {
     this.compiledGlyphs = Object.create(null);
     // importing translated data
-    for (let i in translatedData) {
+    for (const i in translatedData) {
       this[i] = translatedData[i];
     }
     this.isEvalSupported = isEvalSupported !== false;

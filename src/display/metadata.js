@@ -24,10 +24,10 @@ class Metadata {
     data = this._repair(data);
 
     // Convert the string to an XML document.
-    let parser = new SimpleXMLParser();
+    const parser = new SimpleXMLParser();
     const xmlDocument = parser.parseFromString(data);
 
-    this._metadata = Object.create(null);
+    this._metadataMap = new Map();
 
     if (xmlDocument) {
       this._parse(xmlDocument);
@@ -37,9 +37,9 @@ class Metadata {
   _repair(data) {
     // Start by removing any "junk" before the first tag (see issue 10395).
     return data
-      .replace(/^([^<]+)/, "")
+      .replace(/^[^<]+/, "")
       .replace(/>\\376\\377([^<]+)/g, function(all, codes) {
-        let bytes = codes
+        const bytes = codes
           .replace(/\\([0-3])([0-7])([0-7])/g, function(code, d1, d2, d3) {
             return String.fromCharCode(d1 * 64 + d2 * 8 + d3 * 1);
           })
@@ -61,13 +61,13 @@ class Metadata {
 
         let chars = "";
         for (let i = 0, ii = bytes.length; i < ii; i += 2) {
-          let code = bytes.charCodeAt(i) * 256 + bytes.charCodeAt(i + 1);
+          const code = bytes.charCodeAt(i) * 256 + bytes.charCodeAt(i + 1);
           if (
-            code >= 32 &&
-            code < 127 &&
-            code !== 60 &&
-            code !== 62 &&
-            code !== 38
+            code >= /* Space = */ 32 &&
+            code < /* Delete = */ 127 &&
+            code !== /* '<' = */ 60 &&
+            code !== /* '>' = */ 62 &&
+            code !== /* '&' = */ 38
           ) {
             chars += String.fromCharCode(code);
           } else {
@@ -90,40 +90,43 @@ class Metadata {
       }
     }
 
-    let nodeName = rdf ? rdf.nodeName.toLowerCase() : null;
+    const nodeName = rdf ? rdf.nodeName.toLowerCase() : null;
     if (!rdf || nodeName !== "rdf:rdf" || !rdf.hasChildNodes()) {
       return;
     }
 
-    let children = rdf.childNodes;
+    const children = rdf.childNodes;
     for (let i = 0, ii = children.length; i < ii; i++) {
-      let desc = children[i];
+      const desc = children[i];
       if (desc.nodeName.toLowerCase() !== "rdf:description") {
         continue;
       }
 
       for (let j = 0, jj = desc.childNodes.length; j < jj; j++) {
         if (desc.childNodes[j].nodeName.toLowerCase() !== "#text") {
-          let entry = desc.childNodes[j];
-          let name = entry.nodeName.toLowerCase();
+          const entry = desc.childNodes[j];
+          const name = entry.nodeName.toLowerCase();
 
-          this._metadata[name] = entry.textContent.trim();
+          this._metadataMap.set(name, entry.textContent.trim());
         }
       }
     }
   }
 
   get(name) {
-    const data = this._metadata[name];
-    return typeof data !== "undefined" ? data : null;
+    return this._metadataMap.has(name) ? this._metadataMap.get(name) : null;
   }
 
   getAll() {
-    return this._metadata;
+    const obj = Object.create(null);
+    for (const [key, value] of this._metadataMap) {
+      obj[key] = value;
+    }
+    return obj;
   }
 
   has(name) {
-    return typeof this._metadata[name] !== "undefined";
+    return this._metadataMap.has(name);
   }
 }
 

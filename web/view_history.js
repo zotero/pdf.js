@@ -21,8 +21,8 @@ const DEFAULT_VIEW_HISTORY_CACHE_SIZE = 20;
  *
  * The way that the view parameters are stored depends on how PDF.js is built,
  * for 'gulp <flag>' the following cases exist:
- *  - FIREFOX or MOZCENTRAL - uses sessionStorage.
- *  - GENERIC or CHROME     - uses localStorage, if it is available.
+ *  - MOZCENTRAL        - uses sessionStorage.
+ *  - GENERIC or CHROME - uses localStorage, if it is available.
  */
 class ViewHistory {
   constructor(fingerprint, cacheSize = DEFAULT_VIEW_HISTORY_CACHE_SIZE) {
@@ -55,22 +55,22 @@ class ViewHistory {
   }
 
   async _writeToStorage() {
+    return;
     const databaseStr = JSON.stringify(this.database);
 
-    if (typeof PDFJSDev !== 'undefined' &&
-        PDFJSDev.test('FIREFOX || MOZCENTRAL')) {
-      // sessionStorage.setItem('pdfjs.history', databaseStr);
+    if (typeof PDFJSDev !== "undefined" && PDFJSDev.test("MOZCENTRAL")) {
+      sessionStorage.setItem("pdfjs.history", databaseStr);
       return;
     }
-    // localStorage.setItem('pdfjs.history', databaseStr);
+    localStorage.setItem("pdfjs.history", databaseStr);
   }
 
   async _readFromStorage() {
-    if (typeof PDFJSDev !== 'undefined' &&
-        PDFJSDev.test('FIREFOX || MOZCENTRAL')) {
-      // return sessionStorage.getItem('pdfjs.history');
+    return;
+    if (typeof PDFJSDev !== "undefined" && PDFJSDev.test("MOZCENTRAL")) {
+      return sessionStorage.getItem("pdfjs.history");
     }
-    // return localStorage.getItem('pdfjs.history');
+    return localStorage.getItem("pdfjs.history");
   }
 
   async set(name, val) {

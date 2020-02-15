@@ -60,6 +60,13 @@
        "link": false,
        "type": "eq"
     },
+    {  "id": "issue11549",
+       "file": "pdfs/issue11549_reduced.pdf",
+       "md5": "a1ea636f413e02e10dbdf379ab4a99ae",
+       "rounds": 1,
+       "link": false,
+       "type": "eq"
+    },
     {  "id": "issue1293",
        "file": "pdfs/issue1293r.pdf",
        "md5": "4a098f5051f34fab036f5bbe88f8deef",
@@ -1419,6 +1426,12 @@
        "lastPage": 1,
        "type": "eq"
     },
+    {  "id": "issue11403",
+       "file": "pdfs/issue11403_reduced.pdf",
+       "md5": "08287b64f442cb7c329b97c4774aa1cd",
+       "rounds": 1,
+       "type": "eq"
+    },
     {  "id": "issue11139",
        "file": "pdfs/issue11139.pdf",
        "md5": "006dd4f4bb1878bc14a12072d81a4524",
@@ -1594,6 +1607,14 @@
        "link": true,
        "lastPage": 1,
        "type": "eq"
+    },
+    {  "id": "issue11362",
+       "file": "pdfs/issue11362.pdf",
+       "md5": "bcb08162d4bff1d32ead8b563e866c93",
+       "rounds": 1,
+       "link": false,
+       "type": "eq",
+       "annotations": true
     },
     {  "id": "issue11385",
        "file": "pdfs/issue11385.pdf",
@@ -2927,6 +2948,14 @@
       "link": true,
       "type": "eq"
     },
+    {  "id": "issue1877",
+       "file": "pdfs/issue1877.pdf",
+       "md5": "feac01f414f2e6792e4d3174944622f5",
+       "rounds": 1,
+       "link": true,
+       "lastPage": 1,
+       "type": "eq"
+    },
     {  "id": "issue7308",
        "file": "pdfs/issue7308.pdf",
        "md5": "ba2e23d3af93ac2c634d77ccbe2e79d5",
@@ -3006,6 +3035,13 @@
        "rounds": 1,
        "link": true,
        "lastPage": 1,
+       "type": "eq"
+    },
+    {  "id": "issue11578",
+       "file": "pdfs/issue11578_reduced.pdf",
+       "md5": "6cefb4bdfae2fa25e5585374735e321f",
+       "rounds": 1,
+       "link": false,
        "type": "eq"
     },
     {  "id": "issue4890",

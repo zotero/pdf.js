@@ -371,8 +371,8 @@ class PDFSidebar {
       return;
     }
 
-    const removeNotification = view => {
-      switch (view) {
+    const removeNotification = sidebarView => {
+      switch (sidebarView) {
         case SidebarView.OUTLINE:
           this.outlineButton.classList.remove(UI_NOTIFICATION_CLASS);
           break;
@@ -438,7 +438,7 @@ class PDFSidebar {
     });
 
     // Disable/enable views.
-    this.eventBus.on("outlineloaded", evt => {
+    this.eventBus._on("outlineloaded", evt => {
       const outlineCount = evt.outlineCount;
 
       this.outlineButton.disabled = !outlineCount;
@@ -452,7 +452,7 @@ class PDFSidebar {
       }
     });
 
-    this.eventBus.on("attachmentsloaded", evt => {
+    this.eventBus._on("attachmentsloaded", evt => {
       if (evt.attachmentsCount) {
         this.attachmentsButton.disabled = false;
 
@@ -481,7 +481,7 @@ class PDFSidebar {
     });
 
     // Update the thumbnailViewer, if visible, when exiting presentation mode.
-    this.eventBus.on("presentationmodechanged", evt => {
+    this.eventBus._on("presentationmodechanged", evt => {
       if (!evt.active && !evt.switchInProgress && this.isThumbnailViewVisible) {
         this._updateThumbnailViewer();
       }

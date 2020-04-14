@@ -75,8 +75,7 @@ class AnnotationLayerBuilder {
         'Caret',
         'Ink',
         'Squiggly',
-        'StrikeOut',
-        'FileAttachment'
+        'StrikeOut'
       ];
       annotations = annotations.filter(x => allowedSubtypes.includes(x.subtype));
 

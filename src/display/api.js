@@ -63,20 +63,25 @@ const RENDERING_CANCELLED_TIMEOUT = 100; // ms
 
 /**
  * @typedef {function} IPDFStreamFactory
- * @param {DocumentInitParameters} params The document initialization
- * parameters. The "url" key is always present.
+ * @param {DocumentInitParameters} params - The document initialization
+ *   parameters. The "url" key is always present.
  * @returns {IPDFStream}
+ * @ignore
  */
 
-/** @type IPDFStreamFactory */
+/**
+ * @type IPDFStreamFactory
+ * @private
+ */
 let createPDFNetworkStream;
 
 /**
- * Sets the function that instantiates a IPDFStream as an alternative PDF data
- * transport.
- * @param {IPDFStreamFactory} pdfNetworkStreamFactory - the factory function
- * that takes document initialization parameters (including a "url") and returns
- * an instance of IPDFStream.
+ * Sets the function that instantiates an {IPDFStream} as an alternative PDF
+ * data transport.
+ * @param {IPDFStreamFactory} pdfNetworkStreamFactory - The factory function
+ *   that takes document initialization parameters (including a "url") and
+ *   returns an instance of {IPDFStream}.
+ * @ignore
  */
 function setPDFNetworkStreamFactory(pdfNetworkStreamFactory) {
   createPDFNetworkStream = pdfNetworkStreamFactory;
@@ -140,6 +145,11 @@ function setPDFNetworkStreamFactory(pdfNetworkStreamFactory) {
  *   converted to OpenType fonts and loaded via font face rules. If disabled,
  *   fonts will be rendered using a built-in font renderer that constructs the
  *   glyphs with primitive path commands. The default value is `false`.
+ * @property {boolean} [fontExtraProperties] - Include additional properties,
+ *   which are unused during rendering of PDF documents, when exporting the
+ *   parsed font data from the worker-thread. This may be useful for debugging
+ *   purposes (and backwards compatibility), but note that it will lead to
+ *   increased memory usage. The default value is `false`.
  * @property {boolean} [disableRange] - Disable range request loading
  *   of PDF files. When enabled, and if the server supports partial content
  *   requests, then the PDF will be fetched in chunks.
@@ -246,6 +256,7 @@ function getDocument(src) {
   params.rangeChunkSize = params.rangeChunkSize || DEFAULT_RANGE_CHUNK_SIZE;
   params.CMapReaderFactory = params.CMapReaderFactory || DOMCMapReaderFactory;
   params.ignoreErrors = params.stopAtErrors !== true;
+  params.fontExtraProperties = params.fontExtraProperties === true;
   params.pdfBug = params.pdfBug === true;
 
   const NativeImageDecoderValues = Object.values(NativeImageDecoding);
@@ -398,6 +409,7 @@ function _fetchDocument(worker, source, pdfDataRangeTransport, docId) {
       nativeImageDecoderSupport: source.nativeImageDecoderSupport,
       ignoreErrors: source.ignoreErrors,
       isEvalSupported: source.isEvalSupported,
+      fontExtraProperties: source.fontExtraProperties,
     })
     .then(function(workerId) {
       if (worker.destroyed) {
@@ -415,6 +427,7 @@ const PDFDocumentLoadingTask = (function PDFDocumentLoadingTaskClosure() {
    * (such as network requests) and provides a way to listen for completion,
    * after which individual pages can be rendered.
    */
+  // eslint-disable-next-line no-shadow
   class PDFDocumentLoadingTask {
     constructor() {
       this._capability = createPromiseCapability();
@@ -480,17 +493,6 @@ const PDFDocumentLoadingTask = (function PDFDocumentLoadingTaskClosure() {
           this._worker = null;
         }
       });
-    }
-
-    /**
-     * Registers callbacks to indicate the document loading completion.
-     * @ignore
-     */
-    then(onFulfilled, onRejected) {
-      throw new Error(
-        "Removed API method: " +
-          "PDFDocumentLoadingTask.then, use the `promise` getter instead."
-      );
     }
   }
   return PDFDocumentLoadingTask;
@@ -608,8 +610,8 @@ class PDFDocumentProxy {
   /**
    * @param {{num: number, gen: number}} ref - The page reference. Must have
    *   the `num` and `gen` properties.
-   * @returns {Promise} A promise that is resolved with the page index that is
-   *   associated with the reference.
+   * @returns {Promise} A promise that is resolved with the page index (starting
+   *   from zero) that is associated with the reference.
    */
   getPageIndex(ref) {
     return this._transport.getPageIndex(ref);
@@ -909,7 +911,7 @@ class PDFDocumentProxy {
  */
 class PDFPageProxy {
   constructor(pageIndex, pageInfo, transport, pdfBug = false) {
-    this.pageIndex = pageIndex;
+    this._pageIndex = pageIndex;
     this._pageInfo = pageInfo;
     this._transport = transport;
     this._stats = pdfBug ? new StatTimer() : null;
@@ -927,7 +929,7 @@ class PDFPageProxy {
    * @type {number} Page number of the page. First page is 1.
    */
   get pageNumber() {
-    return this.pageIndex + 1;
+    return this._pageIndex + 1;
   }
 
   /**
@@ -972,15 +974,6 @@ class PDFPageProxy {
     offsetY = 0,
     dontFlip = false,
   } = {}) {
-    if (
-      typeof PDFJSDev !== "undefined" &&
-      PDFJSDev.test("GENERIC") &&
-      (arguments.length > 1 || typeof arguments[0] === "number")
-    ) {
-      throw new Error(
-        "PDFPageProxy.getViewport is called with obsolete arguments."
-      );
-    }
     return new PageViewport({
       viewBox: this.view,
       scale,
@@ -999,7 +992,7 @@ class PDFPageProxy {
   getAnnotations({ intent = null } = {}) {
     if (!this.annotationsPromise || this.annotationsIntent !== intent) {
       this.annotationsPromise = this._transport.getAnnotations(
-        this.pageIndex,
+        this._pageIndex,
         intent
       );
       this.annotationsIntent = intent;
@@ -1063,7 +1056,7 @@ class PDFPageProxy {
         this._stats.time("Page Request");
       }
       this._pumpOperatorList({
-        pageIndex: this.pageNumber - 1,
+        pageIndex: this._pageIndex,
         intent: renderingIntent,
         renderInteractiveForms: renderInteractiveForms === true,
       });
@@ -1111,7 +1104,7 @@ class PDFPageProxy {
       objs: this.objs,
       commonObjs: this.commonObjs,
       operatorList: intentState.operatorList,
-      pageNumber: this.pageNumber,
+      pageIndex: this._pageIndex,
       canvasFactory: canvasFactoryInstance,
       webGLContext,
       useRequestAnimationFrame: renderingIntent !== "print",
@@ -1180,7 +1173,7 @@ class PDFPageProxy {
         this._stats.time("Page Request");
       }
       this._pumpOperatorList({
-        pageIndex: this.pageIndex,
+        pageIndex: this._pageIndex,
         intent: renderingIntent,
       });
     }
@@ -1200,7 +1193,7 @@ class PDFPageProxy {
     return this._transport.messageHandler.sendWithStream(
       "GetTextContent",
       {
-        pageIndex: this.pageNumber - 1,
+        pageIndex: this._pageIndex,
         normalizeWhitespace: normalizeWhitespace === true,
         combineTextItems: disableCombineTextItems !== true,
       },
@@ -1249,7 +1242,7 @@ class PDFPageProxy {
    */
   _destroy() {
     this.destroyed = true;
-    this._transport.pageCache[this.pageIndex] = null;
+    this._transport.pageCache[this._pageIndex] = null;
 
     const waitOn = [];
     Object.keys(this.intentStates).forEach(intent => {
@@ -1694,6 +1687,7 @@ const PDFWorker = (function PDFWorkerClosure() {
    * thread to the worker thread and vice versa. If the creation of a web
    * worker is not possible, a "fake" worker will be used instead.
    */
+  // eslint-disable-next-line no-shadow
   class PDFWorker {
     /**
      * @param {PDFWorkerParameters} params - Worker initialization parameters.
@@ -2343,7 +2337,7 @@ class WorkerTransport {
       this._onUnsupportedFeature.bind(this)
     );
 
-    messageHandler.on("JpegDecode", data => {
+    messageHandler.on("JpegDecode", ([imageUrl, components]) => {
       if (this.destroyed) {
         return Promise.reject(new Error("Worker was destroyed"));
       }
@@ -2354,7 +2348,6 @@ class WorkerTransport {
         return Promise.reject(new Error('"document" is not defined.'));
       }
 
-      const [imageUrl, components] = data;
       if (components !== 3 && components !== 1) {
         return Promise.reject(
           new Error("Only 3 components or 1 component can be returned")
@@ -2707,17 +2700,6 @@ class RenderTask {
   cancel() {
     this._internalRenderTask.cancel();
   }
-
-  /**
-   * Registers callbacks to indicate the rendering task completion.
-   * @ignore
-   */
-  then(onFulfilled, onRejected) {
-    throw new Error(
-      "Removed API method: " +
-        "RenderTask.then, use the `promise` getter instead."
-    );
-  }
 }
 
 /**
@@ -2727,6 +2709,7 @@ class RenderTask {
 const InternalRenderTask = (function InternalRenderTaskClosure() {
   const canvasInRendering = new WeakSet();
 
+  // eslint-disable-next-line no-shadow
   class InternalRenderTask {
     constructor({
       callback,
@@ -2734,7 +2717,7 @@ const InternalRenderTask = (function InternalRenderTaskClosure() {
       objs,
       commonObjs,
       operatorList,
-      pageNumber,
+      pageIndex,
       canvasFactory,
       webGLContext,
       useRequestAnimationFrame = false,
@@ -2746,7 +2729,7 @@ const InternalRenderTask = (function InternalRenderTaskClosure() {
       this.commonObjs = commonObjs;
       this.operatorListIdx = null;
       this.operatorList = operatorList;
-      this.pageNumber = pageNumber;
+      this._pageIndex = pageIndex;
       this.canvasFactory = canvasFactory;
       this.webGLContext = webGLContext;
       this._pdfBug = pdfBug;
@@ -2786,7 +2769,7 @@ const InternalRenderTask = (function InternalRenderTaskClosure() {
         globalThis.StepperManager &&
         globalThis.StepperManager.enabled
       ) {
-        this.stepper = globalThis.StepperManager.create(this.pageNumber - 1);
+        this.stepper = globalThis.StepperManager.create(this._pageIndex);
         this.stepper.init(this.operatorList);
         this.stepper.nextBreakPoint = this.stepper.getNextBreakPoint();
       }
@@ -2831,7 +2814,7 @@ const InternalRenderTask = (function InternalRenderTaskClosure() {
       this.callback(
         error ||
           new RenderingCancelledException(
-            `Rendering cancelled, page ${this.pageNumber}`,
+            `Rendering cancelled, page ${this._pageIndex + 1}`,
             "canvas"
           )
       );

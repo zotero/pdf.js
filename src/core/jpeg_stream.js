@@ -26,6 +26,7 @@ import { JpegImage } from "./jpg.js";
  * DecodeStreams.
  */
 const JpegStream = (function JpegStreamClosure() {
+  // eslint-disable-next-line no-shadow
   function JpegStream(stream, maybeLength, dict, params) {
     // Some images may contain 'junk' before the SOI (start-of-image) marker.
     // Note: this seems to mainly affect inline images.
@@ -134,6 +135,17 @@ const JpegStream = (function JpegStreamClosure() {
             stream.pos += 2; // Skip marker length.
             stream.pos += 1; // Skip precision.
             const scanLines = stream.getUint16();
+            const samplesPerLine = stream.getUint16();
+
+            // Letting the browser handle the JPEG decoding, on the main-thread,
+            // will cause a *large* increase in peak memory usage since there's
+            // a handful of short-lived copies of the image data. For very big
+            // JPEG images, always let the PDF.js image decoder handle them to
+            // reduce overall memory usage during decoding (see issue 11694).
+            if (scanLines * samplesPerLine > 1e6) {
+              validDimensions = false;
+              break;
+            }
 
             // The "normal" case, where the image data and dictionary agrees.
             if (scanLines === dictHeight) {

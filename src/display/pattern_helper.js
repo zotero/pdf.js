@@ -158,7 +158,7 @@ var createMeshCanvas = (function createMeshCanvasClosure() {
       var x2_ = Math.round(Math.max(xa, xb));
       var j = rowSize * y + x1_ * 4;
       for (var x = x1_; x <= x2_; x++) {
-        let k = (xa - x) / (xa - xb);
+        k = (xa - x) / (xa - xb);
         if (k < 0) {
           k = 0;
         } else if (k > 1) {
@@ -226,6 +226,7 @@ var createMeshCanvas = (function createMeshCanvasClosure() {
     }
   }
 
+  // eslint-disable-next-line no-shadow
   function createMeshCanvas(
     bounds,
     combinesScale,
@@ -413,6 +414,7 @@ var TilingPattern = (function TilingPatternClosure() {
 
   var MAX_PATTERN_SIZE = 3000; // 10in @ 300dpi shall be enough
 
+  // eslint-disable-next-line no-shadow
   function TilingPattern(IR, color, ctx, canvasGraphicsFactory, baseTransform) {
     this.operatorList = IR[2];
     this.matrix = IR[3] || [1, 0, 0, 1, 0, 0];

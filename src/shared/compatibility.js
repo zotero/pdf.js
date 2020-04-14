@@ -14,11 +14,9 @@
  */
 /* eslint no-var: error */
 
-// Skip compatibility checks for modern builds (unless we're running the
-// unit-tests in Node.js/Travis) and if we already ran the module.
+// Skip compatibility checks for modern builds and if we already ran the module.
 if (
-  (typeof PDFJSDev === "undefined" ||
-    PDFJSDev.test("!SKIP_BABEL || (LIB && TESTING)")) &&
+  (typeof PDFJSDev === "undefined" || !PDFJSDev.test("SKIP_BABEL")) &&
   (typeof globalThis === "undefined" || !globalThis._pdfjsCompatibilityChecked)
 ) {
   // Provides support for globalThis in legacy browsers.
@@ -224,6 +222,15 @@ if (
       return;
     }
     Number.isInteger = require("core-js/es/number/is-integer.js");
+  })();
+
+  // Provides support for TypedArray.prototype.slice in legacy browsers.
+  // Support: IE
+  (function checkTypedArraySlice() {
+    if (Uint8Array.prototype.slice) {
+      return;
+    }
+    require("core-js/es/typed-array/slice");
   })();
 
   // Support: IE, Safari<11, Chrome<63

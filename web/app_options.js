@@ -53,6 +53,11 @@ const defaultOptions = {
     value: false,
     kind: OptionKind.VIEWER + OptionKind.PREFERENCE,
   },
+  enablePermissions: {
+    /** @type {boolean} */
+    value: false,
+    kind: OptionKind.VIEWER + OptionKind.PREFERENCE,
+  },
   /**
    * The `disablePreferences` is, conditionally, defined below.
    */
@@ -62,11 +67,6 @@ const defaultOptions = {
     kind: OptionKind.VIEWER + OptionKind.PREFERENCE,
   },
   enableWebGL: {
-    /** @type {boolean} */
-    value: false,
-    kind: OptionKind.VIEWER + OptionKind.PREFERENCE,
-  },
-  eventBusDispatchToDOM: {
     /** @type {boolean} */
     value: false,
     kind: OptionKind.VIEWER + OptionKind.PREFERENCE,
@@ -196,6 +196,11 @@ const defaultOptions = {
   docBaseUrl: {
     /** @type {string} */
     value: "",
+    kind: OptionKind.API,
+  },
+  fontExtraProperties: {
+    /** @type {boolean} */
+    value: false,
     kind: OptionKind.API,
   },
   isEvalSupported: {

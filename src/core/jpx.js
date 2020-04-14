@@ -31,6 +31,8 @@ var JpxImage = (function JpxImageClosure() {
     HL: 1,
     HH: 2,
   };
+
+  // eslint-disable-next-line no-shadow
   function JpxImage() {
     this.failOnCorruptedImage = false;
   }
@@ -736,7 +738,7 @@ var JpxImage = (function JpxImageClosure() {
     var l, r, c, p;
     var maxDecompositionLevelsCount = 0;
     for (c = 0; c < componentsCount; c++) {
-      var component = tile.components[c];
+      const component = tile.components[c];
       maxDecompositionLevelsCount = Math.max(
         maxDecompositionLevelsCount,
         component.codingStyleParameters.decompositionLevelsCount
@@ -768,7 +770,7 @@ var JpxImage = (function JpxImageClosure() {
       for (; r <= maxDecompositionLevelsCount; r++) {
         for (; p < maxNumPrecinctsInLevel[r]; p++) {
           for (; c < componentsCount; c++) {
-            var component = tile.components[c];
+            const component = tile.components[c];
             if (r > component.codingStyleParameters.decompositionLevelsCount) {
               continue;
             }
@@ -1434,7 +1436,7 @@ var JpxImage = (function JpxImageClosure() {
         // calculate quantization coefficient (Section E.1.1.1)
         var delta = reversible
           ? 1
-          : Math.pow(2, precision + gainLog2 - epsilon) * (1 + mu / 2048);
+          : 2 ** (precision + gainLog2 - epsilon) * (1 + mu / 2048);
         var mb = guardBits + epsilon - 1;
 
         // In the first resolution level, copyCoefficients will fill the
@@ -1585,6 +1587,7 @@ var JpxImage = (function JpxImageClosure() {
 
   // Section B.10.2 Tag trees
   var TagTree = (function TagTreeClosure() {
+    // eslint-disable-next-line no-shadow
     function TagTree(width, height) {
       var levelsLength = log2(Math.max(width, height)) + 1;
       this.levels = [];
@@ -1646,6 +1649,7 @@ var JpxImage = (function JpxImageClosure() {
   })();
 
   var InclusionTree = (function InclusionTreeClosure() {
+    // eslint-disable-next-line no-shadow
     function InclusionTree(width, height, defaultValue) {
       var levelsLength = log2(Math.max(width, height)) + 1;
       this.levels = [];
@@ -1752,6 +1756,7 @@ var JpxImage = (function JpxImageClosure() {
       8, 0, 8, 8, 8, 0, 8, 8, 8, 0, 0, 0, 0, 0, 8, 8, 8, 0, 8, 8, 8, 0, 8, 8, 8
     ]);
 
+    // eslint-disable-next-line no-shadow
     function BitModel(width, height, subband, zeroBitPlanes, mb) {
       this.width = width;
       this.height = height;
@@ -2107,6 +2112,7 @@ var JpxImage = (function JpxImageClosure() {
 
   // Section F, Discrete wavelet transformation
   var Transform = (function TransformClosure() {
+    // eslint-disable-next-line no-shadow
     function Transform() {}
 
     Transform.prototype.calculate = function transformCalculate(
@@ -2248,6 +2254,7 @@ var JpxImage = (function JpxImageClosure() {
 
   // Section 3.8.2 Irreversible 9-7 filter
   var IrreversibleTransform = (function IrreversibleTransformClosure() {
+    // eslint-disable-next-line no-shadow
     function IrreversibleTransform() {
       Transform.call(this);
     }
@@ -2345,6 +2352,7 @@ var JpxImage = (function JpxImageClosure() {
 
   // Section 3.8.1 Reversible 5-3 filter
   var ReversibleTransform = (function ReversibleTransformClosure() {
+    // eslint-disable-next-line no-shadow
     function ReversibleTransform() {
       Transform.call(this);
     }

@@ -58,10 +58,6 @@
       "type": "boolean",
       "default": false
     },
-    "eventBusDispatchToDOM": {
-      "type": "boolean",
-      "default": false
-    },
     "pdfBugEnabled": {
       "title": "Enable debugging tools",
       "description": "Whether to enable debugging tools.",
@@ -152,6 +148,10 @@
       "default": "canvas"
     },
     "renderInteractiveForms": {
+      "type": "boolean",
+      "default": false
+    },
+    "enablePermissions": {
       "type": "boolean",
       "default": false
     },

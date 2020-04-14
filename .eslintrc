@@ -119,8 +119,8 @@
     "no-catch-shadow": "error",
     "no-delete-var": "error",
     "no-label-var": "error",
+    "no-shadow": "error",
     "no-shadow-restricted-names": "error",
-    "no-shadow": "off",
     "no-undef-init": "error",
     "no-undef": ["error", { "typeof": true, }],
     "no-unused-vars": ["error", {
@@ -158,6 +158,7 @@
       },
     ],
     "no-unneeded-ternary": "error",
+    "prefer-exponentiation-operator": "error",
     "spaced-comment": ["error", "always", {
       "block": {
         "balanced": true,

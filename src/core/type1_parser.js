@@ -79,6 +79,7 @@ var Type1CharString = (function Type1CharStringClosure() {
     hvcurveto: [31],
   };
 
+  // eslint-disable-next-line no-shadow
   function Type1CharString() {
     this.width = 0;
     this.lsb = 0;
@@ -436,7 +437,7 @@ var Type1Parser = (function Type1ParserClosure() {
         r = ((value + r) * c1 + c2) & ((1 << 16) - 1);
       }
     }
-    return Array.prototype.slice.call(decrypted, discardNumber, j);
+    return decrypted.slice(discardNumber, j);
   }
 
   function isSpecial(c) {
@@ -451,14 +452,19 @@ var Type1Parser = (function Type1ParserClosure() {
     );
   }
 
+  // eslint-disable-next-line no-shadow
   function Type1Parser(stream, encrypted, seacAnalysisEnabled) {
     if (encrypted) {
       var data = stream.getBytes();
       var isBinary = !(
-        isHexDigit(data[0]) &&
+        (isHexDigit(data[0]) || isWhiteSpace(data[0])) &&
         isHexDigit(data[1]) &&
         isHexDigit(data[2]) &&
-        isHexDigit(data[3])
+        isHexDigit(data[3]) &&
+        isHexDigit(data[4]) &&
+        isHexDigit(data[5]) &&
+        isHexDigit(data[6]) &&
+        isHexDigit(data[7])
       );
       stream = new Stream(
         isBinary
@@ -612,7 +618,7 @@ var Type1Parser = (function Type1ParserClosure() {
             this.readInt(); // num
             this.getToken(); // read in 'array'
             while (this.getToken() === "dup") {
-              var index = this.readInt();
+              const index = this.readInt();
               length = this.readInt();
               this.getToken(); // read in 'RD' or '-|'
               data = length > 0 ? stream.getBytes(length) : new Uint8Array(0);

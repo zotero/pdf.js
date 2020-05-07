@@ -29,7 +29,7 @@ import {
 import { DOMSVGFactory } from "./display_utils.js";
 import { isNodeJS } from "../shared/is_node.js";
 
-let SVGGraphics = function() {
+let SVGGraphics = function () {
   throw new Error("Not implemented: SVGGraphics");
 };
 
@@ -44,7 +44,7 @@ if (typeof PDFJSDev === "undefined" || PDFJSDev.test("GENERIC")) {
   const LINE_CAP_STYLES = ["butt", "round", "square"];
   const LINE_JOIN_STYLES = ["miter", "round", "bevel"];
 
-  const convertImgDataToPng = (function() {
+  const convertImgDataToPng = (function () {
     const PNG_HEADER = new Uint8Array([
       0x89,
       0x50,
@@ -744,6 +744,7 @@ if (typeof PDFJSDev === "undefined" || PDFJSDev.test("GENERIC")) {
       current.y = current.lineY = 0;
 
       current.xcoords = [];
+      current.ycoords = [];
       current.tspan = this.svgFactory.createElement("svg:tspan");
       current.tspan.setAttributeNS(null, "font-family", current.fontFamily);
       current.tspan.setAttributeNS(
@@ -768,6 +769,7 @@ if (typeof PDFJSDev === "undefined" || PDFJSDev.test("GENERIC")) {
       current.txtElement = this.svgFactory.createElement("svg:text");
       current.txtgrp = this.svgFactory.createElement("svg:g");
       current.xcoords = [];
+      current.ycoords = [];
     }
 
     moveText(x, y) {
@@ -776,6 +778,7 @@ if (typeof PDFJSDev === "undefined" || PDFJSDev.test("GENERIC")) {
       current.y = current.lineY += y;
 
       current.xcoords = [];
+      current.ycoords = [];
       current.tspan = this.svgFactory.createElement("svg:tspan");
       current.tspan.setAttributeNS(null, "font-family", current.fontFamily);
       current.tspan.setAttributeNS(
@@ -794,11 +797,14 @@ if (typeof PDFJSDev === "undefined" || PDFJSDev.test("GENERIC")) {
         return;
       }
 
+      const fontSizeScale = current.fontSizeScale;
       const charSpacing = current.charSpacing;
       const wordSpacing = current.wordSpacing;
       const fontDirection = current.fontDirection;
       const textHScale = current.textHScale * fontDirection;
       const vertical = font.vertical;
+      const spacingDir = vertical ? 1 : -1;
+      const defaultVMetrics = font.defaultVMetrics;
       const widthAdvanceScale = fontSize * current.fontMatrix[0];
 
       let x = 0;
@@ -808,39 +814,72 @@ if (typeof PDFJSDev === "undefined" || PDFJSDev.test("GENERIC")) {
           x += fontDirection * wordSpacing;
           continue;
         } else if (isNum(glyph)) {
-          x += -glyph * fontSize * 0.001;
+          x += (spacingDir * glyph * fontSize) / 1000;
           continue;
         }
 
-        const width = glyph.width;
-        const character = glyph.fontChar;
         const spacing = (glyph.isSpace ? wordSpacing : 0) + charSpacing;
-        const charWidth = width * widthAdvanceScale + spacing * fontDirection;
+        const character = glyph.fontChar;
+        let scaledX, scaledY;
+        let width = glyph.width;
+        if (vertical) {
+          let vx;
+          const vmetric = glyph.vmetric || defaultVMetrics;
+          vx = glyph.vmetric ? vmetric[1] : width * 0.5;
+          vx = -vx * widthAdvanceScale;
+          const vy = vmetric[2] * widthAdvanceScale;
 
-        if (!glyph.isInFont && !font.missingFile) {
-          x += charWidth;
+          width = vmetric ? -vmetric[0] : width;
+          scaledX = vx / fontSizeScale;
+          scaledY = (x + vy) / fontSizeScale;
+        } else {
+          scaledX = x / fontSizeScale;
+          scaledY = 0;
+        }
+
+        if (glyph.isInFont || font.missingFile) {
+          current.xcoords.push(current.x + scaledX);
+          if (vertical) {
+            current.ycoords.push(-current.y + scaledY);
+          }
+          current.tspan.textContent += character;
+        } else {
           // TODO: To assist with text selection, we should replace the missing
           // character with a space character if charWidth is not zero.
           // But we cannot just do "character = ' '", because the ' ' character
           // might actually map to a different glyph.
-          continue;
         }
-        current.xcoords.push(current.x + x);
-        current.tspan.textContent += character;
+
+        let charWidth;
+        if (vertical) {
+          charWidth = width * widthAdvanceScale - spacing * fontDirection;
+        } else {
+          charWidth = width * widthAdvanceScale + spacing * fontDirection;
+        }
+
         x += charWidth;
       }
-      if (vertical) {
-        current.y -= x * textHScale;
-      } else {
-        current.x += x * textHScale;
-      }
-
       current.tspan.setAttributeNS(
         null,
         "x",
         current.xcoords.map(pf).join(" ")
       );
-      current.tspan.setAttributeNS(null, "y", pf(-current.y));
+      if (vertical) {
+        current.tspan.setAttributeNS(
+          null,
+          "y",
+          current.ycoords.map(pf).join(" ")
+        );
+      } else {
+        current.tspan.setAttributeNS(null, "y", pf(-current.y));
+      }
+
+      if (vertical) {
+        current.y -= x;
+      } else {
+        current.x += x * textHScale;
+      }
+
       current.tspan.setAttributeNS(null, "font-family", current.fontFamily);
       current.tspan.setAttributeNS(
         null,
@@ -909,6 +948,12 @@ if (typeof PDFJSDev === "undefined" || PDFJSDev.test("GENERIC")) {
     }
 
     addFontStyle(fontObj) {
+      if (!fontObj.data) {
+        throw new Error(
+          "addFontStyle: No font data available, " +
+            'ensure that the "fontExtraProperties" API parameter is set.'
+        );
+      }
       if (!this.cssStyle) {
         this.cssStyle = this.svgFactory.createElement("svg:style");
         this.cssStyle.setAttributeNS(null, "type", "text/css");
@@ -933,7 +978,7 @@ if (typeof PDFJSDev === "undefined" || PDFJSDev.test("GENERIC")) {
 
       if (
         this.embedFonts &&
-        fontObj.data &&
+        !fontObj.missingFile &&
         !this.embeddedFonts[fontObj.loadedName]
       ) {
         this.addFontStyle(fontObj);
@@ -966,6 +1011,7 @@ if (typeof PDFJSDev === "undefined" || PDFJSDev.test("GENERIC")) {
       current.tspan = this.svgFactory.createElement("svg:tspan");
       current.tspan.setAttributeNS(null, "y", pf(-current.y));
       current.xcoords = [];
+      current.ycoords = [];
     }
 
     endText() {
@@ -1017,6 +1063,7 @@ if (typeof PDFJSDev === "undefined" || PDFJSDev.test("GENERIC")) {
       this.current.fillColor = Util.makeCssRgb(r, g, b);
       this.current.tspan = this.svgFactory.createElement("svg:tspan");
       this.current.xcoords = [];
+      this.current.ycoords = [];
     }
 
     setStrokeColorN(args) {
@@ -1327,7 +1374,7 @@ if (typeof PDFJSDev === "undefined" || PDFJSDev.test("GENERIC")) {
         // The previous clipping group content can go out of order -- resetting
         // cached clipGroups.
         current.clipGroup = null;
-        this.extraStack.forEach(function(prev) {
+        this.extraStack.forEach(function (prev) {
           prev.clipGroup = null;
         });
         // Intersect with the previous clipping path.
@@ -1439,7 +1486,7 @@ if (typeof PDFJSDev === "undefined" || PDFJSDev.test("GENERIC")) {
       const current = this.current;
       let dashArray = current.dashArray;
       if (lineWidthScale !== 1 && dashArray.length > 0) {
-        dashArray = dashArray.map(function(value) {
+        dashArray = dashArray.map(function (value) {
           return lineWidthScale * value;
         });
       }

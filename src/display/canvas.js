@@ -362,7 +362,7 @@ function compileType3Glyph(imgData) {
     --i;
   }
 
-  var drawOutline = function(c) {
+  var drawOutline = function (c) {
     c.save();
     // the path shall be painted in [0..1]x[0..1] space
     c.scale(1 / width, -1 / height);
@@ -1498,7 +1498,7 @@ var CanvasGraphics = (function CanvasGraphicsClosure() {
       var isAddToPathSet = !!(
         textRenderingMode & TextRenderingMode.ADD_TO_PATH_FLAG
       );
-      const patternFill = current.patternFill && font.data;
+      const patternFill = current.patternFill && !font.missingFile;
 
       var addToPath;
       if (font.disableFontFace || isAddToPathSet || patternFill) {

@@ -56,7 +56,7 @@ class BaseFontLoader {
   }
 
   clear() {
-    this.nativeFontFaces.forEach(function(nativeFontFace) {
+    this.nativeFontFaces.forEach(function (nativeFontFace) {
       document.fonts.delete(nativeFontFace);
     });
     this.nativeFontFaces.length = 0;
@@ -82,7 +82,9 @@ class BaseFontLoader {
         try {
           await nativeFontFace.loaded;
         } catch (ex) {
-          this._onUnsupportedFeature({ featureId: UNSUPPORTED_FEATURES.font });
+          this._onUnsupportedFeature({
+            featureId: UNSUPPORTED_FEATURES.errorFontLoadNative,
+          });
           warn(`Failed to load font '${nativeFontFace.family}': '${ex}'.`);
 
           // When font loading failed, fall back to the built-in font renderer.
@@ -198,7 +200,7 @@ if (typeof PDFJSDev !== "undefined" && PDFJSDev.test("MOZCENTRAL")) {
     }
 
     get _loadTestFont() {
-      const getLoadTestFont = function() {
+      const getLoadTestFont = function () {
         // This is a CFF font with 1 glyph for '.' that fills its entire width
         // and height.
         return atob(
@@ -328,7 +330,7 @@ if (typeof PDFJSDev !== "undefined" && PDFJSDev.test("MOZCENTRAL")) {
       }
       document.body.appendChild(div);
 
-      isFontReady(loadTestFontId, function() {
+      isFontReady(loadTestFontId, function () {
         document.body.removeChild(div);
         request.complete();
       });
@@ -400,11 +402,13 @@ class FontFaceObject {
         throw ex;
       }
       if (this._onUnsupportedFeature) {
-        this._onUnsupportedFeature({ featureId: UNSUPPORTED_FEATURES.font });
+        this._onUnsupportedFeature({
+          featureId: UNSUPPORTED_FEATURES.errorFontGetPath,
+        });
       }
       warn(`getPathGenerator - ignoring character: "${ex}".`);
 
-      return (this.compiledGlyphs[character] = function(c, size) {
+      return (this.compiledGlyphs[character] = function (c, size) {
         // No-op function, to allow rendering to continue.
       });
     }
@@ -428,7 +432,7 @@ class FontFaceObject {
     }
     // ... but fall back on using Function.prototype.apply() if we're
     // blocked from using eval() for whatever reason (like CSP policies).
-    return (this.compiledGlyphs[character] = function(c, size) {
+    return (this.compiledGlyphs[character] = function (c, size) {
       for (let i = 0, ii = cmds.length; i < ii; i++) {
         current = cmds[i];
 

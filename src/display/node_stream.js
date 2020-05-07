@@ -91,7 +91,7 @@ class PDFNodeStream {
     }
 
     const readers = this._rangeRequestReaders.slice(0);
-    readers.forEach(function(reader) {
+    readers.forEach(function (reader) {
       reader.cancel(reason);
     });
   }
@@ -376,7 +376,7 @@ class PDFNodeStreamRangeReader extends BaseRangeReader {
       }
       this._httpHeaders[property] = value;
     }
-    this._httpHeaders["Range"] = `bytes=${start}-${end - 1}`;
+    this._httpHeaders.Range = `bytes=${start}-${end - 1}`;
 
     const handleResponse = response => {
       if (response.statusCode === 404) {

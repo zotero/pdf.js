@@ -14,8 +14,8 @@
  */
 
 import "../extensions/firefox/tools/l10n.js";
-import { createObjectURL, PDFDataRangeTransport, shadow } from "pdfjs-lib";
 import { DefaultExternalServices, PDFViewerApplication } from "./app.js";
+import { PDFDataRangeTransport, shadow } from "pdfjs-lib";
 import { BasePreferences } from "./preferences.js";
 import { DEFAULT_SCALE_VALUE } from "./ui_utils.js";
 
@@ -100,14 +100,23 @@ class DownloadManager {
   }
 
   downloadData(data, filename, contentType) {
-    const blobUrl = createObjectURL(data, contentType);
+    const blobUrl = URL.createObjectURL(
+      new Blob([data], { type: contentType })
+    );
+    const onResponse = err => {
+      URL.revokeObjectURL(blobUrl);
+    };
 
-    FirefoxCom.request("download", {
-      blobUrl,
-      originalUrl: blobUrl,
-      filename,
-      isAttachment: true,
-    });
+    FirefoxCom.request(
+      "download",
+      {
+        blobUrl,
+        originalUrl: blobUrl,
+        filename,
+        isAttachment: true,
+      },
+      onResponse
+    );
   }
 
   download(blob, url, filename) {
@@ -133,14 +142,14 @@ class DownloadManager {
 
 class FirefoxPreferences extends BasePreferences {
   async _writeToStorage(prefObj) {
-    return new Promise(function(resolve) {
+    return new Promise(function (resolve) {
       FirefoxCom.request("setPreferences", prefObj, resolve);
     });
   }
 
   async _readFromStorage(prefObj) {
-    return new Promise(function(resolve) {
-      FirefoxCom.request("getPreferences", prefObj, function(prefStr) {
+    return new Promise(function (resolve) {
+      FirefoxCom.request("getPreferences", prefObj, function (prefStr) {
         const readPrefs = JSON.parse(prefStr);
         resolve(readPrefs);
       });
@@ -179,7 +188,7 @@ class MozL10n {
     "findentirewordchange",
     "findbarclose",
   ];
-  const handleEvent = function({ type, detail }) {
+  const handleEvent = function ({ type, detail }) {
     if (!PDFViewerApplication.initialized) {
       return;
     }
@@ -206,7 +215,7 @@ class MozL10n {
 
 (function listenZoomEvents() {
   const events = ["zoomin", "zoomout", "zoomreset"];
-  const handleEvent = function({ type, detail }) {
+  const handleEvent = function ({ type, detail }) {
     if (!PDFViewerApplication.initialized) {
       return;
     }

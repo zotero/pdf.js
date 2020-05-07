@@ -46,7 +46,7 @@ function group(stats, groupBy) {
     if (vals[key] === undefined) {
       vals[key] = [];
     }
-    vals[key].push(curStat["time"]);
+    vals[key].push(curStat.time);
   }
   return vals;
 }
@@ -57,21 +57,21 @@ function group(stats, groupBy) {
  */
 function flatten(stats) {
   var rows = [];
-  stats.forEach(function(curStat) {
-    curStat["stats"].forEach(function(s) {
+  stats.forEach(function (curStat) {
+    curStat.stats.forEach(function (s) {
       rows.push({
-        browser: curStat["browser"],
-        page: curStat["page"],
-        pdf: curStat["pdf"],
-        round: curStat["round"],
-        stat: s["name"],
-        time: s["end"] - s["start"],
+        browser: curStat.browser,
+        page: curStat.page,
+        pdf: curStat.pdf,
+        round: curStat.round,
+        stat: s.name,
+        time: s.end - s.start,
       });
     });
   });
   // Use only overall results if not grouped by 'stat'
   if (!options.groupBy.includes("stat")) {
-    rows = rows.filter(function(s) {
+    rows = rows.filter(function (s) {
       return s.stat === "Overall";
     });
   }
@@ -138,7 +138,7 @@ function stat(baseline, current) {
     row,
     rows = [];
   // collect rows and measure column widths
-  var width = labels.map(function(s) {
+  var width = labels.map(function (s) {
     return s.length;
   });
   rows.push(labels);
@@ -172,7 +172,7 @@ function stat(baseline, current) {
   }
 
   // add horizontal line
-  var hline = width.map(function(w) {
+  var hline = width.map(function (w) {
     return new Array(w + 1).join("-");
   });
   rows.splice(1, 0, hline);

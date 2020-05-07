@@ -1134,6 +1134,15 @@
        "link": true,
        "type": "eq"
     },
+    {  "id": "issue11871",
+       "file": "pdfs/issue11871.pdf",
+       "md5": "9c533eacd0ca892df4191360848668a2",
+       "rounds": 1,
+       "link": true,
+       "firstPage": 2,
+       "lastPage": 2,
+       "type": "eq"
+    },
     {  "id": "bug1252420",
        "file": "pdfs/bug1252420.pdf",
        "md5": "f21c911b9b655972b06ef782a1fa6a17",
@@ -2468,6 +2477,14 @@
       "link": true,
       "type": "eq"
     },
+    {  "id": "issue11794",
+       "file": "pdfs/issue11794.pdf",
+       "md5": "00d17b10a5fd7c06cddd7a0d2066ecdd",
+       "rounds": 1,
+       "link": true,
+       "lastPage": 1,
+       "type": "eq"
+    },
     {
       "id": "bug852992",
       "file": "pdfs/bug852992_reduced.pdf",
@@ -3108,6 +3125,12 @@
        "rounds": 1,
        "type": "text",
        "about": "Invisible (and broken) TrueType font used for text-selection."
+    },
+    {  "id": "issue11768",
+       "file": "pdfs/issue11768_reduced.pdf",
+       "md5": "0cafde97d78bb6883531a325a996a5ef",
+       "rounds": 1,
+       "type": "eq"
     },
     {  "id": "issue1912",
       "file": "pdfs/issue1912.pdf",

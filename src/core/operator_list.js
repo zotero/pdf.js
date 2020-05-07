@@ -13,7 +13,7 @@
  * limitations under the License.
  */
 
-import { assert, ImageKind, OPS } from "../shared/util.js";
+import { assert, ImageKind, OPS, warn } from "../shared/util.js";
 
 var QueueOptimizer = (function QueueOptimizerClosure() {
   function addState(parentState, pattern, checkFn, iterateFn, processFn) {
@@ -304,7 +304,7 @@ var QueueOptimizer = (function QueueOptimizerClosure() {
   addState(
     InitialState,
     [OPS.save, OPS.transform, OPS.paintImageXObject, OPS.restore],
-    function(context) {
+    function (context) {
       var argsArray = context.argsArray;
       var iFirstTransform = context.iCurr - 2;
       return (
@@ -351,7 +351,7 @@ var QueueOptimizer = (function QueueOptimizerClosure() {
       }
       throw new Error(`iterateImageGroup - invalid pos: ${pos}`);
     },
-    function(context, i) {
+    function (context, i) {
       var MIN_IMAGES_IN_BLOCK = 3;
       var MAX_IMAGES_IN_BLOCK = 1000;
 
@@ -436,7 +436,7 @@ var QueueOptimizer = (function QueueOptimizerClosure() {
       }
       throw new Error(`iterateShowTextGroup - invalid pos: ${pos}`);
     },
-    function(context, i) {
+    function (context, i) {
       var MIN_CHARS_IN_BLOCK = 3;
       var MAX_CHARS_IN_BLOCK = 1000;
 
@@ -674,6 +674,10 @@ var OperatorList = (function OperatorListClosure() {
     },
 
     addOpList(opList) {
+      if (!(opList instanceof OperatorList)) {
+        warn('addOpList - ignoring invalid "opList" parameter.');
+        return;
+      }
       Object.assign(this.dependencies, opList.dependencies);
       for (var i = 0, ii = opList.length; i < ii; i++) {
         this.addOp(opList.fnArray[i], opList.argsArray[i]);

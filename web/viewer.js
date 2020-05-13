@@ -120,7 +120,7 @@ function getViewerConfiguration() {
       // Buttons
       thumbnailButton: document.getElementById('viewThumbnail'),
       outlineButton: document.getElementById('viewOutline'),
-      attachmentsButton: document.getElementById('viewAttachments'),
+      attachmentsButton: document.createElement('div'),
       annotationsButton: document.getElementById('viewAnnotations'),
       // Views
       thumbnailView: document.getElementById('thumbnailView'),

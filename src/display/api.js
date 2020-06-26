@@ -28,7 +28,6 @@ import {
   isArrayBuffer,
   isSameOrigin,
   MissingPDFException,
-  NativeImageDecoding,
   PasswordException,
   setVerbosityLevel,
   shadow,
@@ -44,7 +43,6 @@ import {
   DOMCMapReaderFactory,
   loadScript,
   PageViewport,
-  releaseImageResources,
   RenderingCancelledException,
   StatTimer,
 } from "./display_utils.js";
@@ -65,7 +63,8 @@ const RENDERING_CANCELLED_TIMEOUT = 100; // ms
  * @typedef {function} IPDFStreamFactory
  * @param {DocumentInitParameters} params - The document initialization
  *   parameters. The "url" key is always present.
- * @returns {IPDFStream}
+ * @returns {Promise} A promise, which is resolved with an instance of
+ *   {IPDFStream}.
  * @ignore
  */
 
@@ -80,7 +79,7 @@ let createPDFNetworkStream;
  * data transport.
  * @param {IPDFStreamFactory} pdfNetworkStreamFactory - The factory function
  *   that takes document initialization parameters (including a "url") and
- *   returns an instance of {IPDFStream}.
+ *   returns a promise which is resolved with an instance of {IPDFStream}.
  * @ignore
  */
 function setPDFNetworkStreamFactory(pdfNetworkStreamFactory) {
@@ -115,14 +114,6 @@ function setPDFNetworkStreamFactory(pdfNetworkStreamFactory) {
  * @property {string} [docBaseUrl] - The base URL of the document,
  *   used when attempting to recover valid absolute URLs for annotations, and
  *   outline items, that (incorrectly) only specify relative URLs.
- * @property {string} [nativeImageDecoderSupport] - Strategy for
- *   decoding certain (simple) JPEG images in the browser. This is useful for
- *   environments without DOM image and canvas support, such as e.g. Node.js.
- *   Valid values are 'decode', 'display' or 'none'; where 'decode' is intended
- *   for browsers with full image/canvas support, 'display' for environments
- *   with limited image support through stubs (useful for SVG conversion),
- *   and 'none' where JPEG images will be decoded entirely by PDF.js.
- *   The default value is 'decode'.
  * @property {string} [cMapUrl] - The URL where the predefined
  *   Adobe CMaps are located. Include trailing slash.
  * @property {boolean} [cMapPacked] - Specifies if the Adobe CMaps are
@@ -163,9 +154,6 @@ function setPDFNetworkStreamFactory(pdfNetworkStreamFactory) {
  *   The default value is `false`.
  *   NOTE: It is also necessary to disable streaming, see above,
  *         in order for disabling of pre-fetching to work correctly.
- * @property {boolean} [disableCreateObjectURL] - Disable the use of
- *   `URL.createObjectURL`, for compatibility with older browsers.
- *   The default value is `false`.
  * @property {boolean} [pdfBug] - Enables special hooks for debugging
  *   PDF.js (see `web/debugger.js`). The default value is `false`.
  */
@@ -259,15 +247,6 @@ function getDocument(src) {
   params.fontExtraProperties = params.fontExtraProperties === true;
   params.pdfBug = params.pdfBug === true;
 
-  const NativeImageDecoderValues = Object.values(NativeImageDecoding);
-  if (
-    params.nativeImageDecoderSupport === undefined ||
-    !NativeImageDecoderValues.includes(params.nativeImageDecoderSupport)
-  ) {
-    params.nativeImageDecoderSupport =
-      apiCompatibilityParams.nativeImageDecoderSupport ||
-      NativeImageDecoding.DECODE;
-  }
   if (!Number.isInteger(params.maxImageSize)) {
     params.maxImageSize = -1;
   }
@@ -286,10 +265,6 @@ function getDocument(src) {
   }
   if (typeof params.disableAutoFetch !== "boolean") {
     params.disableAutoFetch = false;
-  }
-  if (typeof params.disableCreateObjectURL !== "boolean") {
-    params.disableCreateObjectURL =
-      apiCompatibilityParams.disableCreateObjectURL || false;
   }
 
   // Set the main-thread verbosity level.
@@ -313,34 +288,44 @@ function getDocument(src) {
       if (task.destroyed) {
         throw new Error("Loading aborted");
       }
-      return _fetchDocument(worker, params, rangeTransport, docId).then(
-        function (workerId) {
-          if (task.destroyed) {
-            throw new Error("Loading aborted");
-          }
 
-          let networkStream;
-          if (rangeTransport) {
-            networkStream = new PDFDataTransportStream(
-              {
-                length: params.length,
-                initialData: params.initialData,
-                progressiveDone: params.progressiveDone,
-                disableRange: params.disableRange,
-                disableStream: params.disableStream,
-              },
-              rangeTransport
-            );
-          } else if (!params.data) {
-            networkStream = createPDFNetworkStream({
-              url: params.url,
+      const workerIdPromise = _fetchDocument(
+        worker,
+        params,
+        rangeTransport,
+        docId
+      );
+      const networkStreamPromise = new Promise(function (resolve) {
+        let networkStream;
+        if (rangeTransport) {
+          networkStream = new PDFDataTransportStream(
+            {
               length: params.length,
-              httpHeaders: params.httpHeaders,
-              withCredentials: params.withCredentials,
-              rangeChunkSize: params.rangeChunkSize,
+              initialData: params.initialData,
+              progressiveDone: params.progressiveDone,
               disableRange: params.disableRange,
               disableStream: params.disableStream,
-            });
+            },
+            rangeTransport
+          );
+        } else if (!params.data) {
+          networkStream = createPDFNetworkStream({
+            url: params.url,
+            length: params.length,
+            httpHeaders: params.httpHeaders,
+            withCredentials: params.withCredentials,
+            rangeChunkSize: params.rangeChunkSize,
+            disableRange: params.disableRange,
+            disableStream: params.disableStream,
+          });
+        }
+        resolve(networkStream);
+      });
+
+      return Promise.all([workerIdPromise, networkStreamPromise]).then(
+        function ([workerId, networkStream]) {
+          if (task.destroyed) {
+            throw new Error("Loading aborted");
           }
 
           const messageHandler = new MessageHandler(
@@ -403,10 +388,8 @@ function _fetchDocument(worker, source, pdfDataRangeTransport, docId) {
       },
       maxImageSize: source.maxImageSize,
       disableFontFace: source.disableFontFace,
-      disableCreateObjectURL: source.disableCreateObjectURL,
       postMessageTransfers: worker.postMessageTransfers,
       docBaseUrl: source.docBaseUrl,
-      nativeImageDecoderSupport: source.nativeImageDecoderSupport,
       ignoreErrors: source.ignoreErrors,
       isEvalSupported: source.isEvalSupported,
       fontExtraProperties: source.fontExtraProperties,
@@ -678,13 +661,6 @@ class PDFDocumentProxy {
     return this._transport.getOpenAction();
   }
 
-  getOpenActionDestination() {
-    deprecated("getOpenActionDestination, use getOpenAction instead.");
-    return this.getOpenAction().then(function (openAction) {
-      return openAction && openAction.dest ? openAction.dest : null;
-    });
-  }
-
   /**
    * @returns {Promise} A promise that is resolved with a lookup table for
    *   mapping named attachments to their content.
@@ -922,7 +898,7 @@ class PDFPageProxy {
 
     this.cleanupAfterRender = false;
     this.pendingCleanup = false;
-    this.intentStates = Object.create(null);
+    this._intentStates = new Map();
     this.destroyed = false;
   }
 
@@ -1027,10 +1003,11 @@ class PDFPageProxy {
     // this call to render.
     this.pendingCleanup = false;
 
-    if (!this.intentStates[renderingIntent]) {
-      this.intentStates[renderingIntent] = Object.create(null);
+    let intentState = this._intentStates.get(renderingIntent);
+    if (!intentState) {
+      intentState = Object.create(null);
+      this._intentStates.set(renderingIntent, intentState);
     }
-    const intentState = this.intentStates[renderingIntent];
 
     // Ensure that a pending `streamReader` cancel timeout is always aborted.
     if (intentState.streamReaderCancelTimeout) {
@@ -1152,14 +1129,15 @@ class PDFPageProxy {
     }
 
     const renderingIntent = "oplist";
-    if (!this.intentStates[renderingIntent]) {
-      this.intentStates[renderingIntent] = Object.create(null);
+    let intentState = this._intentStates.get(renderingIntent);
+    if (!intentState) {
+      intentState = Object.create(null);
+      this._intentStates.set(renderingIntent, intentState);
     }
-    const intentState = this.intentStates[renderingIntent];
     let opListTask;
 
     if (!intentState.opListReadCapability) {
-      opListTask = {};
+      opListTask = Object.create(null);
       opListTask.operatorListChanged = operatorListChanged;
       intentState.opListReadCapability = createPromiseCapability();
       intentState.renderTasks = [];
@@ -1246,8 +1224,7 @@ class PDFPageProxy {
     this._transport.pageCache[this._pageIndex] = null;
 
     const waitOn = [];
-    Object.keys(this.intentStates).forEach(intent => {
-      const intentState = this.intentStates[intent];
+    for (const [intent, intentState] of this._intentStates) {
       this._abortOperatorList({
         intentState,
         reason: new Error("Page was destroyed."),
@@ -1256,16 +1233,13 @@ class PDFPageProxy {
 
       if (intent === "oplist") {
         // Avoid errors below, since the renderTasks are just stubs.
-        return;
+        continue;
       }
-      intentState.renderTasks.forEach(function (renderTask) {
-        const renderCompleted = renderTask.capability.promise.catch(
-          function () {}
-        ); // ignoring failures
-        waitOn.push(renderCompleted);
-        renderTask.cancel();
-      });
-    });
+      for (const internalRenderTask of intentState.renderTasks) {
+        waitOn.push(internalRenderTask.completed);
+        internalRenderTask.cancel();
+      }
+    }
     this.objs.clear();
     this.annotationsPromise = null;
     this.pendingCleanup = false;
@@ -1288,22 +1262,16 @@ class PDFPageProxy {
    * @private
    */
   _tryCleanup(resetStats = false) {
-    if (
-      !this.pendingCleanup ||
-      Object.keys(this.intentStates).some(intent => {
-        const intentState = this.intentStates[intent];
-        return (
-          intentState.renderTasks.length !== 0 ||
-          !intentState.operatorList.lastChunk
-        );
-      })
-    ) {
+    if (!this.pendingCleanup) {
       return false;
     }
+    for (const { renderTasks, operatorList } of this._intentStates.values()) {
+      if (renderTasks.length !== 0 || !operatorList.lastChunk) {
+        return false;
+      }
+    }
 
-    Object.keys(this.intentStates).forEach(intent => {
-      delete this.intentStates[intent];
-    });
+    this._intentStates.clear();
     this.objs.clear();
     this.annotationsPromise = null;
     if (resetStats && this._stats) {
@@ -1317,7 +1285,7 @@ class PDFPageProxy {
    * @private
    */
   _startRenderPage(transparency, intent) {
-    const intentState = this.intentStates[intent];
+    const intentState = this._intentStates.get(intent);
     if (!intentState) {
       return; // Rendering was cancelled.
     }
@@ -1367,7 +1335,7 @@ class PDFPageProxy {
     );
     const reader = readableStream.getReader();
 
-    const intentState = this.intentStates[args.intent];
+    const intentState = this._intentStates.get(args.intent);
     intentState.streamReader = reader;
 
     const pump = () => {
@@ -1452,13 +1420,12 @@ class PDFPageProxy {
     }
     // Remove the current `intentState`, since a cancelled `getOperatorList`
     // call on the worker-thread cannot be re-started...
-    Object.keys(this.intentStates).some(intent => {
-      if (this.intentStates[intent] === intentState) {
-        delete this.intentStates[intent];
-        return true;
+    for (const [intent, curIntentState] of this._intentStates) {
+      if (curIntentState === intentState) {
+        this._intentStates.delete(intent);
+        break;
       }
-      return false;
-    });
+    }
     // ... and force clean-up to ensure that any old state is always removed.
     this.cleanup();
   }
@@ -1639,7 +1606,9 @@ const PDFWorker = (function PDFWorkerClosure() {
       }
       if (typeof PDFJSDev === "undefined" || !PDFJSDev.test("PRODUCTION")) {
         if (typeof SystemJS !== "object") {
-          throw new Error("SystemJS must be used to load fake worker.");
+          // Manually load SystemJS, since it's only necessary for fake workers.
+          await loadScript("../node_modules/systemjs/dist/system.js");
+          await loadScript("../systemjs.config.js");
         }
         const worker = await SystemJS.import("pdfjs/core/worker.js");
         return worker.WorkerMessageHandler;
@@ -2275,6 +2244,7 @@ class WorkerTransport {
           break;
         case "FontPath":
         case "FontType3Res":
+        case "Image":
           this.commonObjs.resolve(id, exportedData);
           break;
         default:
@@ -2295,26 +2265,6 @@ class WorkerTransport {
       }
 
       switch (type) {
-        case "JpegStream":
-          return new Promise((resolve, reject) => {
-            const img = new Image();
-            img.onload = function () {
-              resolve(img);
-            };
-            img.onerror = function () {
-              // Note that when the browser image loading/decoding fails,
-              // we'll fallback to the built-in PDF.js JPEG decoder; see
-              // `PartialEvaluator.buildPaintImageXObject` in the
-              // `src/core/evaluator.js` file.
-              reject(new Error("Error during JPEG image loading"));
-
-              // Always remember to release the image data if errors occurred.
-              releaseImageResources(img);
-            };
-            img.src = imageData;
-          }).then(img => {
-            pageProxy.objs.resolve(id, img);
-          });
         case "Image":
           pageProxy.objs.resolve(id, imageData);
 
@@ -2351,69 +2301,6 @@ class WorkerTransport {
       "UnsupportedFeature",
       this._onUnsupportedFeature.bind(this)
     );
-
-    messageHandler.on("JpegDecode", ([imageUrl, components]) => {
-      if (this.destroyed) {
-        return Promise.reject(new Error("Worker was destroyed"));
-      }
-
-      if (typeof document === "undefined") {
-        // Make sure that this code is not executing in node.js, as
-        // it's using DOM image, and there is no library to support that.
-        return Promise.reject(new Error('"document" is not defined.'));
-      }
-
-      if (components !== 3 && components !== 1) {
-        return Promise.reject(
-          new Error("Only 3 components or 1 component can be returned")
-        );
-      }
-
-      return new Promise(function (resolve, reject) {
-        const img = new Image();
-        img.onload = function () {
-          const { width, height } = img;
-          const size = width * height;
-          const rgbaLength = size * 4;
-          const buf = new Uint8ClampedArray(size * components);
-          let tmpCanvas = document.createElement("canvas");
-          tmpCanvas.width = width;
-          tmpCanvas.height = height;
-          let tmpCtx = tmpCanvas.getContext("2d");
-          tmpCtx.drawImage(img, 0, 0);
-          const data = tmpCtx.getImageData(0, 0, width, height).data;
-
-          if (components === 3) {
-            for (let i = 0, j = 0; i < rgbaLength; i += 4, j += 3) {
-              buf[j] = data[i];
-              buf[j + 1] = data[i + 1];
-              buf[j + 2] = data[i + 2];
-            }
-          } else if (components === 1) {
-            for (let i = 0, j = 0; i < rgbaLength; i += 4, j++) {
-              buf[j] = data[i];
-            }
-          }
-          resolve({ data: buf, width, height });
-
-          // Immediately release the image data once decoding has finished.
-          releaseImageResources(img);
-          // Zeroing the width and height cause Firefox to release graphics
-          // resources immediately, which can greatly reduce memory consumption.
-          tmpCanvas.width = 0;
-          tmpCanvas.height = 0;
-          tmpCanvas = null;
-          tmpCtx = null;
-        };
-        img.onerror = function () {
-          reject(new Error("JpegDecode failed to load image"));
-
-          // Always remember to release the image data if errors occurred.
-          releaseImageResources(img);
-        };
-        img.src = imageUrl;
-      });
-    });
 
     messageHandler.on("FetchBuiltInCMap", (data, sink) => {
       if (this.destroyed) {
@@ -2594,9 +2481,7 @@ class WorkerTransport {
     const params = this._params;
     return shadow(this, "loadingParams", {
       disableAutoFetch: params.disableAutoFetch,
-      disableCreateObjectURL: params.disableCreateObjectURL,
       disableFontFace: params.disableFontFace,
-      nativeImageDecoderSupport: params.nativeImageDecoderSupport,
     });
   }
 }
@@ -2670,14 +2555,6 @@ class PDFObjects {
   }
 
   clear() {
-    for (const objId in this._objs) {
-      const { data } = this._objs[objId];
-
-      if (typeof Image !== "undefined" && data instanceof Image) {
-        // Always release the image data when clearing out the cached objects.
-        releaseImageResources(data);
-      }
-    }
     this._objs = Object.create(null);
   }
 }
@@ -2762,6 +2639,13 @@ const InternalRenderTask = (function InternalRenderTaskClosure() {
       this._scheduleNextBound = this._scheduleNext.bind(this);
       this._nextBound = this._next.bind(this);
       this._canvas = params.canvasContext.canvas;
+    }
+
+    get completed() {
+      return this.capability.promise.catch(function () {
+        // Ignoring errors, since we only want to know when rendering is
+        // no longer pending.
+      });
     }
 
     initializeGraphics(transparency = false) {

@@ -669,6 +669,14 @@
        "lastPage": 1,
        "type": "eq"
     },
+    {  "id": "issue6707",
+       "file": "pdfs/issue6707.pdf",
+       "md5": "068ceaec23d265b1d38dfa6ab279f017",
+       "rounds": 1,
+       "link": true,
+       "lastPage": 1,
+       "type": "eq"
+    },
     {  "id": "issue6721_reduced",
        "file": "pdfs/issue6721_reduced.pdf",
        "md5": "719aa66d8081a15e3ba6032ed4279237",
@@ -703,6 +711,14 @@
        "type": "eq",
        "about": "Type1 font with |Ref|s in the Differences array of the Encoding dictionary."
     },
+    {  "id": "issue8078",
+       "file": "pdfs/issue8078.pdf",
+       "md5": "8b7d74bc24b4157393e4e88a511c05f1",
+       "link": true,
+       "rounds": 1,
+       "lastPage": 1,
+       "type": "eq"
+    },
     {  "id": "issue8092",
        "file": "pdfs/issue8092.pdf",
        "md5": "e4f3376b35fd132580246c3db1fbd738",
@@ -725,6 +741,12 @@
        "type": "eq",
        "annotations": true,
        "about": "Annotation with Rect array containing indirect objects."
+    },
+    {  "id": "issue11922",
+       "file": "pdfs/issue11922_reduced.pdf",
+       "md5": "711bb4b4bf92d967644b4f88d11a93db",
+       "rounds": 1,
+       "type": "load"
     },
     {  "id": "file_url_link",
        "file": "pdfs/file_url_link.pdf",
@@ -1631,8 +1653,7 @@
        "link": true,
        "firstPage": 2,
        "lastPage": 2,
-       "type": "eq",
-       "nativeImageDecoderSupport": "none"
+       "type": "eq"
     },
     {  "id": "issue10529",
        "file": "pdfs/issue10529.pdf",
@@ -4175,22 +4196,12 @@
        "link": true,
        "type": "eq"
     },
-    {  "id": "issue4926-built-in-jpg",
-       "file": "pdfs/issue4926.pdf",
-       "md5": "ed881c8ea2f9bc4be94ecb7f2b2c149b",
-       "rounds": 1,
-       "link": true,
-       "lastPage": 1,
-       "type": "eq",
-       "nativeImageDecoderSupport": "none"
-    },
     {  "id": "decodeACSuccessive",
        "file": "pdfs/decodeACSuccessive.pdf",
        "md5": "7749c032624fe27ab8e8d7d5e9a4a93f",
        "rounds": 1,
        "link": false,
-       "type": "eq",
-       "nativeImageDecoderSupport": "none"
+       "type": "eq"
     },
     {  "id": "issue5592",
        "file": "pdfs/issue5592.pdf",
@@ -4371,6 +4382,12 @@
        "rounds": 1,
        "type": "eq",
        "forms": true
+    },
+    {  "id": "issue11931",
+       "file": "pdfs/issue11931.pdf",
+       "md5": "9ea233037992e1f10280420a49e72845",
+       "rounds": 1,
+       "type": "eq"
     },
     {  "id": "annotation-button-widget-annotations",
        "file": "pdfs/annotation-button-widget.pdf",

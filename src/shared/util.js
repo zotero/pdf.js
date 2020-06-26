@@ -19,12 +19,6 @@ import "./compatibility.js";
 const IDENTITY_MATRIX = [1, 0, 0, 1, 0, 0];
 const FONT_IDENTITY_MATRIX = [0.001, 0, 0, 0.001, 0, 0];
 
-const NativeImageDecoding = {
-  NONE: "none",
-  DECODE: "decode",
-  DISPLAY: "display",
-};
-
 // Permission flags from Table 22, Section 7.6.3.2 of the PDF specification.
 const PermissionFlag = {
   PRINT: 0x04,
@@ -799,13 +793,6 @@ function utf8StringToString(str) {
   return unescape(encodeURIComponent(str));
 }
 
-function isEmptyObj(obj) {
-  for (const key in obj) {
-    return false;
-  }
-  return true;
-}
-
 function isBool(v) {
   return typeof v === "boolean";
 }
@@ -917,7 +904,6 @@ export {
   AbortException,
   InvalidPDFException,
   MissingPDFException,
-  NativeImageDecoding,
   PasswordException,
   PasswordResponses,
   PermissionFlag,
@@ -938,7 +924,6 @@ export {
   isArrayBuffer,
   isArrayEqual,
   isBool,
-  isEmptyObj,
   isNum,
   isString,
   isSameOrigin,

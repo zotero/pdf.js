@@ -440,7 +440,7 @@ if (typeof PDFJSDev === "undefined" || PDFJSDev.test("GENERIC")) {
 
   // eslint-disable-next-line no-shadow
   SVGGraphics = class SVGGraphics {
-    constructor(commonObjs, objs, forceDataSchema) {
+    constructor(commonObjs, objs, forceDataSchema = false) {
       this.svgFactory = new DOMSVGFactory();
 
       this.current = new SVGExtraState();
@@ -663,9 +663,6 @@ if (typeof PDFJSDev === "undefined" || PDFJSDev.test("GENERIC")) {
             break;
           case OPS.paintSolidColorImageMask:
             this.paintSolidColorImageMask();
-            break;
-          case OPS.paintJpegXObject:
-            this.paintJpegXObject(args[0], args[1], args[2]);
             break;
           case OPS.paintImageXObject:
             this.paintImageXObject(args[0]);
@@ -1093,6 +1090,9 @@ if (typeof PDFJSDev === "undefined" || PDFJSDev.test("GENERIC")) {
       rect.setAttributeNS(null, "width", x1 - x0);
       rect.setAttributeNS(null, "height", y1 - y0);
       rect.setAttributeNS(null, "fill", this._makeShadingPattern(args));
+      if (this.current.fillAlpha < 1) {
+        rect.setAttributeNS(null, "fill-opacity", this.current.fillAlpha);
+      }
       this._ensureTransformGroup().appendChild(rect);
     }
 
@@ -1559,25 +1559,10 @@ if (typeof PDFJSDev === "undefined" || PDFJSDev.test("GENERIC")) {
       this._ensureTransformGroup().appendChild(rect);
     }
 
-    paintJpegXObject(objId, w, h) {
-      const imgObj = this.objs.get(objId);
-      const imgEl = this.svgFactory.createElement("svg:image");
-      imgEl.setAttributeNS(XLINK_NS, "xlink:href", imgObj.src);
-      imgEl.setAttributeNS(null, "width", pf(w));
-      imgEl.setAttributeNS(null, "height", pf(h));
-      imgEl.setAttributeNS(null, "x", "0");
-      imgEl.setAttributeNS(null, "y", pf(-h));
-      imgEl.setAttributeNS(
-        null,
-        "transform",
-        `scale(${pf(1 / w)} ${pf(-1 / h)})`
-      );
-
-      this._ensureTransformGroup().appendChild(imgEl);
-    }
-
     paintImageXObject(objId) {
-      const imgData = this.objs.get(objId);
+      const imgData = objId.startsWith("g_")
+        ? this.commonObjs.get(objId)
+        : this.objs.get(objId);
       if (!imgData) {
         warn(`Dependent image with object ID ${objId} is not ready yet`);
         return;

@@ -22,23 +22,6 @@ import { JpxImage } from "./jpx.js";
 
 var PDFImage = (function PDFImageClosure() {
   /**
-   * Decodes the image using native decoder if possible. Resolves the promise
-   * when the image data is ready.
-   */
-  function handleImageData(image, nativeDecoder) {
-    if (nativeDecoder && nativeDecoder.canDecode(image)) {
-      return nativeDecoder.decode(image).catch(reason => {
-        warn(
-          "Native image decoding failed -- trying to recover: " +
-            (reason && reason.message)
-        );
-        return image;
-      });
-    }
-    return Promise.resolve(image);
-  }
-
-  /**
    * Decode and clamp a value. The formula is different from the spec because we
    * don't decode to float range [0,1], we decode it in the [0,max] range.
    */
@@ -106,6 +89,7 @@ var PDFImage = (function PDFImageClosure() {
     mask = null,
     isMask = false,
     pdfFunctionFactory,
+    localColorSpaceCache,
   }) {
     this.image = image;
     var dict = image.dict;
@@ -176,7 +160,7 @@ var PDFImage = (function PDFImageClosure() {
     this.bpc = bitsPerComponent;
 
     if (!this.imageMask) {
-      var colorSpace = dict.get("ColorSpace", "CS");
+      let colorSpace = dict.getRaw("ColorSpace") || dict.getRaw("CS");
       if (!colorSpace) {
         info("JPX images (which do not require color spaces)");
         switch (image.numComps) {
@@ -196,13 +180,13 @@ var PDFImage = (function PDFImageClosure() {
             );
         }
       }
-      const resources = isInline ? res : null;
-      this.colorSpace = ColorSpace.parse(
-        colorSpace,
+      this.colorSpace = ColorSpace.parse({
+        cs: colorSpace,
         xref,
-        resources,
-        pdfFunctionFactory
-      );
+        resources: isInline ? res : null,
+        pdfFunctionFactory,
+        localColorSpaceCache,
+      });
       this.numComps = this.colorSpace.numComps;
     }
 
@@ -238,6 +222,7 @@ var PDFImage = (function PDFImageClosure() {
         image: smask,
         isInline,
         pdfFunctionFactory,
+        localColorSpaceCache,
       });
     } else if (mask) {
       if (isStream(mask)) {
@@ -253,6 +238,7 @@ var PDFImage = (function PDFImageClosure() {
             isInline,
             isMask: true,
             pdfFunctionFactory,
+            localColorSpaceCache,
           });
         }
       } else {
@@ -265,53 +251,41 @@ var PDFImage = (function PDFImageClosure() {
    * Handles processing of image data and returns the Promise that is resolved
    * with a PDFImage when the image is ready to be used.
    */
-  PDFImage.buildImage = function ({
-    handler,
+  PDFImage.buildImage = async function ({
     xref,
     res,
     image,
     isInline = false,
-    nativeDecoder = null,
     pdfFunctionFactory,
+    localColorSpaceCache,
   }) {
-    var imagePromise = handleImageData(image, nativeDecoder);
-    var smaskPromise;
-    var maskPromise;
+    const imageData = image;
+    let smaskData = null;
+    let maskData = null;
 
-    var smask = image.dict.get("SMask");
-    var mask = image.dict.get("Mask");
+    const smask = image.dict.get("SMask");
+    const mask = image.dict.get("Mask");
 
     if (smask) {
-      smaskPromise = handleImageData(smask, nativeDecoder);
-      maskPromise = Promise.resolve(null);
-    } else {
-      smaskPromise = Promise.resolve(null);
-      if (mask) {
-        if (isStream(mask)) {
-          maskPromise = handleImageData(mask, nativeDecoder);
-        } else if (Array.isArray(mask)) {
-          maskPromise = Promise.resolve(mask);
-        } else {
-          warn("Unsupported mask format.");
-          maskPromise = Promise.resolve(null);
-        }
+      smaskData = smask;
+    } else if (mask) {
+      if (isStream(mask) || Array.isArray(mask)) {
+        maskData = mask;
       } else {
-        maskPromise = Promise.resolve(null);
+        warn("Unsupported mask format.");
       }
     }
-    return Promise.all([imagePromise, smaskPromise, maskPromise]).then(
-      function ([imageData, smaskData, maskData]) {
-        return new PDFImage({
-          xref,
-          res,
-          image: imageData,
-          isInline,
-          smask: smaskData,
-          mask: maskData,
-          pdfFunctionFactory,
-        });
-      }
-    );
+
+    return new PDFImage({
+      xref,
+      res,
+      image: imageData,
+      isInline,
+      smask: smaskData,
+      mask: maskData,
+      pdfFunctionFactory,
+      localColorSpaceCache,
+    });
   };
 
   PDFImage.createMask = function ({

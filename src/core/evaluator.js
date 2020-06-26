@@ -25,7 +25,6 @@ import {
   isArrayEqual,
   isNum,
   isString,
-  NativeImageDecoding,
   OPS,
   stringToPDFString,
   TextRenderingMode,
@@ -74,24 +73,21 @@ import {
 } from "./standard_fonts.js";
 import { getTilingPatternIR, Pattern } from "./pattern.js";
 import { Lexer, Parser } from "./parser.js";
+import { LocalColorSpaceCache, LocalImageCache } from "./image_utils.js";
 import { bidi } from "./bidi.js";
 import { ColorSpace } from "./colorspace.js";
 import { DecodeStream } from "./stream.js";
 import { getGlyphsUnicode } from "./glyphlist.js";
 import { getMetrics } from "./metrics.js";
 import { isPDFFunction } from "./function.js";
-import { JpegStream } from "./jpeg_stream.js";
 import { MurmurHash3_64 } from "./murmurhash3.js";
-import { NativeImageDecoder } from "./image_utils.js";
 import { OperatorList } from "./operator_list.js";
 import { PDFImage } from "./image.js";
 
 var PartialEvaluator = (function PartialEvaluatorClosure() {
   const DefaultPartialEvaluatorOptions = {
-    forceDataSchema: false,
     maxImageSize: -1,
     disableFontFace: false,
-    nativeImageDecoderSupport: NativeImageDecoding.DECODE,
     ignoreErrors: false,
     isEvalSupported: true,
     fontExtraProperties: false,
@@ -105,6 +101,7 @@ var PartialEvaluator = (function PartialEvaluatorClosure() {
     idFactory,
     fontCache,
     builtInCMapCache,
+    globalImageCache,
     options = null,
     pdfFunctionFactory,
   }) {
@@ -114,38 +111,12 @@ var PartialEvaluator = (function PartialEvaluatorClosure() {
     this.idFactory = idFactory;
     this.fontCache = fontCache;
     this.builtInCMapCache = builtInCMapCache;
+    this.globalImageCache = globalImageCache;
     this.options = options || DefaultPartialEvaluatorOptions;
     this.pdfFunctionFactory = pdfFunctionFactory;
     this.parsingType3Font = false;
 
-    this.fetchBuiltInCMap = async name => {
-      if (this.builtInCMapCache.has(name)) {
-        return this.builtInCMapCache.get(name);
-      }
-      const readableStream = this.handler.sendWithStream("FetchBuiltInCMap", {
-        name,
-      });
-      const reader = readableStream.getReader();
-
-      const data = await new Promise(function (resolve, reject) {
-        function pump() {
-          reader.read().then(function ({ value, done }) {
-            if (done) {
-              return;
-            }
-            resolve(value);
-            pump();
-          }, reject);
-        }
-        pump();
-      });
-
-      if (data.compressionType !== CMapCompressionType.NONE) {
-        // Given the size of uncompressed CMaps, only cache compressed ones.
-        this.builtInCMapCache.set(name, data);
-      }
-      return data;
-    };
+    this._fetchBuiltInCMapBound = this.fetchBuiltInCMap.bind(this);
   }
 
   // Trying to minimize Date.now() usage and check every 100 time
@@ -377,13 +348,44 @@ var PartialEvaluator = (function PartialEvaluatorClosure() {
       return false;
     },
 
+    async fetchBuiltInCMap(name) {
+      const cachedData = this.builtInCMapCache.get(name);
+      if (cachedData) {
+        return cachedData;
+      }
+      const readableStream = this.handler.sendWithStream("FetchBuiltInCMap", {
+        name,
+      });
+      const reader = readableStream.getReader();
+
+      const data = await new Promise(function (resolve, reject) {
+        function pump() {
+          reader.read().then(function ({ value, done }) {
+            if (done) {
+              return;
+            }
+            resolve(value);
+            pump();
+          }, reject);
+        }
+        pump();
+      });
+
+      if (data.compressionType !== CMapCompressionType.NONE) {
+        // Given the size of uncompressed CMaps, only cache compressed ones.
+        this.builtInCMapCache.set(name, data);
+      }
+      return data;
+    },
+
     async buildFormXObject(
       resources,
       xobj,
       smask,
       operatorList,
       task,
-      initialState
+      initialState,
+      localColorSpaceCache
     ) {
       var dict = xobj.dict;
       var matrix = dict.getArray("Matrix");
@@ -409,10 +411,22 @@ var PartialEvaluator = (function PartialEvaluatorClosure() {
           groupOptions.isolated = group.get("I") || false;
           groupOptions.knockout = group.get("K") || false;
           if (group.has("CS")) {
-            colorSpace = await this.parseColorSpace({
-              cs: group.get("CS"),
-              resources,
-            });
+            const cs = group.getRaw("CS");
+
+            const cachedColorSpace = ColorSpace.getCached(
+              cs,
+              this.xref,
+              localColorSpaceCache
+            );
+            if (cachedColorSpace) {
+              colorSpace = cachedColorSpace;
+            } else {
+              colorSpace = await this.parseColorSpace({
+                cs,
+                resources,
+                localColorSpaceCache,
+              });
+            }
           }
         }
 
@@ -441,16 +455,41 @@ var PartialEvaluator = (function PartialEvaluatorClosure() {
       });
     },
 
+    _sendImgData(objId, imgData, cacheGlobally = false) {
+      const transfers = imgData ? [imgData.data.buffer] : null;
+
+      if (this.parsingType3Font) {
+        return this.handler.sendWithPromise(
+          "commonobj",
+          [objId, "FontType3Res", imgData],
+          transfers
+        );
+      }
+      if (cacheGlobally) {
+        return this.handler.send(
+          "commonobj",
+          [objId, "Image", imgData],
+          transfers
+        );
+      }
+      return this.handler.send(
+        "obj",
+        [objId, this.pageIndex, "Image", imgData],
+        transfers
+      );
+    },
+
     async buildPaintImageXObject({
       resources,
       image,
       isInline = false,
       operatorList,
       cacheKey,
-      imageCache,
-      forceDisableNativeImageDecoder = false,
+      localImageCache,
+      localColorSpaceCache,
     }) {
       var dict = image.dict;
+      const imageRef = dict.objId;
       var w = dict.get("Width", "W");
       var h = dict.get("Height", "H");
 
@@ -494,10 +533,10 @@ var PartialEvaluator = (function PartialEvaluatorClosure() {
 
         operatorList.addOp(OPS.paintImageMaskXObject, args);
         if (cacheKey) {
-          imageCache[cacheKey] = {
+          localImageCache.set(cacheKey, imageRef, {
             fn: OPS.paintImageMaskXObject,
             args,
-          };
+          });
         }
         return undefined;
       }
@@ -507,19 +546,14 @@ var PartialEvaluator = (function PartialEvaluatorClosure() {
 
       var SMALL_IMAGE_DIMENSIONS = 200;
       // Inlining small images into the queue as RGB data
-      if (
-        isInline &&
-        !softMask &&
-        !mask &&
-        !(image instanceof JpegStream) &&
-        w + h < SMALL_IMAGE_DIMENSIONS
-      ) {
+      if (isInline && !softMask && !mask && w + h < SMALL_IMAGE_DIMENSIONS) {
         const imageObj = new PDFImage({
           xref: this.xref,
           res: resources,
           image,
           isInline,
           pdfFunctionFactory: this.pdfFunctionFactory,
+          localColorSpaceCache,
         });
         // We force the use of RGBA_32BPP images here, because we can't handle
         // any other kind.
@@ -528,93 +562,22 @@ var PartialEvaluator = (function PartialEvaluatorClosure() {
         return undefined;
       }
 
-      const nativeImageDecoderSupport = forceDisableNativeImageDecoder
-        ? NativeImageDecoding.NONE
-        : this.options.nativeImageDecoderSupport;
       // If there is no imageMask, create the PDFImage and a lot
       // of image processing can be done here.
-      let objId = `img_${this.idFactory.createObjId()}`;
+      let objId = `img_${this.idFactory.createObjId()}`,
+        cacheGlobally = false;
 
       if (this.parsingType3Font) {
-        assert(
-          nativeImageDecoderSupport === NativeImageDecoding.NONE,
-          "Type3 image resources should be completely decoded in the worker."
+        objId = `${this.idFactory.getDocId()}_type3res_${objId}`;
+      } else if (imageRef) {
+        cacheGlobally = this.globalImageCache.shouldCache(
+          imageRef,
+          this.pageIndex
         );
 
-        objId = `${this.idFactory.getDocId()}_type3res_${objId}`;
-      }
-
-      if (
-        nativeImageDecoderSupport !== NativeImageDecoding.NONE &&
-        !softMask &&
-        !mask &&
-        image instanceof JpegStream &&
-        image.maybeValidDimensions &&
-        NativeImageDecoder.isSupported(
-          image,
-          this.xref,
-          resources,
-          this.pdfFunctionFactory
-        )
-      ) {
-        // These JPEGs don't need any more processing so we can just send it.
-        return this.handler
-          .sendWithPromise("obj", [
-            objId,
-            this.pageIndex,
-            "JpegStream",
-            image.getIR(this.options.forceDataSchema),
-          ])
-          .then(
-            function () {
-              // Only add the dependency once we know that the native JPEG
-              // decoding succeeded, to ensure that rendering will always
-              // complete.
-              operatorList.addDependency(objId);
-              args = [objId, w, h];
-
-              operatorList.addOp(OPS.paintJpegXObject, args);
-              if (cacheKey) {
-                imageCache[cacheKey] = {
-                  fn: OPS.paintJpegXObject,
-                  args,
-                };
-              }
-            },
-            reason => {
-              warn(
-                "Native JPEG decoding failed -- trying to recover: " +
-                  (reason && reason.message)
-              );
-              // Try to decode the JPEG image with the built-in decoder instead.
-              return this.buildPaintImageXObject({
-                resources,
-                image,
-                isInline,
-                operatorList,
-                cacheKey,
-                imageCache,
-                forceDisableNativeImageDecoder: true,
-              });
-            }
-          );
-      }
-
-      // Creates native image decoder only if a JPEG image or mask is present.
-      var nativeImageDecoder = null;
-      if (
-        nativeImageDecoderSupport === NativeImageDecoding.DECODE &&
-        (image instanceof JpegStream ||
-          mask instanceof JpegStream ||
-          softMask instanceof JpegStream)
-      ) {
-        nativeImageDecoder = new NativeImageDecoder({
-          xref: this.xref,
-          resources,
-          handler: this.handler,
-          forceDataSchema: this.options.forceDataSchema,
-          pdfFunctionFactory: this.pdfFunctionFactory,
-        });
+        if (cacheGlobally) {
+          objId = `${this.idFactory.getDocId()}_${objId}`;
+        }
       }
 
       // Ensure that the dependency is added before the image is decoded.
@@ -622,43 +585,22 @@ var PartialEvaluator = (function PartialEvaluatorClosure() {
       args = [objId, w, h];
 
       const imgPromise = PDFImage.buildImage({
-        handler: this.handler,
         xref: this.xref,
         res: resources,
         image,
         isInline,
-        nativeDecoder: nativeImageDecoder,
         pdfFunctionFactory: this.pdfFunctionFactory,
+        localColorSpaceCache,
       })
         .then(imageObj => {
           imgData = imageObj.createImageData(/* forceRGBA = */ false);
 
-          if (this.parsingType3Font) {
-            return this.handler.sendWithPromise(
-              "commonobj",
-              [objId, "FontType3Res", imgData],
-              [imgData.data.buffer]
-            );
-          }
-          this.handler.send(
-            "obj",
-            [objId, this.pageIndex, "Image", imgData],
-            [imgData.data.buffer]
-          );
-          return undefined;
+          return this._sendImgData(objId, imgData, cacheGlobally);
         })
         .catch(reason => {
-          warn("Unable to decode image: " + reason);
+          warn(`Unable to decode image "${objId}": "${reason}".`);
 
-          if (this.parsingType3Font) {
-            return this.handler.sendWithPromise("commonobj", [
-              objId,
-              "FontType3Res",
-              null,
-            ]);
-          }
-          this.handler.send("obj", [objId, this.pageIndex, "Image", null]);
-          return undefined;
+          return this._sendImgData(objId, /* imgData = */ null, cacheGlobally);
         });
 
       if (this.parsingType3Font) {
@@ -670,10 +612,23 @@ var PartialEvaluator = (function PartialEvaluatorClosure() {
 
       operatorList.addOp(OPS.paintImageXObject, args);
       if (cacheKey) {
-        imageCache[cacheKey] = {
+        localImageCache.set(cacheKey, imageRef, {
           fn: OPS.paintImageXObject,
           args,
-        };
+        });
+
+        if (imageRef) {
+          assert(!isInline, "Cannot cache an inline image globally.");
+          this.globalImageCache.addPageIndex(imageRef, this.pageIndex);
+
+          if (cacheGlobally) {
+            this.globalImageCache.setData(imageRef, {
+              objId,
+              fn: OPS.paintImageXObject,
+              args,
+            });
+          }
+        }
       }
       return undefined;
     },
@@ -683,7 +638,8 @@ var PartialEvaluator = (function PartialEvaluatorClosure() {
       resources,
       operatorList,
       task,
-      stateManager
+      stateManager,
+      localColorSpaceCache
     ) {
       var smaskContent = smask.get("G");
       var smaskOptions = {
@@ -712,7 +668,8 @@ var PartialEvaluator = (function PartialEvaluatorClosure() {
         smaskOptions,
         operatorList,
         task,
-        stateManager.state.clone()
+        stateManager.state.clone(),
+        localColorSpaceCache
       );
     },
 
@@ -864,7 +821,8 @@ var PartialEvaluator = (function PartialEvaluatorClosure() {
       gState,
       operatorList,
       task,
-      stateManager
+      stateManager,
+      localColorSpaceCache
     ) {
       // This array holds the converted/processed state data.
       var gStateObj = [];
@@ -917,7 +875,8 @@ var PartialEvaluator = (function PartialEvaluatorClosure() {
                   resources,
                   operatorList,
                   task,
-                  stateManager
+                  stateManager,
+                  localColorSpaceCache
                 );
               });
               gStateObj.push([key, true]);
@@ -1181,11 +1140,13 @@ var PartialEvaluator = (function PartialEvaluatorClosure() {
       }
     },
 
-    parseColorSpace({ cs, resources }) {
-      return new Promise(resolve => {
-        resolve(
-          ColorSpace.parse(cs, this.xref, resources, this.pdfFunctionFactory)
-        );
+    parseColorSpace({ cs, resources, localColorSpaceCache }) {
+      return ColorSpace.parseAsync({
+        cs,
+        xref: this.xref,
+        resources,
+        pdfFunctionFactory: this.pdfFunctionFactory,
+        localColorSpaceCache,
       }).catch(reason => {
         if (reason instanceof AbortException) {
           return null;
@@ -1203,7 +1164,16 @@ var PartialEvaluator = (function PartialEvaluatorClosure() {
       });
     },
 
-    async handleColorN(operatorList, fn, args, cs, patterns, resources, task) {
+    async handleColorN(
+      operatorList,
+      fn,
+      args,
+      cs,
+      patterns,
+      resources,
+      task,
+      localColorSpaceCache
+    ) {
       // compile tiling patterns
       var patternName = args[args.length - 1];
       // SCN/scn applies patterns along with normal colors
@@ -1232,7 +1202,8 @@ var PartialEvaluator = (function PartialEvaluatorClosure() {
             this.xref,
             resources,
             this.handler,
-            this.pdfFunctionFactory
+            this.pdfFunctionFactory,
+            localColorSpaceCache
           );
           operatorList.addOp(fn, pattern.getIR());
           return undefined;
@@ -1261,7 +1232,8 @@ var PartialEvaluator = (function PartialEvaluatorClosure() {
       var self = this;
       var xref = this.xref;
       let parsingText = false;
-      var imageCache = Object.create(null);
+      const localImageCache = new LocalImageCache();
+      const localColorSpaceCache = new LocalColorSpaceCache();
 
       var xobjs = resources.get("XObject") || Dict.empty;
       var patterns = resources.get("Pattern") || Dict.empty;
@@ -1308,10 +1280,13 @@ var PartialEvaluator = (function PartialEvaluatorClosure() {
             case OPS.paintXObject:
               // eagerly compile XForm objects
               var name = args[0].name;
-              if (name && imageCache[name] !== undefined) {
-                operatorList.addOp(imageCache[name].fn, imageCache[name].args);
-                args = null;
-                continue;
+              if (name) {
+                const localImage = localImageCache.getByName(name);
+                if (localImage) {
+                  operatorList.addOp(localImage.fn, localImage.args);
+                  args = null;
+                  continue;
+                }
               }
 
               next(
@@ -1322,7 +1297,31 @@ var PartialEvaluator = (function PartialEvaluatorClosure() {
                     );
                   }
 
-                  const xobj = xobjs.get(name);
+                  let xobj = xobjs.getRaw(name);
+                  if (xobj instanceof Ref) {
+                    const localImage = localImageCache.getByRef(xobj);
+                    if (localImage) {
+                      operatorList.addOp(localImage.fn, localImage.args);
+
+                      resolveXObject();
+                      return;
+                    }
+
+                    const globalImage = self.globalImageCache.getData(
+                      xobj,
+                      self.pageIndex
+                    );
+                    if (globalImage) {
+                      operatorList.addDependency(globalImage.objId);
+                      operatorList.addOp(globalImage.fn, globalImage.args);
+
+                      resolveXObject();
+                      return;
+                    }
+
+                    xobj = xref.fetch(xobj);
+                  }
+
                   if (!xobj) {
                     operatorList.addOp(fn, args);
                     resolveXObject();
@@ -1346,7 +1345,8 @@ var PartialEvaluator = (function PartialEvaluatorClosure() {
                         null,
                         operatorList,
                         task,
-                        stateManager.state.clone()
+                        stateManager.state.clone(),
+                        localColorSpaceCache
                       )
                       .then(function () {
                         stateManager.restore();
@@ -1360,7 +1360,8 @@ var PartialEvaluator = (function PartialEvaluatorClosure() {
                         image: xobj,
                         operatorList,
                         cacheKey: name,
-                        imageCache,
+                        localImageCache,
+                        localColorSpaceCache,
                       })
                       .then(resolveXObject, rejectXObject);
                     return;
@@ -1419,9 +1420,9 @@ var PartialEvaluator = (function PartialEvaluatorClosure() {
             case OPS.endInlineImage:
               var cacheKey = args[0].cacheKey;
               if (cacheKey) {
-                var cacheEntry = imageCache[cacheKey];
-                if (cacheEntry !== undefined) {
-                  operatorList.addOp(cacheEntry.fn, cacheEntry.args);
+                const localImage = localImageCache.getByName(cacheKey);
+                if (localImage) {
+                  operatorList.addOp(localImage.fn, localImage.args);
                   args = null;
                   continue;
                 }
@@ -1433,7 +1434,8 @@ var PartialEvaluator = (function PartialEvaluatorClosure() {
                   isInline: true,
                   operatorList,
                   cacheKey,
-                  imageCache,
+                  localImageCache,
+                  localColorSpaceCache,
                 })
               );
               return;
@@ -1491,12 +1493,23 @@ var PartialEvaluator = (function PartialEvaluatorClosure() {
               stateManager.state.textRenderingMode = args[0];
               break;
 
-            case OPS.setFillColorSpace:
+            case OPS.setFillColorSpace: {
+              const cachedColorSpace = ColorSpace.getCached(
+                args[0],
+                xref,
+                localColorSpaceCache
+              );
+              if (cachedColorSpace) {
+                stateManager.state.fillColorSpace = cachedColorSpace;
+                continue;
+              }
+
               next(
                 self
                   .parseColorSpace({
                     cs: args[0],
                     resources,
+                    localColorSpaceCache,
                   })
                   .then(function (colorSpace) {
                     if (colorSpace) {
@@ -1505,12 +1518,24 @@ var PartialEvaluator = (function PartialEvaluatorClosure() {
                   })
               );
               return;
-            case OPS.setStrokeColorSpace:
+            }
+            case OPS.setStrokeColorSpace: {
+              const cachedColorSpace = ColorSpace.getCached(
+                args[0],
+                xref,
+                localColorSpaceCache
+              );
+              if (cachedColorSpace) {
+                stateManager.state.strokeColorSpace = cachedColorSpace;
+                continue;
+              }
+
               next(
                 self
                   .parseColorSpace({
                     cs: args[0],
                     resources,
+                    localColorSpaceCache,
                   })
                   .then(function (colorSpace) {
                     if (colorSpace) {
@@ -1519,6 +1544,7 @@ var PartialEvaluator = (function PartialEvaluatorClosure() {
                   })
               );
               return;
+            }
             case OPS.setFillColor:
               cs = stateManager.state.fillColorSpace;
               args = cs.getRgb(args, 0);
@@ -1568,7 +1594,8 @@ var PartialEvaluator = (function PartialEvaluatorClosure() {
                     cs,
                     patterns,
                     resources,
-                    task
+                    task,
+                    localColorSpaceCache
                   )
                 );
                 return;
@@ -1587,7 +1614,8 @@ var PartialEvaluator = (function PartialEvaluatorClosure() {
                     cs,
                     patterns,
                     resources,
-                    task
+                    task,
+                    localColorSpaceCache
                   )
                 );
                 return;
@@ -1613,7 +1641,8 @@ var PartialEvaluator = (function PartialEvaluatorClosure() {
                 xref,
                 resources,
                 self.handler,
-                self.pdfFunctionFactory
+                self.pdfFunctionFactory,
+                localColorSpaceCache
               );
               var patternIR = shadingFill.getIR();
               args = [patternIR];
@@ -1634,7 +1663,8 @@ var PartialEvaluator = (function PartialEvaluatorClosure() {
                   gState,
                   operatorList,
                   task,
-                  stateManager
+                  stateManager,
+                  localColorSpaceCache
                 )
               );
               return;
@@ -1757,7 +1787,7 @@ var PartialEvaluator = (function PartialEvaluatorClosure() {
 
       // The xobj is parsed iff it's needed, e.g. if there is a `DO` cmd.
       var xobjs = null;
-      var skipEmptyXObjs = Object.create(null);
+      const emptyXObjectCache = new LocalImageCache();
 
       var preprocessor = new EvaluatorPreprocessor(stream, xref, stateManager);
 
@@ -2291,7 +2321,7 @@ var PartialEvaluator = (function PartialEvaluatorClosure() {
               }
 
               var name = args[0].name;
-              if (name && skipEmptyXObjs[name] !== undefined) {
+              if (name && emptyXObjectCache.getByName(name)) {
                 break;
               }
 
@@ -2303,7 +2333,16 @@ var PartialEvaluator = (function PartialEvaluatorClosure() {
                     );
                   }
 
-                  const xobj = xobjs.get(name);
+                  let xobj = xobjs.getRaw(name);
+                  if (xobj instanceof Ref) {
+                    if (emptyXObjectCache.getByRef(xobj)) {
+                      resolveXObject();
+                      return;
+                    }
+
+                    xobj = xref.fetch(xobj);
+                  }
+
                   if (!xobj) {
                     resolveXObject();
                     return;
@@ -2318,7 +2357,8 @@ var PartialEvaluator = (function PartialEvaluatorClosure() {
                   }
 
                   if (type.name !== "Form") {
-                    skipEmptyXObjs[name] = true;
+                    emptyXObjectCache.set(name, xobj.dict.objId, true);
+
                     resolveXObject();
                     return;
                   }
@@ -2369,7 +2409,7 @@ var PartialEvaluator = (function PartialEvaluatorClosure() {
                     })
                     .then(function () {
                       if (!sinkWrapper.enqueueInvoked) {
-                        skipEmptyXObjs[name] = true;
+                        emptyXObjectCache.set(name, xobj.dict.objId, true);
                       }
                       resolveXObject();
                     }, rejectXObject);
@@ -2731,7 +2771,7 @@ var PartialEvaluator = (function PartialEvaluatorClosure() {
         // from the ASN Web site; see the Bibliography).
         return CMapFactory.create({
           encoding: ucs2CMapName,
-          fetchBuiltInCMap: this.fetchBuiltInCMap,
+          fetchBuiltInCMap: this._fetchBuiltInCMapBound,
           useCMap: null,
         }).then(function (ucs2CMap) {
           const cMap = properties.cMap;
@@ -2764,7 +2804,7 @@ var PartialEvaluator = (function PartialEvaluatorClosure() {
       if (isName(cmapObj)) {
         return CMapFactory.create({
           encoding: cmapObj,
-          fetchBuiltInCMap: this.fetchBuiltInCMap,
+          fetchBuiltInCMap: this._fetchBuiltInCMapBound,
           useCMap: null,
         }).then(function (cmap) {
           if (cmap instanceof IdentityCMap) {
@@ -2775,7 +2815,7 @@ var PartialEvaluator = (function PartialEvaluatorClosure() {
       } else if (isStream(cmapObj)) {
         return CMapFactory.create({
           encoding: cmapObj,
-          fetchBuiltInCMap: this.fetchBuiltInCMap,
+          fetchBuiltInCMap: this._fetchBuiltInCMapBound,
           useCMap: null,
         }).then(
           function (cmap) {
@@ -3270,7 +3310,7 @@ var PartialEvaluator = (function PartialEvaluatorClosure() {
         }
         cMapPromise = CMapFactory.create({
           encoding: cidEncoding,
-          fetchBuiltInCMap: this.fetchBuiltInCMap,
+          fetchBuiltInCMap: this._fetchBuiltInCMapBound,
           useCMap: null,
         }).then(function (cMap) {
           properties.cMap = cMap;
@@ -3393,7 +3433,6 @@ class TranslatedFont {
     // the rendering code on the main-thread (see issue10717.pdf).
     var type3Options = Object.create(evaluator.options);
     type3Options.ignoreErrors = false;
-    type3Options.nativeImageDecoderSupport = NativeImageDecoding.NONE;
     var type3Evaluator = evaluator.clone(type3Options);
     type3Evaluator.parsingType3Font = true;
 

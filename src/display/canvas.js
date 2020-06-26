@@ -2113,46 +2113,6 @@ var CanvasGraphics = (function CanvasGraphicsClosure() {
       this.restore();
     },
 
-    paintJpegXObject: function CanvasGraphics_paintJpegXObject(objId, w, h) {
-      const domImage = this.processingType3
-        ? this.commonObjs.get(objId)
-        : this.objs.get(objId);
-      if (!domImage) {
-        warn("Dependent image isn't ready yet");
-        return;
-      }
-
-      this.save();
-
-      var ctx = this.ctx;
-      // scale the image to the unit square
-      ctx.scale(1 / w, -1 / h);
-
-      ctx.drawImage(
-        domImage,
-        0,
-        0,
-        domImage.width,
-        domImage.height,
-        0,
-        -h,
-        w,
-        h
-      );
-      if (this.imageLayer) {
-        var currentTransform = ctx.mozCurrentTransformInverse;
-        var position = this.getCanvasPosition(0, 0);
-        this.imageLayer.appendImage({
-          objId,
-          left: position[0],
-          top: position[1],
-          width: w / currentTransform[0],
-          height: h / currentTransform[3],
-        });
-      }
-      this.restore();
-    },
-
     paintImageMaskXObject: function CanvasGraphics_paintImageMaskXObject(img) {
       var ctx = this.ctx;
       var width = img.width,
@@ -2197,9 +2157,11 @@ var CanvasGraphics = (function CanvasGraphicsClosure() {
       this.paintInlineImageXObject(maskCanvas.canvas);
     },
 
-    paintImageMaskXObjectRepeat: function CanvasGraphics_paintImageMaskXObjectRepeat(
+    paintImageMaskXObjectRepeat(
       imgData,
       scaleX,
+      skewX = 0,
+      skewY = 0,
       scaleY,
       positions
     ) {
@@ -2230,7 +2192,14 @@ var CanvasGraphics = (function CanvasGraphicsClosure() {
       var ctx = this.ctx;
       for (var i = 0, ii = positions.length; i < ii; i += 2) {
         ctx.save();
-        ctx.transform(scaleX, 0, 0, scaleY, positions[i], positions[i + 1]);
+        ctx.transform(
+          scaleX,
+          skewX,
+          skewY,
+          scaleY,
+          positions[i],
+          positions[i + 1]
+        );
         ctx.scale(1, -1);
         ctx.drawImage(maskCanvas.canvas, 0, 0, width, height, 0, -1, 1, 1);
         ctx.restore();
@@ -2277,7 +2246,7 @@ var CanvasGraphics = (function CanvasGraphicsClosure() {
     },
 
     paintImageXObject: function CanvasGraphics_paintImageXObject(objId) {
-      const imgData = this.processingType3
+      const imgData = objId.startsWith("g_")
         ? this.commonObjs.get(objId)
         : this.objs.get(objId);
       if (!imgData) {
@@ -2294,7 +2263,7 @@ var CanvasGraphics = (function CanvasGraphicsClosure() {
       scaleY,
       positions
     ) {
-      const imgData = this.processingType3
+      const imgData = objId.startsWith("g_")
         ? this.commonObjs.get(objId)
         : this.objs.get(objId);
       if (!imgData) {
@@ -2353,9 +2322,9 @@ var CanvasGraphics = (function CanvasGraphicsClosure() {
       var paintWidth = width,
         paintHeight = height;
       var tmpCanvasId = "prescale1";
-      // Vertial or horizontal scaling shall not be more than 2 to not loose the
+      // Vertical or horizontal scaling shall not be more than 2 to not lose the
       // pixels during drawImage operation, painting on the temporary canvas(es)
-      // that are twice smaller in size
+      // that are twice smaller in size.
       while (
         (widthScale > 2 && paintWidth > 1) ||
         (heightScale > 2 && paintHeight > 1)

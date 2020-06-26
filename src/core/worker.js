@@ -37,39 +37,34 @@ import { MessageHandler } from "../shared/message_handler.js";
 import { PDFWorkerStream } from "./worker_stream.js";
 import { XRefParseException } from "./core_utils.js";
 
-var WorkerTask = (function WorkerTaskClosure() {
-  // eslint-disable-next-line no-shadow
-  function WorkerTask(name) {
+class WorkerTask {
+  constructor(name) {
     this.name = name;
     this.terminated = false;
     this._capability = createPromiseCapability();
   }
 
-  WorkerTask.prototype = {
-    get finished() {
-      return this._capability.promise;
-    },
+  get finished() {
+    return this._capability.promise;
+  }
 
-    finish() {
-      this._capability.resolve();
-    },
+  finish() {
+    this._capability.resolve();
+  }
 
-    terminate() {
-      this.terminated = true;
-    },
+  terminate() {
+    this.terminated = true;
+  }
 
-    ensureNotTerminated() {
-      if (this.terminated) {
-        throw new Error("Worker task was terminated");
-      }
-    },
-  };
+  ensureNotTerminated() {
+    if (this.terminated) {
+      throw new Error("Worker task was terminated");
+    }
+  }
+}
 
-  return WorkerTask;
-})();
-
-var WorkerMessageHandler = {
-  setup(handler, port) {
+class WorkerMessageHandler {
+  static setup(handler, port) {
     var testMessageProcessed = false;
     handler.on("test", function wphSetupTest(data) {
       if (testMessageProcessed) {
@@ -96,8 +91,9 @@ var WorkerMessageHandler = {
     handler.on("GetDocRequest", function wphSetupDoc(data) {
       return WorkerMessageHandler.createDocumentHandler(data, port);
     });
-  },
-  createDocumentHandler(docParams, port) {
+  }
+
+  static createDocumentHandler(docParams, port) {
     // This context is actually holds references on pdfManager and handler,
     // until the latter is destroyed.
     var pdfManager;
@@ -399,10 +395,8 @@ var WorkerMessageHandler = {
       ensureNotTerminated();
 
       var evaluatorOptions = {
-        forceDataSchema: data.disableCreateObjectURL,
         maxImageSize: data.maxImageSize,
         disableFontFace: data.disableFontFace,
-        nativeImageDecoderSupport: data.nativeImageDecoderSupport,
         ignoreErrors: data.ignoreErrors,
         isEvalSupported: data.isEvalSupported,
         fontExtraProperties: data.fontExtraProperties,
@@ -625,7 +619,7 @@ var WorkerMessageHandler = {
     });
 
     handler.on("Cleanup", function wphCleanup(data) {
-      return pdfManager.cleanup();
+      return pdfManager.cleanup(/* manuallyTriggered = */ true);
     });
 
     handler.on("Terminate", function wphTerminate(data) {
@@ -664,13 +658,14 @@ var WorkerMessageHandler = {
       docParams = null; // we don't need docParams anymore -- saving memory.
     });
     return workerHandlerName;
-  },
-  initializeFromPort(port) {
+  }
+
+  static initializeFromPort(port) {
     var handler = new MessageHandler("worker", "main", port);
     WorkerMessageHandler.setup(handler, port);
     handler.send("ready", null);
-  },
-};
+  }
+}
 
 function isMessagePort(maybePort) {
   return (
@@ -678,7 +673,7 @@ function isMessagePort(maybePort) {
   );
 }
 
-// Worker thread (and not node.js)?
+// Worker thread (and not Node.js)?
 if (
   typeof window === "undefined" &&
   !isNodeJS &&

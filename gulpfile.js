@@ -54,7 +54,8 @@ var GENERIC_DIR = BUILD_DIR + "generic/";
 var GENERIC_ES5_DIR = BUILD_DIR + "generic-es5/";
 var COMPONENTS_DIR = BUILD_DIR + "components/";
 var COMPONENTS_ES5_DIR = BUILD_DIR + "components-es5/";
-var IMAGE_DECODERS_DIR = BUILD_DIR + "image_decoders";
+var IMAGE_DECODERS_DIR = BUILD_DIR + "image_decoders/";
+var IMAGE_DECODERS_ES5_DIR = BUILD_DIR + "image_decoders-es5/";
 var DEFAULT_PREFERENCES_DIR = BUILD_DIR + "default_preferences/";
 var MINIFIED_DIR = BUILD_DIR + "minified/";
 var MINIFIED_ES5_DIR = BUILD_DIR + "minified-es5/";
@@ -63,6 +64,8 @@ var GH_PAGES_DIR = BUILD_DIR + "gh-pages/";
 var SRC_DIR = "src/";
 var LIB_DIR = BUILD_DIR + "lib/";
 var DIST_DIR = BUILD_DIR + "dist/";
+var TYPES_DIR = BUILD_DIR + "types/";
+var TYPESTEST_DIR = BUILD_DIR + "typestest/";
 var COMMON_WEB_FILES = ["web/images/*.{png,svg,gif,cur}", "web/debugger.js"];
 var MOZCENTRAL_DIFF_FILE = "mozcentral.diff";
 
@@ -767,7 +770,6 @@ function buildComponents(defines, dir) {
     "web/images/annotation-*.svg",
     "web/images/loading-icon.gif",
     "web/images/shadow.png",
-    "web/images/texture.png",
   ];
 
   return merge([
@@ -823,6 +825,23 @@ gulp.task(
 
     return createImageDecodersBundle(defines).pipe(
       gulp.dest(IMAGE_DECODERS_DIR)
+    );
+  })
+);
+
+gulp.task(
+  "image_decoders-es5",
+  gulp.series("buildnumber", function () {
+    console.log();
+    console.log("### Creating (ES5) image decoders");
+    var defines = builder.merge(DEFINES, {
+      GENERIC: true,
+      IMAGE_DECODERS: true,
+      SKIP_BABEL: false,
+    });
+
+    return createImageDecodersBundle(defines).pipe(
+      gulp.dest(IMAGE_DECODERS_ES5_DIR)
     );
   })
 );
@@ -907,18 +926,30 @@ function parseMinified(dir) {
   console.log("### Minifying js files");
 
   var Terser = require("terser");
-  // V8 chokes on very long sequences. Works around that.
-  var optsForHugeFile = { compress: { sequences: false } };
+  var options = {
+    compress: {
+      // V8 chokes on very long sequences, work around that.
+      sequences: false,
+    },
+    keep_classnames: true,
+    keep_fnames: true,
+  };
 
-  fs.writeFileSync(dir + "/web/pdf.viewer.js", Terser.minify(viewerFiles).code);
-  fs.writeFileSync(dir + "/build/pdf.min.js", Terser.minify(pdfFile).code);
+  fs.writeFileSync(
+    dir + "/web/pdf.viewer.js",
+    Terser.minify(viewerFiles, options).code
+  );
+  fs.writeFileSync(
+    dir + "/build/pdf.min.js",
+    Terser.minify(pdfFile, options).code
+  );
   fs.writeFileSync(
     dir + "/build/pdf.worker.min.js",
-    Terser.minify(pdfWorkerFile, optsForHugeFile).code
+    Terser.minify(pdfWorkerFile, options).code
   );
   fs.writeFileSync(
     dir + "image_decoders/pdf.image_decoders.min.js",
-    Terser.minify(pdfImageDecodersFile).code
+    Terser.minify(pdfImageDecodersFile, options).code
   );
 
   console.log();
@@ -1141,6 +1172,21 @@ gulp.task("jsdoc", function (done) {
   });
 });
 
+gulp.task("types", function (done) {
+  console.log("### Generating TypeScript definitions using `tsc`");
+  const args = [
+    "target ES2020",
+    "allowJS",
+    "declaration",
+    `outDir ${TYPES_DIR}`,
+    "strict",
+    "esModuleInterop",
+    "forceConsistentCasingInFileNames",
+    "emitDeclarationOnly",
+  ].join(" --");
+  exec(`"node_modules/.bin/tsc" --${args} src/pdf.js`, done);
+});
+
 function buildLib(defines, dir) {
   // When we create a bundle, webpack is run on the source and it will replace
   // require with __webpack_require__. When we want to use the real require,
@@ -1336,6 +1382,38 @@ gulp.task(
   })
 );
 
+gulp.task(
+  "typestest-pre",
+  gulp.series("testing-pre", "generic", "types", function () {
+    const [packageJsonSrc] = packageBowerJson();
+    return merge([
+      packageJsonSrc.pipe(gulp.dest(TYPESTEST_DIR)),
+      gulp
+        .src([
+          GENERIC_DIR + "build/pdf.js",
+          GENERIC_DIR + "build/pdf.worker.js",
+          SRC_DIR + "pdf.worker.entry.js",
+        ])
+        .pipe(gulp.dest(TYPESTEST_DIR + "build/")),
+      gulp
+        .src(TYPES_DIR + "**/*", { base: TYPES_DIR })
+        .pipe(gulp.dest(TYPESTEST_DIR + "types/")),
+    ]);
+  })
+);
+
+gulp.task(
+  "typestest",
+  gulp.series("typestest-pre", function (done) {
+    exec('"node_modules/.bin/tsc" -p test/types', function (err, stdout) {
+      if (err) {
+        console.log(`Couldn't compile TypeScript test: ${stdout}`);
+      }
+      done(err);
+    });
+  })
+);
+
 gulp.task("baseline", function (done) {
   console.log();
   console.log("### Creating baseline environment");
@@ -1393,10 +1471,10 @@ gulp.task(
 
 gulp.task("lint", function (done) {
   console.log();
-  console.log("### Linting JS files");
+  console.log("### Linting JS/CSS files");
 
   // Ensure that we lint the Firefox specific *.jsm files too.
-  var options = [
+  const esLintOptions = [
     "node_modules/eslint/bin/eslint",
     "--ext",
     ".js,.jsm",
@@ -1404,16 +1482,34 @@ gulp.task("lint", function (done) {
     "--report-unused-disable-directives",
   ];
   if (process.argv.includes("--fix")) {
-    options.push("--fix");
+    esLintOptions.push("--fix");
   }
-  var esLintProcess = startNode(options, { stdio: "inherit" });
-  esLintProcess.on("close", function (code) {
-    if (code !== 0) {
+
+  const styleLintOptions = [
+    "node_modules/stylelint/bin/stylelint",
+    "**/*.css",
+    "--report-needless-disables",
+  ];
+  if (process.argv.includes("--fix")) {
+    styleLintOptions.push("--fix");
+  }
+
+  const esLintProcess = startNode(esLintOptions, { stdio: "inherit" });
+  esLintProcess.on("close", function (esLintCode) {
+    if (esLintCode !== 0) {
       done(new Error("ESLint failed."));
       return;
     }
-    console.log("files checked, no errors found");
-    done();
+
+    const styleLintProcess = startNode(styleLintOptions, { stdio: "inherit" });
+    styleLintProcess.on("close", function (styleLintCode) {
+      if (styleLintCode !== 0) {
+        done(new Error("Stylelint failed."));
+        return;
+      }
+      console.log("files checked, no errors found");
+      done();
+    });
   });
 });
 
@@ -1576,6 +1672,55 @@ gulp.task(
   )
 );
 
+function packageBowerJson() {
+  var VERSION = getVersionJSON().version;
+
+  var DIST_NAME = "pdfjs-dist";
+  var DIST_DESCRIPTION = "Generic build of Mozilla's PDF.js library.";
+  var DIST_KEYWORDS = ["Mozilla", "pdf", "pdf.js"];
+  var DIST_HOMEPAGE = "http://mozilla.github.io/pdf.js/";
+  var DIST_BUGS_URL = "https://github.com/mozilla/pdf.js/issues";
+  var DIST_LICENSE = "Apache-2.0";
+
+  var npmManifest = {
+    name: DIST_NAME,
+    version: VERSION,
+    main: "build/pdf.js",
+    types: "types/pdf.d.ts",
+    description: DIST_DESCRIPTION,
+    keywords: DIST_KEYWORDS,
+    homepage: DIST_HOMEPAGE,
+    bugs: DIST_BUGS_URL,
+    license: DIST_LICENSE,
+    browser: {
+      canvas: false,
+      fs: false,
+      http: false,
+      https: false,
+      url: false,
+      zlib: false,
+    },
+    format: "amd", // to not allow system.js to choose 'cjs'
+    repository: {
+      type: "git",
+      url: DIST_REPO_URL,
+    },
+  };
+
+  var bowerManifest = {
+    name: DIST_NAME,
+    version: VERSION,
+    main: ["build/pdf.js", "build/pdf.worker.js"],
+    ignore: [],
+    keywords: DIST_KEYWORDS,
+  };
+
+  return [
+    createStringSource("package.json", JSON.stringify(npmManifest, null, 2)),
+    createStringSource("bower.json", JSON.stringify(bowerManifest, null, 2)),
+  ];
+}
+
 gulp.task(
   "dist-pre",
   gulp.series(
@@ -1584,11 +1729,12 @@ gulp.task(
     "components",
     "components-es5",
     "image_decoders",
+    "image_decoders-es5",
     "lib",
     "minified",
+    "minified-es5",
+    "types",
     function () {
-      var VERSION = getVersionJSON().version;
-
       console.log();
       console.log("### Cloning baseline distribution");
 
@@ -1601,49 +1747,7 @@ gulp.task(
       rimraf.sync(path.join(DIST_DIR, "*"));
 
       // Rebuilding manifests
-      var DIST_NAME = "pdfjs-dist";
-      var DIST_DESCRIPTION = "Generic build of Mozilla's PDF.js library.";
-      var DIST_KEYWORDS = ["Mozilla", "pdf", "pdf.js"];
-      var DIST_HOMEPAGE = "http://mozilla.github.io/pdf.js/";
-      var DIST_BUGS_URL = "https://github.com/mozilla/pdf.js/issues";
-      var DIST_LICENSE = "Apache-2.0";
-      var npmManifest = {
-        name: DIST_NAME,
-        version: VERSION,
-        main: "build/pdf.js",
-        description: DIST_DESCRIPTION,
-        keywords: DIST_KEYWORDS,
-        homepage: DIST_HOMEPAGE,
-        bugs: DIST_BUGS_URL,
-        license: DIST_LICENSE,
-        browser: {
-          fs: false,
-          http: false,
-          https: false,
-          url: false,
-          zlib: false,
-        },
-        format: "amd", // to not allow system.js to choose 'cjs'
-        repository: {
-          type: "git",
-          url: DIST_REPO_URL,
-        },
-      };
-      var packageJsonSrc = createStringSource(
-        "package.json",
-        JSON.stringify(npmManifest, null, 2)
-      );
-      var bowerManifest = {
-        name: DIST_NAME,
-        version: VERSION,
-        main: ["build/pdf.js", "build/pdf.worker.js"],
-        ignore: [],
-        keywords: DIST_KEYWORDS,
-      };
-      var bowerJsonSrc = createStringSource(
-        "bower.json",
-        JSON.stringify(bowerManifest, null, 2)
-      );
+      var [packageJsonSrc, bowerJsonSrc] = packageBowerJson();
 
       return merge([
         packageJsonSrc.pipe(gulp.dest(DIST_DIR)),
@@ -1686,6 +1790,18 @@ gulp.task(
           .pipe(rename("pdf.image_decoders.min.js"))
           .pipe(gulp.dest(DIST_DIR + "image_decoders/")),
         gulp
+          .src(MINIFIED_ES5_DIR + "build/pdf.js")
+          .pipe(rename("pdf.min.js"))
+          .pipe(gulp.dest(DIST_DIR + "es5/build/")),
+        gulp
+          .src(MINIFIED_ES5_DIR + "build/pdf.worker.js")
+          .pipe(rename("pdf.worker.min.js"))
+          .pipe(gulp.dest(DIST_DIR + "es5/build/")),
+        gulp
+          .src(MINIFIED_ES5_DIR + "image_decoders/pdf.image_decoders.js")
+          .pipe(rename("pdf.image_decoders.min.js"))
+          .pipe(gulp.dest(DIST_DIR + "es5/image_decoders/")),
+        gulp
           .src(COMPONENTS_DIR + "**/*", { base: COMPONENTS_DIR })
           .pipe(gulp.dest(DIST_DIR + "web/")),
         gulp
@@ -1693,10 +1809,18 @@ gulp.task(
           .pipe(gulp.dest(DIST_DIR + "es5/web/")),
         gulp
           .src(IMAGE_DECODERS_DIR + "**/*", { base: IMAGE_DECODERS_DIR })
-          .pipe(gulp.dest(DIST_DIR + "image_decoders")),
+          .pipe(gulp.dest(DIST_DIR + "image_decoders/")),
+        gulp
+          .src(IMAGE_DECODERS_ES5_DIR + "**/*", {
+            base: IMAGE_DECODERS_ES5_DIR,
+          })
+          .pipe(gulp.dest(DIST_DIR + "es5/image_decoders/")),
         gulp
           .src(LIB_DIR + "**/*", { base: LIB_DIR })
           .pipe(gulp.dest(DIST_DIR + "lib/")),
+        gulp
+          .src(TYPES_DIR + "**/*", { base: TYPES_DIR })
+          .pipe(gulp.dest(DIST_DIR + "types/")),
       ]);
     }
   )
@@ -1846,7 +1970,7 @@ gulp.task("externaltest", function (done) {
 gulp.task(
   "npm-test",
   gulp.series(
-    gulp.parallel("lint", "externaltest", "unittestcli"),
+    gulp.parallel("lint", "externaltest", "unittestcli", "typestest"),
     "lint-chromium"
   )
 );

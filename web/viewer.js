@@ -118,14 +118,16 @@ function getViewerConfiguration() {
       viewerContainer: document.getElementById("viewerContainer"),
       toggleButton: document.getElementById("sidebarToggle"),
       // Buttons
-      thumbnailButton: document.getElementById('viewThumbnail'),
-      outlineButton: document.getElementById('viewOutline'),
+      thumbnailButton: document.getElementById("viewThumbnail"),
+      outlineButton: document.getElementById("viewOutline"),
       attachmentsButton: document.createElement('div'),
+      layersButton: document.getElementById("viewLayers"),
       annotationsButton: document.getElementById('viewAnnotations'),
       // Views
-      thumbnailView: document.getElementById('thumbnailView'),
-      outlineView: document.getElementById('outlineView'),
-      attachmentsView: document.getElementById('attachmentsView'),
+      thumbnailView: document.getElementById("thumbnailView"),
+      outlineView: document.getElementById("outlineView"),
+      attachmentsView: document.getElementById("attachmentsView"),
+      layersView: document.getElementById("layersView"),
       annotationsView: document.getElementById('annotationsView'),
     },
     sidebarResizer: {

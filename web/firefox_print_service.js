@@ -13,18 +13,23 @@
  * limitations under the License.
  */
 
-import { AppOptions } from "./app_options.js";
 import { CSS_UNITS } from "./ui_utils.js";
 import { PDFPrintServiceFactory } from "./app.js";
 import { shadow } from "pdfjs-lib";
 
 // Creates a placeholder with div and canvas with right size for the page.
-function composePage(pdfDocument, pageNumber, size, printContainer) {
+function composePage(
+  pdfDocument,
+  pageNumber,
+  size,
+  printContainer,
+  printResolution,
+  optionalContentConfigPromise
+) {
   const canvas = document.createElement("canvas");
 
   // The size of the canvas in pixels for printing.
-  const PRINT_RESOLUTION = AppOptions.get("printResolution") || 150;
-  const PRINT_UNITS = PRINT_RESOLUTION / 72.0;
+  const PRINT_UNITS = printResolution / 72.0;
   canvas.width = Math.floor(size.width * PRINT_UNITS);
   canvas.height = Math.floor(size.height * PRINT_UNITS);
 
@@ -53,6 +58,8 @@ function composePage(pdfDocument, pageNumber, size, printContainer) {
           transform: [PRINT_UNITS, 0, 0, PRINT_UNITS, 0, 0],
           viewport: pdfPage.getViewport({ scale: 1, rotation: size.rotation }),
           intent: "print",
+          annotationStorage: pdfDocument.annotationStorage,
+          optionalContentConfigPromise,
         };
         return pdfPage.render(renderContext).promise;
       })
@@ -75,21 +82,43 @@ function composePage(pdfDocument, pageNumber, size, printContainer) {
   };
 }
 
-function FirefoxPrintService(pdfDocument, pagesOverview, printContainer) {
+function FirefoxPrintService(
+  pdfDocument,
+  pagesOverview,
+  printContainer,
+  printResolution,
+  optionalContentConfigPromise = null
+) {
   this.pdfDocument = pdfDocument;
   this.pagesOverview = pagesOverview;
   this.printContainer = printContainer;
+  this._printResolution = printResolution || 150;
+  this._optionalContentConfigPromise =
+    optionalContentConfigPromise || pdfDocument.getOptionalContentConfig();
 }
 
 FirefoxPrintService.prototype = {
   layout() {
-    const { pdfDocument, pagesOverview, printContainer } = this;
+    const {
+      pdfDocument,
+      pagesOverview,
+      printContainer,
+      _printResolution,
+      _optionalContentConfigPromise,
+    } = this;
 
     const body = document.querySelector("body");
     body.setAttribute("data-pdfjsprinting", true);
 
     for (let i = 0, ii = pagesOverview.length; i < ii; ++i) {
-      composePage(pdfDocument, i + 1, pagesOverview[i], printContainer);
+      composePage(
+        pdfDocument,
+        /* pageNumber = */ i + 1,
+        pagesOverview[i],
+        printContainer,
+        _printResolution,
+        _optionalContentConfigPromise
+      );
     }
   },
 
@@ -109,8 +138,20 @@ PDFPrintServiceFactory.instance = {
     return shadow(this, "supportsPrinting", value);
   },
 
-  createPrintService(pdfDocument, pagesOverview, printContainer) {
-    return new FirefoxPrintService(pdfDocument, pagesOverview, printContainer);
+  createPrintService(
+    pdfDocument,
+    pagesOverview,
+    printContainer,
+    printResolution,
+    optionalContentConfigPromise
+  ) {
+    return new FirefoxPrintService(
+      pdfDocument,
+      pagesOverview,
+      printContainer,
+      printResolution,
+      optionalContentConfigPromise
+    );
   },
 };
 

@@ -12,7 +12,6 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-/* eslint no-var: error */
 
 import {
   assert,
@@ -38,6 +37,7 @@ import {
   Dict,
   isDict,
   isName,
+  isRef,
   isStream,
   Ref,
 } from "./primitives.js";
@@ -703,8 +703,15 @@ class PDFDocument {
    */
   _hasOnlyDocumentSignatures(fields, recursionDepth = 0) {
     const RECURSION_LIMIT = 10;
+
+    if (!Array.isArray(fields)) {
+      return false;
+    }
     return fields.every(field => {
       field = this.xref.fetchIfRef(field);
+      if (!(field instanceof Dict)) {
+        return false;
+      }
       if (field.has("Kids")) {
         if (++recursionDepth > RECURSION_LIMIT) {
           warn("_hasOnlyDocumentSignatures: maximum recursion depth reached");
@@ -724,20 +731,23 @@ class PDFDocument {
   }
 
   get formInfo() {
-    const formInfo = { hasAcroForm: false, hasXfa: false };
+    const formInfo = { hasFields: false, hasAcroForm: false, hasXfa: false };
     const acroForm = this.catalog.acroForm;
     if (!acroForm) {
       return shadow(this, "formInfo", formInfo);
     }
 
     try {
+      const fields = acroForm.get("Fields");
+      const hasFields = Array.isArray(fields) && fields.length > 0;
+      formInfo.hasFields = hasFields; // Used by the `fieldObjects` getter.
+
       // The document contains XFA data if the `XFA` entry is a non-empty
       // array or stream.
       const xfa = acroForm.get("XFA");
-      const hasXfa =
+      formInfo.hasXfa =
         (Array.isArray(xfa) && xfa.length > 0) ||
         (isStream(xfa) && !xfa.isEmpty);
-      formInfo.hasXfa = hasXfa;
 
       // The document contains AcroForm data if the `Fields` entry is a
       // non-empty array and it doesn't consist of only document signatures.
@@ -746,8 +756,6 @@ class PDFDocument {
       // store (invisible) document signatures. This can be detected using
       // the first bit of the `SigFlags` integer (see Table 219 in the
       // specification).
-      const fields = acroForm.get("Fields");
-      const hasFields = Array.isArray(fields) && fields.length > 0;
       const sigFlags = acroForm.get("SigFlags");
       const hasOnlyDocumentSignatures =
         !!(sigFlags & 0x1) && this._hasOnlyDocumentSignatures(fields);
@@ -756,7 +764,7 @@ class PDFDocument {
       if (ex instanceof MissingDataException) {
         throw ex;
       }
-      info("Cannot fetch form information.");
+      warn(`Cannot fetch form information: "${ex}".`);
     }
     return shadow(this, "formInfo", formInfo);
   }
@@ -950,6 +958,90 @@ class PDFDocument {
     return this.catalog
       ? this.catalog.cleanup(manuallyTriggered)
       : clearPrimitiveCaches();
+  }
+
+  /**
+   * @private
+   */
+  _collectFieldObjects(name, fieldRef, promises) {
+    const field = this.xref.fetchIfRef(fieldRef);
+    if (field.has("T")) {
+      const partName = stringToPDFString(field.get("T"));
+      if (name === "") {
+        name = partName;
+      } else {
+        name = `${name}.${partName}`;
+      }
+    }
+
+    if (!(name in promises)) {
+      promises.set(name, []);
+    }
+    promises.get(name).push(
+      AnnotationFactory.create(
+        this.xref,
+        fieldRef,
+        this.pdfManager,
+        this._localIdFactory
+      )
+        .then(annotation => annotation && annotation.getFieldObject())
+        .catch(function (reason) {
+          warn(`_collectFieldObjects: "${reason}".`);
+          return null;
+        })
+    );
+
+    if (field.has("Kids")) {
+      const kids = field.get("Kids");
+      for (const kid of kids) {
+        this._collectFieldObjects(name, kid, promises);
+      }
+    }
+  }
+
+  get fieldObjects() {
+    if (!this.formInfo.hasFields) {
+      return shadow(this, "fieldObjects", Promise.resolve(null));
+    }
+
+    const allFields = Object.create(null);
+    const fieldPromises = new Map();
+    for (const fieldRef of this.catalog.acroForm.get("Fields")) {
+      this._collectFieldObjects("", fieldRef, fieldPromises);
+    }
+
+    const allPromises = [];
+    for (const [name, promises] of fieldPromises) {
+      allPromises.push(
+        Promise.all(promises).then(fields => {
+          fields = fields.filter(field => !!field);
+          if (fields.length > 0) {
+            allFields[name] = fields;
+          }
+        })
+      );
+    }
+
+    return shadow(
+      this,
+      "fieldObjects",
+      Promise.all(allPromises).then(() => allFields)
+    );
+  }
+
+  get calculationOrderIds() {
+    const acroForm = this.catalog.acroForm;
+    if (!acroForm || !acroForm.has("CO")) {
+      return shadow(this, "calculationOrderIds", null);
+    }
+
+    const calculationOrder = acroForm.get("CO");
+    if (!Array.isArray(calculationOrder) || calculationOrder.length === 0) {
+      return shadow(this, "calculationOrderIds", null);
+    }
+
+    const ids = calculationOrder.filter(isRef).map(ref => ref.toString());
+    return shadow(this, "calculationOrderIds", ids);
   }
 }
 

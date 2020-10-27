@@ -21,7 +21,6 @@
 var autoprefixer = require("autoprefixer");
 var calc = require("postcss-calc");
 var cssvariables = require("postcss-css-variables");
-var fancylog = require("fancy-log");
 var fs = require("fs");
 var gulp = require("gulp");
 var postcss = require("gulp-postcss");
@@ -186,6 +185,19 @@ function createWebpackConfig(defines, output) {
     !bundleDefines.TESTING;
   var skipBabel = bundleDefines.SKIP_BABEL;
 
+  // `core-js` (see https://github.com/zloirock/core-js/issues/514),
+  // `web-streams-polyfill` (already using a transpiled file), and
+  // `src/core/{glyphlist,unicode}.js` (Babel is too slow for those when
+  // source-maps are enabled) should be excluded from processing.
+  const babelExcludes = [
+    "node_modules[\\\\\\/]core-js",
+    "node_modules[\\\\\\/]web-streams-polyfill",
+  ];
+  if (enableSourceMaps) {
+    babelExcludes.push("src[\\\\\\/]core[\\\\\\/](glyphlist|unicode)");
+  }
+  const babelExcludeRegExp = new RegExp(`(${babelExcludes.join("|")})`);
+
   // Required to expose e.g., the `window` object.
   output.globalObject = "this";
 
@@ -210,20 +222,10 @@ function createWebpackConfig(defines, output) {
       rules: [
         {
           loader: "babel-loader",
-          // `core-js` (see https://github.com/zloirock/core-js/issues/514),
-          // `web-streams-polyfill` (already using a transpiled file), and
-          // `src/core/{glyphlist,unicode}.js` (Babel is too slow for those)
-          // should be excluded from processing.
-          exclude: /(node_modules[\\\/]core-js|node_modules[\\\/]web-streams-polyfill|src[\\\/]core[\\\/](glyphlist|unicode))/,
+          exclude: babelExcludeRegExp,
           options: {
             presets: skipBabel ? undefined : ["@babel/preset-env"],
             plugins: [
-              [
-                "@babel/plugin-proposal-nullish-coalescing-operator",
-                {
-                  loose: true,
-                },
-              ],
               "@babel/plugin-transform-modules-commonjs",
               [
                 "@babel/plugin-transform-runtime",
@@ -321,6 +323,23 @@ function createMainBundle(defines) {
     .pipe(webpack2Stream(mainFileConfig))
     .pipe(replaceWebpackRequire())
     .pipe(replaceJSRootName(mainAMDName, "pdfjsLib"));
+}
+
+function createScriptingBundle(defines) {
+  var scriptingAMDName = "pdfjs-dist/build/pdf.scripting";
+  var scriptingOutputName = "pdf.scripting.js";
+
+  var scriptingFileConfig = createWebpackConfig(defines, {
+    filename: scriptingOutputName,
+    library: scriptingAMDName,
+    libraryTarget: "umd",
+    umdNamedDefine: true,
+  });
+  return gulp
+    .src("./src/pdf.scripting.js")
+    .pipe(webpack2Stream(scriptingFileConfig))
+    .pipe(replaceWebpackRequire())
+    .pipe(replaceJSRootName(scriptingAMDName, "pdfjsScripting"));
 }
 
 function createWorkerBundle(defines) {
@@ -911,7 +930,7 @@ gulp.task(
   })
 );
 
-function parseMinified(dir) {
+async function parseMinified(dir) {
   var pdfFile = fs.readFileSync(dir + "/build/pdf.js").toString();
   var pdfWorkerFile = fs.readFileSync(dir + "/build/pdf.worker.js").toString();
   var pdfImageDecodersFile = fs
@@ -937,19 +956,19 @@ function parseMinified(dir) {
 
   fs.writeFileSync(
     dir + "/web/pdf.viewer.js",
-    Terser.minify(viewerFiles, options).code
+    (await Terser.minify(viewerFiles, options)).code
   );
   fs.writeFileSync(
     dir + "/build/pdf.min.js",
-    Terser.minify(pdfFile, options).code
+    (await Terser.minify(pdfFile, options)).code
   );
   fs.writeFileSync(
     dir + "/build/pdf.worker.min.js",
-    Terser.minify(pdfWorkerFile, options).code
+    (await Terser.minify(pdfWorkerFile, options)).code
   );
   fs.writeFileSync(
     dir + "image_decoders/pdf.image_decoders.min.js",
-    Terser.minify(pdfImageDecodersFile, options).code
+    (await Terser.minify(pdfImageDecodersFile, options)).code
   );
 
   console.log();
@@ -970,16 +989,16 @@ function parseMinified(dir) {
 
 gulp.task(
   "minified",
-  gulp.series("minified-pre", function (done) {
-    parseMinified(MINIFIED_DIR);
+  gulp.series("minified-pre", async function (done) {
+    await parseMinified(MINIFIED_DIR);
     done();
   })
 );
 
 gulp.task(
   "minified-es5",
-  gulp.series("minified-es5-pre", function (done) {
-    parseMinified(MINIFIED_ES5_DIR);
+  gulp.series("minified-es5-pre", async function (done) {
+    await parseMinified(MINIFIED_ES5_DIR);
     done();
   })
 );
@@ -1041,6 +1060,9 @@ gulp.task(
 
     return merge([
       createMainBundle(defines).pipe(
+        gulp.dest(MOZCENTRAL_CONTENT_DIR + "build")
+      ),
+      createScriptingBundle(defines).pipe(
         gulp.dest(MOZCENTRAL_CONTENT_DIR + "build")
       ),
       createWorkerBundle(defines).pipe(
@@ -1956,11 +1978,14 @@ gulp.task(
 );
 
 gulp.task("externaltest", function (done) {
-  fancylog("Running test-fixtures.js");
+  console.log();
+  console.log("### Running test-fixtures.js");
   safeSpawnSync("node", ["external/builder/test-fixtures.js"], {
     stdio: "inherit",
   });
-  fancylog("Running test-fixtures_esprima.js");
+
+  console.log();
+  console.log("### Running test-fixtures_esprima.js");
   safeSpawnSync("node", ["external/builder/test-fixtures_esprima.js"], {
     stdio: "inherit",
   });

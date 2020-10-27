@@ -12,7 +12,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-/* uses XRef */
+/* eslint-disable no-var */
 
 import { assert, unreachable } from "../shared/util.js";
 
@@ -171,7 +171,14 @@ var Dict = (function DictClosure() {
     },
   };
 
-  Dict.empty = new Dict(null);
+  Dict.empty = (function () {
+    const emptyDict = new Dict(null);
+
+    emptyDict.set = (key, value) => {
+      unreachable("Should not call `set` on the empty dictionary.");
+    };
+    return emptyDict;
+  })();
 
   Dict.merge = function ({ xref, dictArray, mergeSubDicts = false }) {
     const mergedDict = new Dict(xref);

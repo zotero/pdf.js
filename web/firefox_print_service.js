@@ -13,9 +13,9 @@
  * limitations under the License.
  */
 
+import { RenderingCancelledException, shadow } from "pdfjs-lib";
 import { CSS_UNITS } from "./ui_utils.js";
 import { PDFPrintServiceFactory } from "./app.js";
-import { shadow } from "pdfjs-lib";
 
 // Creates a placeholder with div and canvas with right size for the page.
 function composePage(
@@ -41,6 +41,14 @@ function composePage(
   canvasWrapper.appendChild(canvas);
   printContainer.appendChild(canvasWrapper);
 
+  // A callback for a given page may be executed multiple times for different
+  // print operations (think of changing the print settings in the browser).
+  //
+  // Since we don't support queueing multiple render tasks for the same page
+  // (and it'd be racy anyways if painting the page is not done in one go) we
+  // keep track of the last scheduled task in order to properly cancel it before
+  // starting the next one.
+  let currentRenderTask = null;
   canvas.mozPrintCallback = function (obj) {
     // Printing/rendering the page.
     const ctx = obj.context;
@@ -50,9 +58,14 @@ function composePage(
     ctx.fillRect(0, 0, canvas.width, canvas.height);
     ctx.restore();
 
+    let thisRenderTask = null;
     pdfDocument
       .getPage(pageNumber)
       .then(function (pdfPage) {
+        if (currentRenderTask) {
+          currentRenderTask.cancel();
+          currentRenderTask = null;
+        }
         const renderContext = {
           canvasContext: ctx,
           transform: [PRINT_UNITS, 0, 0, PRINT_UNITS, 0, 0],
@@ -61,15 +74,27 @@ function composePage(
           annotationStorage: pdfDocument.annotationStorage,
           optionalContentConfigPromise,
         };
-        return pdfPage.render(renderContext).promise;
+        currentRenderTask = thisRenderTask = pdfPage.render(renderContext);
+        return thisRenderTask.promise;
       })
       .then(
         function () {
           // Tell the printEngine that rendering this canvas/page has finished.
+          if (currentRenderTask === thisRenderTask) {
+            currentRenderTask = null;
+          }
           obj.done();
         },
-        function (error) {
-          console.error(error);
+        function (reason) {
+          if (!(reason instanceof RenderingCancelledException)) {
+            console.error(reason);
+          }
+
+          if (currentRenderTask === thisRenderTask) {
+            currentRenderTask.cancel();
+            currentRenderTask = null;
+          }
+
           // Tell the printEngine that rendering this canvas/page has failed.
           // This will make the print process stop.
           if ("abort" in obj) {

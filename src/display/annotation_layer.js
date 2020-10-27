@@ -12,7 +12,6 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-/* eslint no-var: error */
 
 import {
   addLinkAttributes,
@@ -177,7 +176,7 @@ class AnnotationElement {
     ]);
 
     container.style.transform = `matrix(${viewport.transform.join(",")})`;
-    container.style.transformOrigin = `-${rect[0]}px -${rect[1]}px`;
+    container.style.transformOrigin = `${-rect[0]}px ${-rect[1]}px`;
 
     if (!ignoreBorder && data.borderStyle.width > 0) {
       container.style.borderWidth = `${data.borderStyle.width}px`;
@@ -293,7 +292,8 @@ class LinkAnnotationElement extends AnnotationElement {
     const isRenderable = !!(
       parameters.data.url ||
       parameters.data.dest ||
-      parameters.data.action
+      parameters.data.action ||
+      parameters.data.isTooltipOnly
     );
     super(parameters, isRenderable);
   }
@@ -322,8 +322,10 @@ class LinkAnnotationElement extends AnnotationElement {
       });
     } else if (data.action) {
       this._bindNamedAction(link, data.action);
-    } else {
+    } else if (data.dest) {
       this._bindLink(link, data.dest);
+    } else {
+      this._bindLink(link, "");
     }
 
     this.container.appendChild(link);
@@ -342,11 +344,11 @@ class LinkAnnotationElement extends AnnotationElement {
     link.href = this.linkService.getDestinationHash(destination);
     link.onclick = () => {
       if (destination) {
-        this.linkService.navigateTo(destination);
+        this.linkService.goToDestination(destination);
       }
       return false;
     };
-    if (destination) {
+    if (destination || destination === /* isTooltipOnly = */ "") {
       link.className = "internalLink";
     }
   }
@@ -420,6 +422,10 @@ class WidgetAnnotationElement extends AnnotationElement {
    */
   render() {
     // Show only the container for unsupported field types.
+    if (this.data.alternativeText) {
+      this.container.title = this.data.alternativeText;
+    }
+
     return this.container;
   }
 }
@@ -462,9 +468,44 @@ class TextWidgetAnnotationElement extends WidgetAnnotationElement {
         element.setAttribute("value", textContent);
       }
 
+      element.setAttribute("id", id);
+
       element.addEventListener("input", function (event) {
         storage.setValue(id, event.target.value);
       });
+
+      element.addEventListener("blur", function (event) {
+        event.target.setSelectionRange(0, 0);
+      });
+
+      if (this.data.actions) {
+        element.addEventListener("updateFromSandbox", function (event) {
+          const data = event.detail;
+          if ("value" in data) {
+            event.target.value = event.detail.value;
+          } else if ("focus" in data) {
+            event.target.focus({ preventScroll: false });
+          }
+        });
+
+        for (const eventType of Object.keys(this.data.actions)) {
+          switch (eventType) {
+            case "Format":
+              element.addEventListener("blur", function (event) {
+                window.dispatchEvent(
+                  new CustomEvent("dispatchEventInSandbox", {
+                    detail: {
+                      id,
+                      name: "Format",
+                      value: event.target.value,
+                    },
+                  })
+                );
+              });
+              break;
+          }
+        }
+      }
 
       element.disabled = this.data.readOnly;
       element.name = this.data.fieldName;
@@ -643,6 +684,11 @@ class PushButtonWidgetAnnotationElement extends LinkAnnotationElement {
     // as performing actions on form fields (resetting, submitting, et cetera).
     const container = super.render();
     container.className = "buttonWidgetAnnotation pushButton";
+
+    if (this.data.alternativeText) {
+      container.title = this.data.alternativeText;
+    }
+
     return container;
   }
 }
@@ -759,12 +805,13 @@ class PopupAnnotationElement extends AnnotationElement {
 
     // Position the popup next to the parent annotation's container.
     // PDF viewers ignore a popup annotation's rectangle.
-    const parentLeft = parseFloat(parentElement.style.left);
-    const parentWidth = parseFloat(parentElement.style.width);
-    this.container.style.transformOrigin = `-${parentLeft + parentWidth}px -${
-      parentElement.style.top
-    }`;
-    this.container.style.left = `${parentLeft + parentWidth}px`;
+    const parentTop = parseFloat(parentElement.style.top),
+      parentLeft = parseFloat(parentElement.style.left),
+      parentWidth = parseFloat(parentElement.style.width);
+    const popupLeft = parentLeft + parentWidth;
+
+    this.container.style.transformOrigin = `${-popupLeft}px ${-parentTop}px`;
+    this.container.style.left = `${popupLeft}px`;
 
     this.container.appendChild(popup.render());
     return this.container;

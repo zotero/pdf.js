@@ -23,6 +23,8 @@ const MAX_AUTO_SCALE = 1.25;
 const SCROLLBAR_PADDING = 40;
 const VERTICAL_PADDING = 5;
 
+const LOADINGBAR_END_OFFSET_VAR = "--loadingBar-end-offset";
+
 const PresentationModeState = {
   UNKNOWN: 0,
   NORMAL: 1,
@@ -99,8 +101,6 @@ function getOutputScale(ctx) {
   const backingStoreRatio =
     ctx.webkitBackingStorePixelRatio ||
     ctx.mozBackingStorePixelRatio ||
-    ctx.msBackingStorePixelRatio ||
-    ctx.oBackingStorePixelRatio ||
     ctx.backingStorePixelRatio ||
     1;
   const pixelRatio = devicePixelRatio / backingStoreRatio;
@@ -442,7 +442,8 @@ function getVisibleElements(
   scrollEl,
   views,
   sortByVisibility = false,
-  horizontal = false
+  horizontal = false,
+  rtl = false
 ) {
   const top = scrollEl.scrollTop,
     bottom = top + scrollEl.clientHeight;
@@ -465,11 +466,11 @@ function getVisibleElements(
       element.offsetTop + element.clientTop + element.clientHeight;
     return elementBottom > top;
   }
-  function isElementRightAfterViewLeft(view) {
+  function isElementNextAfterViewHorizontally(view) {
     const element = view.div;
-    const elementRight =
-      element.offsetLeft + element.clientLeft + element.clientWidth;
-    return elementRight > left;
+    const elementLeft = element.offsetLeft + element.clientLeft;
+    const elementRight = elementLeft + element.clientWidth;
+    return rtl ? elementLeft < right : elementRight > left;
   }
 
   const visible = [],
@@ -479,7 +480,9 @@ function getVisibleElements(
       ? 0
       : binarySearchFirstItem(
           views,
-          horizontal ? isElementRightAfterViewLeft : isElementBottomAfterViewTop
+          horizontal
+            ? isElementNextAfterViewHorizontally
+            : isElementBottomAfterViewTop
         );
 
   // Please note the return value of the `binarySearchFirstItem` function when
@@ -942,7 +945,8 @@ class ProgressBar {
     const container = viewer.parentNode;
     const scrollbarWidth = container.offsetWidth - viewer.offsetWidth;
     if (scrollbarWidth > 0) {
-      this.bar.style.width = `calc(100% - ${scrollbarWidth}px)`;
+      const doc = document.documentElement;
+      doc.style.setProperty(LOADINGBAR_END_OFFSET_VAR, `${scrollbarWidth}px`);
     }
   }
 
@@ -952,7 +956,6 @@ class ProgressBar {
     }
     this.visible = false;
     this.bar.classList.add("hidden");
-    document.body.classList.remove("loadingInProgress");
   }
 
   show() {
@@ -960,7 +963,6 @@ class ProgressBar {
       return;
     }
     this.visible = true;
-    document.body.classList.add("loadingInProgress");
     this.bar.classList.remove("hidden");
   }
 }
@@ -986,6 +988,61 @@ function moveToEndOfArray(arr, condition) {
   }
 }
 
+/**
+ * Get the active or focused element in current DOM.
+ *
+ * Recursively search for the truly active or focused element in case there are
+ * shadow DOMs.
+ *
+ * @returns {Element} the truly active or focused element.
+ */
+function getActiveOrFocusedElement() {
+  let curRoot = document;
+  let curActiveOrFocused =
+    curRoot.activeElement || curRoot.querySelector(":focus");
+
+  while (curActiveOrFocused && curActiveOrFocused.shadowRoot) {
+    curRoot = curActiveOrFocused.shadowRoot;
+    curActiveOrFocused =
+      curRoot.activeElement || curRoot.querySelector(":focus");
+  }
+
+  return curActiveOrFocused;
+}
+
+/**
+ * Generate a random string which is not define somewhere in actions.
+ *
+ * @param {Object} objects - The value returned by `getFieldObjects` in the API.
+ * @returns {string} A unique string.
+ */
+function generateRandomStringForSandbox(objects) {
+  const allObjects = Object.values(objects).flat(2);
+  const actions = allObjects.map(obj => Object.values(obj.actions)).flat(2);
+
+  while (true) {
+    const name = new Uint8Array(64);
+    if (typeof crypto !== "undefined") {
+      crypto.getRandomValues(name);
+    } else {
+      for (let i = 0, ii = name.length; i < ii; i++) {
+        name[i] = Math.floor(256 * Math.random());
+      }
+    }
+
+    const nameString =
+      "_" +
+      btoa(
+        Array.from(name)
+          .map(x => String.fromCharCode(x))
+          .join("")
+      );
+    if (actions.every(action => !action.includes(nameString))) {
+      return nameString;
+    }
+  }
+}
+
 export {
   AutoPrintRegExp,
   CSS_UNITS,
@@ -1008,8 +1065,8 @@ export {
   SpreadMode,
   NullL10n,
   EventBus,
-  clamp,
   ProgressBar,
+  generateRandomStringForSandbox,
   getPDFFileNameFromURL,
   noContextMenuHandler,
   parseQueryString,
@@ -1028,4 +1085,5 @@ export {
   WaitOnType,
   waitOnEventOrTimeout,
   moveToEndOfArray,
+  getActiveOrFocusedElement,
 };

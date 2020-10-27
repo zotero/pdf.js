@@ -298,6 +298,7 @@ describe("annotation", function () {
       expect(annotation.hasFlag(AnnotationFlag.NOZOOM)).toEqual(true);
       expect(annotation.hasFlag(AnnotationFlag.PRINT)).toEqual(true);
       expect(annotation.hasFlag(AnnotationFlag.READONLY)).toEqual(false);
+      expect(annotation.hasFlag(AnnotationFlag.HIDDEN)).toEqual(false);
     });
 
     it("should be viewable and not printable by default", function () {
@@ -1433,6 +1434,7 @@ describe("annotation", function () {
         expect(data.textAlignment).toEqual(null);
         expect(data.maxLen).toEqual(null);
         expect(data.readOnly).toEqual(false);
+        expect(data.hidden).toEqual(false);
         expect(data.multiLine).toEqual(false);
         expect(data.comb).toEqual(false);
         done();
@@ -1457,6 +1459,7 @@ describe("annotation", function () {
         expect(data.textAlignment).toEqual(null);
         expect(data.maxLen).toEqual(null);
         expect(data.readOnly).toEqual(false);
+        expect(data.hidden).toEqual(false);
         expect(data.multiLine).toEqual(false);
         expect(data.comb).toEqual(false);
         done();
@@ -1484,6 +1487,7 @@ describe("annotation", function () {
         expect(data.textAlignment).toEqual(1);
         expect(data.maxLen).toEqual(20);
         expect(data.readOnly).toEqual(true);
+        expect(data.hidden).toEqual(false);
         expect(data.multiLine).toEqual(true);
         done();
       }, done.fail);
@@ -1863,6 +1867,92 @@ describe("annotation", function () {
           done();
         }, done.fail);
     });
+
+    it("should get field object for usage in JS sandbox", function (done) {
+      const textWidgetRef = Ref.get(123, 0);
+      const xDictRef = Ref.get(141, 0);
+      const dDictRef = Ref.get(262, 0);
+      const next0Ref = Ref.get(314, 0);
+      const next1Ref = Ref.get(271, 0);
+      const next2Ref = Ref.get(577, 0);
+      const next00Ref = Ref.get(413, 0);
+      const xDict = new Dict();
+      const dDict = new Dict();
+      const next0Dict = new Dict();
+      const next1Dict = new Dict();
+      const next2Dict = new Dict();
+      const next00Dict = new Dict();
+
+      const xref = new XRefMock([
+        { ref: textWidgetRef, data: textWidgetDict },
+        { ref: xDictRef, data: xDict },
+        { ref: dDictRef, data: dDict },
+        { ref: next0Ref, data: next0Dict },
+        { ref: next00Ref, data: next00Dict },
+        { ref: next1Ref, data: next1Dict },
+        { ref: next2Ref, data: next2Dict },
+      ]);
+
+      const JS = Name.get("JavaScript");
+      const additionalActionsDict = new Dict();
+      const eDict = new Dict();
+      eDict.set("JS", "hello()");
+      eDict.set("S", JS);
+      additionalActionsDict.set("E", eDict);
+
+      // Test the cycle detection here
+      xDict.set("JS", "world()");
+      xDict.set("S", JS);
+      xDict.set("Next", [next0Ref, next1Ref, next2Ref, xDictRef]);
+
+      next0Dict.set("JS", "olleh()");
+      next0Dict.set("S", JS);
+      next0Dict.set("Next", next00Ref);
+
+      next00Dict.set("JS", "foo()");
+      next00Dict.set("S", JS);
+      next00Dict.set("Next", next0Ref);
+
+      next1Dict.set("JS", "dlrow()");
+      next1Dict.set("S", JS);
+      next1Dict.set("Next", xDictRef);
+
+      next2Dict.set("JS", "oof()");
+      next2Dict.set("S", JS);
+
+      dDict.set("JS", "bar()");
+      dDict.set("S", JS);
+      dDict.set("Next", dDictRef);
+      additionalActionsDict.set("D", dDictRef);
+
+      additionalActionsDict.set("X", xDictRef);
+      textWidgetDict.set("AA", additionalActionsDict);
+
+      partialEvaluator.xref = xref;
+
+      AnnotationFactory.create(
+        xref,
+        textWidgetRef,
+        pdfManagerMock,
+        idFactoryMock
+      )
+        .then(annotation => {
+          return annotation.getFieldObject();
+        })
+        .then(object => {
+          const actions = object.actions;
+          expect(actions.MouseEnter).toEqual(["hello()"]);
+          expect(actions.MouseExit).toEqual([
+            "world()",
+            "olleh()",
+            "foo()",
+            "dlrow()",
+            "oof()",
+          ]);
+          expect(actions.MouseDown).toEqual(["bar()"]);
+          done();
+        }, done.fail);
+    });
   });
 
   describe("ButtonWidgetAnnotation", function () {
@@ -1963,6 +2053,65 @@ describe("annotation", function () {
       }, done.fail);
     });
 
+    it("should render checkbox with fallback font for printing", function (done) {
+      const appearanceStatesDict = new Dict();
+      const normalAppearanceDict = new Dict();
+      const checkedAppearanceDict = new Dict();
+      const uncheckedAppearanceDict = new Dict();
+
+      const checkedStream = new StringStream("/ 12 Tf (4) Tj");
+      checkedStream.dict = checkedAppearanceDict;
+
+      const uncheckedStream = new StringStream("");
+      uncheckedStream.dict = uncheckedAppearanceDict;
+
+      checkedAppearanceDict.set("BBox", [0, 0, 8, 8]);
+      checkedAppearanceDict.set("FormType", 1);
+      checkedAppearanceDict.set("Matrix", [1, 0, 0, 1, 0, 0]);
+      normalAppearanceDict.set("Checked", checkedStream);
+      normalAppearanceDict.set("Off", uncheckedStream);
+      appearanceStatesDict.set("N", normalAppearanceDict);
+
+      buttonWidgetDict.set("AP", appearanceStatesDict);
+
+      const buttonWidgetRef = Ref.get(124, 0);
+      const xref = new XRefMock([
+        { ref: buttonWidgetRef, data: buttonWidgetDict },
+      ]);
+      const task = new WorkerTask("test print");
+      partialEvaluator.options = { ignoreErrors: true };
+
+      AnnotationFactory.create(
+        xref,
+        buttonWidgetRef,
+        pdfManagerMock,
+        idFactoryMock
+      )
+        .then(annotation => {
+          const annotationStorage = {};
+          annotationStorage[annotation.data.id] = true;
+          return annotation.getOperatorList(
+            partialEvaluator,
+            task,
+            false,
+            annotationStorage
+          );
+        })
+        .then(opList => {
+          expect(opList.argsArray.length).toEqual(5);
+          expect(opList.fnArray).toEqual([
+            OPS.beginAnnotation,
+            OPS.dependency,
+            OPS.setFont,
+            OPS.showText,
+            OPS.endAnnotation,
+          ]);
+          expect(opList.argsArray[3][0][0].fontChar).toEqual("✔");
+          done();
+        })
+        .catch(done.fail);
+    });
+
     it("should render checkboxes for printing", function (done) {
       const appearanceStatesDict = new Dict();
       const normalAppearanceDict = new Dict();
@@ -2043,6 +2192,90 @@ describe("annotation", function () {
           );
           done();
         }, done.fail);
+    });
+
+    it("should render checkboxes for printing two times", function (done) {
+      const appearanceStatesDict = new Dict();
+      const normalAppearanceDict = new Dict();
+      const checkedAppearanceDict = new Dict();
+      const uncheckedAppearanceDict = new Dict();
+
+      const checkedStream = new StringStream("0.1 0.2 0.3 rg");
+      checkedStream.dict = checkedAppearanceDict;
+
+      const uncheckedStream = new StringStream("0.3 0.2 0.1 rg");
+      uncheckedStream.dict = uncheckedAppearanceDict;
+
+      checkedAppearanceDict.set("BBox", [0, 0, 8, 8]);
+      checkedAppearanceDict.set("FormType", 1);
+      checkedAppearanceDict.set("Matrix", [1, 0, 0, 1, 0, 0]);
+      normalAppearanceDict.set("Checked", checkedStream);
+      normalAppearanceDict.set("Off", uncheckedStream);
+      appearanceStatesDict.set("N", normalAppearanceDict);
+
+      buttonWidgetDict.set("AP", appearanceStatesDict);
+      buttonWidgetDict.set("AS", Name.get("Off"));
+
+      const buttonWidgetRef = Ref.get(1249, 0);
+      const xref = new XRefMock([
+        { ref: buttonWidgetRef, data: buttonWidgetDict },
+      ]);
+      const task = new WorkerTask("test print");
+
+      AnnotationFactory.create(
+        xref,
+        buttonWidgetRef,
+        pdfManagerMock,
+        idFactoryMock
+      )
+        .then(annotation => {
+          const annotationStorage = {};
+          annotationStorage[annotation.data.id] = true;
+          return Promise.all([
+            annotation,
+            annotation.getOperatorList(
+              partialEvaluator,
+              task,
+              false,
+              annotationStorage
+            ),
+          ]);
+        })
+        .then(([annotation, opList]) => {
+          expect(opList.argsArray.length).toEqual(3);
+          expect(opList.fnArray).toEqual([
+            OPS.beginAnnotation,
+            OPS.setFillRGBColor,
+            OPS.endAnnotation,
+          ]);
+          expect(opList.argsArray[1]).toEqual(
+            new Uint8ClampedArray([26, 51, 76])
+          );
+          return annotation;
+        })
+        .then(annotation => {
+          const annotationStorage = {};
+          annotationStorage[annotation.data.id] = true;
+          return annotation.getOperatorList(
+            partialEvaluator,
+            task,
+            false,
+            annotationStorage
+          );
+        })
+        .then(opList => {
+          expect(opList.argsArray.length).toEqual(3);
+          expect(opList.fnArray).toEqual([
+            OPS.beginAnnotation,
+            OPS.setFillRGBColor,
+            OPS.endAnnotation,
+          ]);
+          expect(opList.argsArray[1]).toEqual(
+            new Uint8ClampedArray([26, 51, 76])
+          );
+          done();
+        })
+        .catch(done.fail);
     });
 
     it("should save checkboxes", function (done) {
@@ -2129,6 +2362,40 @@ describe("annotation", function () {
         expect(data.radioButton).toEqual(true);
         expect(data.fieldValue).toEqual("1");
         expect(data.buttonValue).toEqual("2");
+        done();
+      }, done.fail);
+    });
+
+    it("should handle radio buttons with a field value not an ascii string", function (done) {
+      const parentDict = new Dict();
+      parentDict.set("V", Name.get("\x91I=\x91\xf0\x93\xe0\x97e3"));
+
+      const normalAppearanceStateDict = new Dict();
+      normalAppearanceStateDict.set("\x91I=\x91\xf0\x93\xe0\x97e3", null);
+
+      const appearanceStatesDict = new Dict();
+      appearanceStatesDict.set("N", normalAppearanceStateDict);
+
+      buttonWidgetDict.set("Ff", AnnotationFieldFlag.RADIO);
+      buttonWidgetDict.set("Parent", parentDict);
+      buttonWidgetDict.set("AP", appearanceStatesDict);
+
+      const buttonWidgetRef = Ref.get(124, 0);
+      const xref = new XRefMock([
+        { ref: buttonWidgetRef, data: buttonWidgetDict },
+      ]);
+
+      AnnotationFactory.create(
+        xref,
+        buttonWidgetRef,
+        pdfManagerMock,
+        idFactoryMock
+      ).then(({ data }) => {
+        expect(data.annotationType).toEqual(AnnotationType.WIDGET);
+        expect(data.checkBox).toEqual(false);
+        expect(data.radioButton).toEqual(true);
+        expect(data.fieldValue).toEqual("‚I=‚ðﬁàŠe3");
+        expect(data.buttonValue).toEqual("‚I=‚ðﬁàŠe3");
         done();
       }, done.fail);
     });
@@ -2316,6 +2583,196 @@ describe("annotation", function () {
           expect(data).toEqual(null);
           done();
         }, done.fail);
+    });
+
+    it("should save radio buttons without a field value", function (done) {
+      const appearanceStatesDict = new Dict();
+      const normalAppearanceDict = new Dict();
+
+      normalAppearanceDict.set("Checked", Ref.get(314, 0));
+      normalAppearanceDict.set("Off", Ref.get(271, 0));
+      appearanceStatesDict.set("N", normalAppearanceDict);
+
+      buttonWidgetDict.set("Ff", AnnotationFieldFlag.RADIO);
+      buttonWidgetDict.set("AP", appearanceStatesDict);
+
+      const buttonWidgetRef = Ref.get(123, 0);
+      const parentRef = Ref.get(456, 0);
+
+      const parentDict = new Dict();
+      parentDict.set("Kids", [buttonWidgetRef]);
+      buttonWidgetDict.set("Parent", parentRef);
+
+      const xref = new XRefMock([
+        { ref: buttonWidgetRef, data: buttonWidgetDict },
+        { ref: parentRef, data: parentDict },
+      ]);
+
+      parentDict.xref = xref;
+      buttonWidgetDict.xref = xref;
+      partialEvaluator.xref = xref;
+      const task = new WorkerTask("test save");
+
+      AnnotationFactory.create(
+        xref,
+        buttonWidgetRef,
+        pdfManagerMock,
+        idFactoryMock
+      )
+        .then(annotation => {
+          const annotationStorage = {};
+          annotationStorage[annotation.data.id] = true;
+          return Promise.all([
+            annotation,
+            annotation.save(partialEvaluator, task, annotationStorage),
+          ]);
+        })
+        .then(([annotation, data]) => {
+          expect(data.length).toEqual(2);
+          const [radioData, parentData] = data;
+          radioData.data = radioData.data.replace(/\(D:[0-9]+\)/, "(date)");
+          expect(radioData.ref).toEqual(Ref.get(123, 0));
+          expect(radioData.data).toEqual(
+            "123 0 obj\n" +
+              "<< /Type /Annot /Subtype /Widget /FT /Btn /Ff 32768 " +
+              "/AP << /N << /Checked 314 0 R /Off 271 0 R>>>> " +
+              "/Parent 456 0 R /AS /Checked /M (date)>>\nendobj\n"
+          );
+          expect(parentData.ref).toEqual(Ref.get(456, 0));
+          expect(parentData.data).toEqual(
+            "456 0 obj\n<< /Kids [123 0 R] /V /Checked>>\nendobj\n"
+          );
+          done();
+        })
+        .catch(done.fail);
+    });
+
+    it("should save nothing", function (done) {
+      const buttonWidgetRef = Ref.get(124, 0);
+      const xref = new XRefMock([
+        { ref: buttonWidgetRef, data: buttonWidgetDict },
+      ]);
+      const task = new WorkerTask("test save");
+
+      AnnotationFactory.create(
+        xref,
+        buttonWidgetRef,
+        pdfManagerMock,
+        idFactoryMock
+      )
+        .then(annotation => {
+          return annotation.save(partialEvaluator, task, {});
+        })
+        .then(data => {
+          expect(data).toEqual(null);
+          done();
+        })
+        .catch(done.fail);
+    });
+
+    it("should handle push buttons", function (done) {
+      const buttonWidgetRef = Ref.get(124, 0);
+      buttonWidgetDict.set("Ff", AnnotationFieldFlag.PUSHBUTTON);
+
+      const actionDict = new Dict();
+      actionDict.set("S", Name.get("JavaScript"));
+      actionDict.set("JS", "do_something();");
+      buttonWidgetDict.set("A", actionDict);
+
+      const xref = new XRefMock([
+        { ref: buttonWidgetRef, data: buttonWidgetDict },
+      ]);
+
+      AnnotationFactory.create(
+        xref,
+        buttonWidgetRef,
+        pdfManagerMock,
+        idFactoryMock
+      ).then(({ data }) => {
+        expect(data.annotationType).toEqual(AnnotationType.WIDGET);
+        expect(data.pushButton).toEqual(true);
+        expect(data.actions.Action).toEqual(["do_something();"]);
+        done();
+      }, done.fail);
+    });
+
+    it("should handle push buttons that act as a tooltip only", function (done) {
+      const buttonWidgetRef = Ref.get(124, 0);
+      buttonWidgetDict.set("Ff", AnnotationFieldFlag.PUSHBUTTON);
+      buttonWidgetDict.set("TU", "An alternative text");
+
+      const xref = new XRefMock([
+        { ref: buttonWidgetRef, data: buttonWidgetDict },
+      ]);
+
+      AnnotationFactory.create(
+        xref,
+        buttonWidgetRef,
+        pdfManagerMock,
+        idFactoryMock
+      ).then(({ data }) => {
+        expect(data.annotationType).toEqual(AnnotationType.WIDGET);
+        expect(data.pushButton).toEqual(true);
+        expect(data.alternativeText).toEqual("An alternative text");
+        done();
+      }, done.fail);
+    });
+
+    it("should handle URL in A dict in push buttons", function (done) {
+      const buttonWidgetRef = Ref.get(124, 0);
+      buttonWidgetDict.set("Ff", AnnotationFieldFlag.PUSHBUTTON);
+
+      const actionDict = new Dict();
+      actionDict.set("S", Name.get("JavaScript"));
+      actionDict.set(
+        "JS",
+        "app.launchURL('https://developer.mozilla.org/en-US/', true)"
+      );
+      buttonWidgetDict.set("A", actionDict);
+
+      const xref = new XRefMock([
+        { ref: buttonWidgetRef, data: buttonWidgetDict },
+      ]);
+
+      AnnotationFactory.create(
+        xref,
+        buttonWidgetRef,
+        pdfManagerMock,
+        idFactoryMock
+      ).then(({ data }) => {
+        expect(data.url).toEqual("https://developer.mozilla.org/en-US/");
+        done();
+      }, done.fail);
+    });
+
+    it("should handle URL in AA dict in push buttons", function (done) {
+      const buttonWidgetRef = Ref.get(124, 0);
+      buttonWidgetDict.set("Ff", AnnotationFieldFlag.PUSHBUTTON);
+
+      // D stands for MouseDown
+      const dDict = new Dict();
+      dDict.set("S", Name.get("JavaScript"));
+      dDict.set(
+        "JS",
+        "app.launchURL('https://developer.mozilla.org/en-US/', true)"
+      );
+      const actionDict = new Dict();
+      actionDict.set("D", dDict);
+      buttonWidgetDict.set("AA", actionDict);
+
+      const xref = new XRefMock([
+        { ref: buttonWidgetRef, data: buttonWidgetDict },
+      ]);
+
+      AnnotationFactory.create(
+        xref,
+        buttonWidgetRef,
+        pdfManagerMock,
+        idFactoryMock
+      ).then(({ data }) => {
+        expect(data.url).toEqual("https://developer.mozilla.org/en-US/");
+        done();
+      }, done.fail);
     });
   });
 
@@ -2533,6 +2990,7 @@ describe("annotation", function () {
       ).then(({ data }) => {
         expect(data.annotationType).toEqual(AnnotationType.WIDGET);
         expect(data.readOnly).toEqual(false);
+        expect(data.hidden).toEqual(false);
         expect(data.combo).toEqual(false);
         expect(data.multiSelect).toEqual(false);
         done();
@@ -2555,6 +3013,7 @@ describe("annotation", function () {
       ).then(({ data }) => {
         expect(data.annotationType).toEqual(AnnotationType.WIDGET);
         expect(data.readOnly).toEqual(false);
+        expect(data.hidden).toEqual(false);
         expect(data.combo).toEqual(false);
         expect(data.multiSelect).toEqual(false);
         done();
@@ -2582,6 +3041,7 @@ describe("annotation", function () {
       ).then(({ data }) => {
         expect(data.annotationType).toEqual(AnnotationType.WIDGET);
         expect(data.readOnly).toEqual(true);
+        expect(data.hidden).toEqual(false);
         expect(data.combo).toEqual(true);
         expect(data.multiSelect).toEqual(true);
         done();
@@ -2966,7 +3426,7 @@ describe("annotation", function () {
   });
 
   describe("HightlightAnnotation", function () {
-    it("should not set quadpoints if not defined", function (done) {
+    it("should set quadpoints to null if not defined", function (done) {
       const highlightDict = new Dict();
       highlightDict.set("Type", Name.get("Annot"));
       highlightDict.set("Subtype", Name.get("Highlight"));
@@ -2981,7 +3441,7 @@ describe("annotation", function () {
         idFactoryMock
       ).then(({ data }) => {
         expect(data.annotationType).toEqual(AnnotationType.HIGHLIGHT);
-        expect(data.quadPoints).toBeUndefined();
+        expect(data.quadPoints).toEqual(null);
         done();
       }, done.fail);
     });
@@ -3014,10 +3474,32 @@ describe("annotation", function () {
         done();
       }, done.fail);
     });
+
+    it("should set quadpoints to null when empty", function (done) {
+      const highlightDict = new Dict();
+      highlightDict.set("Type", Name.get("Annot"));
+      highlightDict.set("Subtype", Name.get("Highlight"));
+      highlightDict.set("Rect", [10, 10, 20, 20]);
+      highlightDict.set("QuadPoints", []);
+
+      const highlightRef = Ref.get(121, 0);
+      const xref = new XRefMock([{ ref: highlightRef, data: highlightDict }]);
+
+      AnnotationFactory.create(
+        xref,
+        highlightRef,
+        pdfManagerMock,
+        idFactoryMock
+      ).then(({ data }) => {
+        expect(data.annotationType).toEqual(AnnotationType.HIGHLIGHT);
+        expect(data.quadPoints).toEqual(null);
+        done();
+      }, done.fail);
+    });
   });
 
   describe("UnderlineAnnotation", function () {
-    it("should not set quadpoints if not defined", function (done) {
+    it("should set quadpoints to null if not defined", function (done) {
       const underlineDict = new Dict();
       underlineDict.set("Type", Name.get("Annot"));
       underlineDict.set("Subtype", Name.get("Underline"));
@@ -3032,7 +3514,7 @@ describe("annotation", function () {
         idFactoryMock
       ).then(({ data }) => {
         expect(data.annotationType).toEqual(AnnotationType.UNDERLINE);
-        expect(data.quadPoints).toBeUndefined();
+        expect(data.quadPoints).toEqual(null);
         done();
       }, done.fail);
     });
@@ -3068,7 +3550,7 @@ describe("annotation", function () {
   });
 
   describe("SquigglyAnnotation", function () {
-    it("should not set quadpoints if not defined", function (done) {
+    it("should set quadpoints to null if not defined", function (done) {
       const squigglyDict = new Dict();
       squigglyDict.set("Type", Name.get("Annot"));
       squigglyDict.set("Subtype", Name.get("Squiggly"));
@@ -3083,7 +3565,7 @@ describe("annotation", function () {
         idFactoryMock
       ).then(({ data }) => {
         expect(data.annotationType).toEqual(AnnotationType.SQUIGGLY);
-        expect(data.quadPoints).toBeUndefined();
+        expect(data.quadPoints).toEqual(null);
         done();
       }, done.fail);
     });
@@ -3119,7 +3601,7 @@ describe("annotation", function () {
   });
 
   describe("StrikeOutAnnotation", function () {
-    it("should not set quadpoints if not defined", function (done) {
+    it("should set quadpoints to null if not defined", function (done) {
       const strikeOutDict = new Dict();
       strikeOutDict.set("Type", Name.get("Annot"));
       strikeOutDict.set("Subtype", Name.get("StrikeOut"));
@@ -3134,7 +3616,7 @@ describe("annotation", function () {
         idFactoryMock
       ).then(({ data }) => {
         expect(data.annotationType).toEqual(AnnotationType.STRIKEOUT);
-        expect(data.quadPoints).toBeUndefined();
+        expect(data.quadPoints).toEqual(null);
         done();
       }, done.fail);
     });

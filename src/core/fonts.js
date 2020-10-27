@@ -12,6 +12,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+/* eslint-disable no-var */
 
 import {
   assert,
@@ -622,7 +623,7 @@ var Font = (function FontClosure() {
         // attempting to recover by assuming that no file exists.
         warn('Font file is empty in "' + name + '" (' + this.loadedName + ")");
       }
-      this.fallbackToSystemFont();
+      this.fallbackToSystemFont(properties);
       return;
     }
 
@@ -679,7 +680,7 @@ var Font = (function FontClosure() {
       }
     } catch (e) {
       warn(e);
-      this.fallbackToSystemFont();
+      this.fallbackToSystemFont(properties);
       return;
     }
 
@@ -1308,7 +1309,7 @@ var Font = (function FontClosure() {
       return data;
     },
 
-    fallbackToSystemFont: function Font_fallbackToSystemFont() {
+    fallbackToSystemFont(properties) {
       this.missingFile = true;
       // The file data is not specified. Trying to fix the font name
       // to be used with the canvas.font.
@@ -1339,7 +1340,8 @@ var Font = (function FontClosure() {
         type === "CIDFontType2" &&
         this.cidEncoding.startsWith("Identity-")
       ) {
-        const GlyphMapForStandardFonts = getGlyphMapForStandardFonts();
+        const GlyphMapForStandardFonts = getGlyphMapForStandardFonts(),
+          cidToGidMap = properties.cidToGidMap;
         // Standard fonts might be embedded as CID font without glyph mapping.
         // Building one based on GlyphMapForStandardFonts.
         const map = [];
@@ -1355,6 +1357,16 @@ var Font = (function FontClosure() {
           const SupplementalGlyphMapForCalibri = getSupplementalGlyphMapForCalibri();
           for (const charCode in SupplementalGlyphMapForCalibri) {
             map[+charCode] = SupplementalGlyphMapForCalibri[charCode];
+          }
+        }
+        // Always update the glyph mapping with the `cidToGidMap` when it exists
+        // (fixes issue12418_reduced.pdf).
+        if (cidToGidMap) {
+          for (const charCode in map) {
+            const cid = map[charCode];
+            if (cidToGidMap[cid] !== undefined) {
+              map[+charCode] = cidToGidMap[cid];
+            }
           }
         }
 
@@ -3084,21 +3096,21 @@ var Font = (function FontClosure() {
       builder.addTable(
         "head",
         "\x00\x01\x00\x00" + // Version number
-        "\x00\x00\x10\x00" + // fontRevision
-        "\x00\x00\x00\x00" + // checksumAdjustement
-        "\x5F\x0F\x3C\xF5" + // magicNumber
-        "\x00\x00" + // Flags
-        safeString16(unitsPerEm) + // unitsPerEM
-        "\x00\x00\x00\x00\x9e\x0b\x7e\x27" + // creation date
-        "\x00\x00\x00\x00\x9e\x0b\x7e\x27" + // modifification date
-        "\x00\x00" + // xMin
-        safeString16(properties.descent) + // yMin
-        "\x0F\xFF" + // xMax
-        safeString16(properties.ascent) + // yMax
-        string16(properties.italicAngle ? 2 : 0) + // macStyle
-        "\x00\x11" + // lowestRecPPEM
-        "\x00\x00" + // fontDirectionHint
-        "\x00\x00" + // indexToLocFormat
+          "\x00\x00\x10\x00" + // fontRevision
+          "\x00\x00\x00\x00" + // checksumAdjustement
+          "\x5F\x0F\x3C\xF5" + // magicNumber
+          "\x00\x00" + // Flags
+          safeString16(unitsPerEm) + // unitsPerEM
+          "\x00\x00\x00\x00\x9e\x0b\x7e\x27" + // creation date
+          "\x00\x00\x00\x00\x9e\x0b\x7e\x27" + // modifification date
+          "\x00\x00" + // xMin
+          safeString16(properties.descent) + // yMin
+          "\x0F\xFF" + // xMax
+          safeString16(properties.ascent) + // yMax
+          string16(properties.italicAngle ? 2 : 0) + // macStyle
+          "\x00\x11" + // lowestRecPPEM
+          "\x00\x00" + // fontDirectionHint
+          "\x00\x00" + // indexToLocFormat
           "\x00\x00"
       ); // glyphDataFormat
 
@@ -3106,21 +3118,21 @@ var Font = (function FontClosure() {
       builder.addTable(
         "hhea",
         "\x00\x01\x00\x00" + // Version number
-        safeString16(properties.ascent) + // Typographic Ascent
-        safeString16(properties.descent) + // Typographic Descent
-        "\x00\x00" + // Line Gap
-        "\xFF\xFF" + // advanceWidthMax
-        "\x00\x00" + // minLeftSidebearing
-        "\x00\x00" + // minRightSidebearing
-        "\x00\x00" + // xMaxExtent
-        safeString16(properties.capHeight) + // caretSlopeRise
-        safeString16(Math.tan(properties.italicAngle) * properties.xHeight) + // caretSlopeRun
-        "\x00\x00" + // caretOffset
-        "\x00\x00" + // -reserved-
-        "\x00\x00" + // -reserved-
-        "\x00\x00" + // -reserved-
-        "\x00\x00" + // -reserved-
-        "\x00\x00" + // metricDataFormat
+          safeString16(properties.ascent) + // Typographic Ascent
+          safeString16(properties.descent) + // Typographic Descent
+          "\x00\x00" + // Line Gap
+          "\xFF\xFF" + // advanceWidthMax
+          "\x00\x00" + // minLeftSidebearing
+          "\x00\x00" + // minRightSidebearing
+          "\x00\x00" + // xMaxExtent
+          safeString16(properties.capHeight) + // caretSlopeRise
+          safeString16(Math.tan(properties.italicAngle) * properties.xHeight) + // caretSlopeRun
+          "\x00\x00" + // caretOffset
+          "\x00\x00" + // -reserved-
+          "\x00\x00" + // -reserved-
+          "\x00\x00" + // -reserved-
+          "\x00\x00" + // -reserved-
+          "\x00\x00" + // metricDataFormat
           string16(numGlyphs)
       ); // Number of HMetrics
 

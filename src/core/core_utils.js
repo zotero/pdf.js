@@ -12,7 +12,6 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-/* eslint no-var: error */
 
 import { assert, BaseException, warn } from "../shared/util.js";
 
@@ -23,6 +22,22 @@ function getLookupTableFactory(initializer) {
       lookup = Object.create(null);
       initializer(lookup);
       initializer = null;
+    }
+    return lookup;
+  };
+}
+
+function getArrayLookupTableFactory(initializer) {
+  let lookup;
+  return function () {
+    if (initializer) {
+      let arr = initializer();
+      initializer = null;
+      lookup = Object.create(null);
+      for (let i = 0, ii = arr.length; i < ii; i += 2) {
+        lookup[arr[i]] = arr[i + 1];
+      }
+      arr = null;
     }
     return lookup;
   };
@@ -165,14 +180,62 @@ function isWhiteSpace(ch) {
   return ch === 0x20 || ch === 0x09 || ch === 0x0d || ch === 0x0a;
 }
 
+/**
+ * AcroForm field names use an array like notation to refer to
+ * repeated XFA elements e.g. foo.bar[nnn].
+ * see: XFA Spec Chapter 3 - Repeated Elements
+ *
+ * @param {string} path - XFA path name.
+ * @returns {Array} - Array of Objects with the name and pos of
+ * each part of the path.
+ */
+function parseXFAPath(path) {
+  const positionPattern = /(.+)\[([0-9]+)\]$/;
+  return path.split(".").map(component => {
+    const m = component.match(positionPattern);
+    if (m) {
+      return { name: m[1], pos: parseInt(m[2], 10) };
+    }
+    return { name: component, pos: 0 };
+  });
+}
+
+function escapePDFName(str) {
+  const buffer = [];
+  let start = 0;
+  for (let i = 0, ii = str.length; i < ii; i++) {
+    const char = str.charCodeAt(i);
+    if (char < 0x21 || char > 0x7e || char === 0x23) {
+      if (start < i) {
+        buffer.push(str.substring(start, i));
+      }
+      buffer.push(`#${char.toString(16)}`);
+      start = i + 1;
+    }
+  }
+
+  if (buffer.length === 0) {
+    return str;
+  }
+
+  if (start < str.length) {
+    buffer.push(str.substring(start, str.length));
+  }
+
+  return buffer.join("");
+}
+
 export {
+  escapePDFName,
   getLookupTableFactory,
+  getArrayLookupTableFactory,
   MissingDataException,
   XRefEntryException,
   XRefParseException,
   getInheritableProperty,
   toRomanNumerals,
   log2,
+  parseXFAPath,
   readInt8,
   readUint16,
   readUint32,

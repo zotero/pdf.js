@@ -12,7 +12,6 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-/* eslint no-var: error */
 
 import "./compatibility.js";
 
@@ -143,6 +142,28 @@ const AnnotationBorderStyleType = {
   BEVELED: 3,
   INSET: 4,
   UNDERLINE: 5,
+};
+
+const AnnotationActionEventType = {
+  E: "MouseEnter",
+  X: "MouseExit",
+  D: "MouseDown",
+  U: "MouseUp",
+  Fo: "Focus",
+  Bl: "Blur",
+  PO: "PageOpen",
+  PC: "PageClose",
+  PV: "PageVisible",
+  PI: "PageInvisible",
+  K: "Keystroke",
+  F: "Format",
+  V: "Validate",
+  C: "Calculate",
+  WC: "WillClose",
+  WS: "WillSave",
+  DS: "DidSave",
+  WP: "WillPrint",
+  DP: "DidPrint",
 };
 
 const StreamType = {
@@ -794,9 +815,17 @@ function stringToPDFString(str) {
 }
 
 function escapeString(str) {
-  // replace "(", ")" and "\" by "\(", "\)" and "\\"
+  // replace "(", ")", "\n", "\r" and "\"
+  // by "\(", "\)", "\\n", "\\r" and "\\"
   // in order to write it in a PDF file.
-  return str.replace(/([\(\)\\])/g, "\\$1");
+  return str.replace(/([\(\)\\\n\r])/g, match => {
+    if (match === "\n") {
+      return "\\n";
+    } else if (match === "\r") {
+      return "\\r";
+    }
+    return `\\${match}`;
+  });
 }
 
 function stringToUTF8String(str) {
@@ -832,11 +861,11 @@ function isArrayEqual(arr1, arr2) {
   });
 }
 
-function getModificationDate(date = new Date(Date.now())) {
+function getModificationDate(date = new Date()) {
   const buffer = [
     date.getUTCFullYear().toString(),
     (date.getUTCMonth() + 1).toString().padStart(2, "0"),
-    (date.getUTCDate() + 1).toString().padStart(2, "0"),
+    date.getUTCDate().toString().padStart(2, "0"),
     date.getUTCHours().toString().padStart(2, "0"),
     date.getUTCMinutes().toString().padStart(2, "0"),
     date.getUTCSeconds().toString().padStart(2, "0"),
@@ -910,6 +939,53 @@ const createObjectURL = (function createObjectURLClosure() {
   };
 })();
 
+const XMLEntities = {
+  /* < */ 0x3c: "&lt;",
+  /* > */ 0x3e: "&gt;",
+  /* & */ 0x26: "&amp;",
+  /* " */ 0x22: "&quot;",
+  /* ' */ 0x27: "&apos;",
+};
+
+function encodeToXmlString(str) {
+  const buffer = [];
+  let start = 0;
+  for (let i = 0, ii = str.length; i < ii; i++) {
+    const char = str.codePointAt(i);
+    if (0x20 <= char && char <= 0x7e) {
+      // ascii
+      const entity = XMLEntities[char];
+      if (entity) {
+        if (start < i) {
+          buffer.push(str.substring(start, i));
+        }
+        buffer.push(entity);
+        start = i + 1;
+      }
+    } else {
+      if (start < i) {
+        buffer.push(str.substring(start, i));
+      }
+      buffer.push(`&#x${char.toString(16).toUpperCase()};`);
+      if (char > 0xd7ff && (char < 0xe000 || char > 0xfffd)) {
+        // char is represented by two u16
+        i++;
+      }
+      start = i + 1;
+    }
+  }
+
+  if (buffer.length === 0) {
+    return str;
+  }
+
+  if (start < str.length) {
+    buffer.push(str.substring(start, str.length));
+  }
+
+  return buffer.join("");
+}
+
 export {
   BaseException,
   FONT_IDENTITY_MATRIX,
@@ -917,6 +993,7 @@ export {
   OPS,
   VerbosityLevel,
   UNSUPPORTED_FEATURES,
+  AnnotationActionEventType,
   AnnotationBorderStyleType,
   AnnotationFieldFlag,
   AnnotationFlag,
@@ -947,6 +1024,7 @@ export {
   createPromiseCapability,
   createObjectURL,
   escapeString,
+  encodeToXmlString,
   getModificationDate,
   getVerbosityLevel,
   info,

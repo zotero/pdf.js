@@ -143,6 +143,26 @@ class BaseViewer {
 
     this.container = options.container;
     this.viewer = options.viewer || options.container.firstElementChild;
+
+    if (
+      typeof PDFJSDev === "undefined" ||
+      PDFJSDev.test("!PRODUCTION || GENERIC")
+    ) {
+      if (
+        !(
+          this.container &&
+          this.container.tagName.toUpperCase() === "DIV" &&
+          this.viewer &&
+          this.viewer.tagName.toUpperCase() === "DIV"
+        )
+      ) {
+        throw new Error("Invalid `container` and/or `viewer` option.");
+      }
+
+      if (getComputedStyle(this.container).position !== "absolute") {
+        throw new Error("The `container` must be absolutely positioned.");
+      }
+    }
     this.eventBus = options.eventBus;
     this.linkService = options.linkService || new SimpleLinkService();
     this.downloadManager = options.downloadManager || null;
@@ -841,6 +861,10 @@ class BaseViewer {
         if (y === null && this._location) {
           x = this._location.left;
           y = this._location.top;
+        } else if (typeof y !== "number") {
+          // The "top" value isn't optional, according to the spec, however some
+          // bad PDF generators will pretend that it is (fixes bug 1663390).
+          y = pageHeight;
         }
         break;
       case "FitV":
@@ -982,6 +1006,10 @@ class BaseViewer {
       : this._scrollMode === ScrollMode.HORIZONTAL;
   }
 
+  get _isContainerRtl() {
+    return getComputedStyle(this.container).direction === "rtl";
+  }
+
   get isInPresentationMode() {
     return this.presentationModeState === PresentationModeState.FULLSCREEN;
   }
@@ -1031,7 +1059,8 @@ class BaseViewer {
       this.container,
       this._pages,
       true,
-      this._isScrollModeHorizontal
+      this._isScrollModeHorizontal,
+      this._isScrollModeHorizontal && this._isContainerRtl
     );
   }
 

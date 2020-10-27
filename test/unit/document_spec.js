@@ -45,16 +45,31 @@ describe("document", function () {
   });
 
   describe("PDFDocument", function () {
-    const pdfManager = {
-      get docId() {
-        return "d0";
-      },
-    };
     const stream = new StringStream("Dummy_PDF_data");
 
-    function getDocument(acroForm) {
+    function getDocument(acroForm, xref = new XRefMock()) {
+      const catalog = { acroForm };
+      const pdfManager = {
+        get docId() {
+          return "d0";
+        },
+        ensureCatalog(prop, args) {
+          return pdfManager.ensure(catalog, prop, args);
+        },
+        ensure(obj, prop, args) {
+          return new Promise(function (resolve) {
+            const value = obj[prop];
+            if (typeof value === "function") {
+              resolve(value.apply(obj, args));
+            } else {
+              resolve(value);
+            }
+          });
+        },
+      };
       const pdfDocument = new PDFDocument(pdfManager, stream);
-      pdfDocument.catalog = { acroForm };
+      pdfDocument.xref = xref;
+      pdfDocument.catalog = catalog;
       return pdfDocument;
     }
 
@@ -63,6 +78,7 @@ describe("document", function () {
       expect(pdfDocument.formInfo).toEqual({
         hasAcroForm: false,
         hasXfa: false,
+        hasFields: false,
       });
     });
 
@@ -75,6 +91,7 @@ describe("document", function () {
       expect(pdfDocument.formInfo).toEqual({
         hasAcroForm: false,
         hasXfa: false,
+        hasFields: false,
       });
 
       acroForm.set("XFA", ["foo", "bar"]);
@@ -82,6 +99,7 @@ describe("document", function () {
       expect(pdfDocument.formInfo).toEqual({
         hasAcroForm: false,
         hasXfa: true,
+        hasFields: false,
       });
 
       acroForm.set("XFA", new StringStream(""));
@@ -89,6 +107,7 @@ describe("document", function () {
       expect(pdfDocument.formInfo).toEqual({
         hasAcroForm: false,
         hasXfa: false,
+        hasFields: false,
       });
 
       acroForm.set("XFA", new StringStream("non-empty"));
@@ -96,6 +115,7 @@ describe("document", function () {
       expect(pdfDocument.formInfo).toEqual({
         hasAcroForm: false,
         hasXfa: true,
+        hasFields: false,
       });
     });
 
@@ -108,6 +128,7 @@ describe("document", function () {
       expect(pdfDocument.formInfo).toEqual({
         hasAcroForm: false,
         hasXfa: false,
+        hasFields: false,
       });
 
       acroForm.set("Fields", ["foo", "bar"]);
@@ -115,6 +136,7 @@ describe("document", function () {
       expect(pdfDocument.formInfo).toEqual({
         hasAcroForm: true,
         hasXfa: false,
+        hasFields: true,
       });
 
       // If the first bit of the `SigFlags` entry is set and the `Fields` array
@@ -125,6 +147,7 @@ describe("document", function () {
       expect(pdfDocument.formInfo).toEqual({
         hasAcroForm: true,
         hasXfa: false,
+        hasFields: true,
       });
 
       const annotationDict = new Dict();
@@ -136,18 +159,85 @@ describe("document", function () {
       kidsDict.set("Kids", [annotationRef]);
       const kidsRef = Ref.get(10, 0);
 
-      pdfDocument.xref = new XRefMock([
+      const xref = new XRefMock([
         { ref: annotationRef, data: annotationDict },
         { ref: kidsRef, data: kidsDict },
       ]);
 
       acroForm.set("Fields", [kidsRef]);
       acroForm.set("SigFlags", 3);
-      pdfDocument = getDocument(acroForm);
+      pdfDocument = getDocument(acroForm, xref);
       expect(pdfDocument.formInfo).toEqual({
         hasAcroForm: false,
         hasXfa: false,
+        hasFields: true,
       });
+    });
+
+    it("should get calculation order array or null", function () {
+      const acroForm = new Dict();
+
+      let pdfDocument = getDocument(acroForm);
+      expect(pdfDocument.calculationOrderIds).toEqual(null);
+
+      acroForm.set("CO", [Ref.get(1, 0), Ref.get(2, 0), Ref.get(3, 0)]);
+      pdfDocument = getDocument(acroForm);
+      expect(pdfDocument.calculationOrderIds).toEqual(["1R", "2R", "3R"]);
+
+      acroForm.set("CO", []);
+      pdfDocument = getDocument(acroForm);
+      expect(pdfDocument.calculationOrderIds).toEqual(null);
+    });
+
+    it("should get field objects array or null", async function () {
+      const acroForm = new Dict();
+
+      let pdfDocument = getDocument(acroForm);
+      let fields = await pdfDocument.fieldObjects;
+      expect(fields).toEqual(null);
+
+      acroForm.set("Fields", []);
+      pdfDocument = getDocument(acroForm);
+      fields = await pdfDocument.fieldObjects;
+      expect(fields).toEqual(null);
+
+      const kid1Ref = Ref.get(314, 0);
+      const kid11Ref = Ref.get(159, 0);
+      const kid2Ref = Ref.get(265, 0);
+      const parentRef = Ref.get(358, 0);
+
+      const allFields = Object.create(null);
+      for (const name of ["parent", "kid1", "kid2", "kid11"]) {
+        const buttonWidgetDict = new Dict();
+        buttonWidgetDict.set("Type", Name.get("Annot"));
+        buttonWidgetDict.set("Subtype", Name.get("Widget"));
+        buttonWidgetDict.set("FT", Name.get("Btn"));
+        buttonWidgetDict.set("T", name);
+        allFields[name] = buttonWidgetDict;
+      }
+
+      allFields.kid1.set("Kids", [kid11Ref]);
+      allFields.parent.set("Kids", [kid1Ref, kid2Ref]);
+
+      const xref = new XRefMock([
+        { ref: parentRef, data: allFields.parent },
+        { ref: kid1Ref, data: allFields.kid1 },
+        { ref: kid11Ref, data: allFields.kid11 },
+        { ref: kid2Ref, data: allFields.kid2 },
+      ]);
+
+      acroForm.set("Fields", [parentRef]);
+      pdfDocument = getDocument(acroForm, xref);
+      fields = await pdfDocument.fieldObjects;
+
+      for (const [name, objs] of Object.entries(fields)) {
+        fields[name] = objs.map(obj => obj.id);
+      }
+
+      expect(fields["parent.kid1"]).toEqual(["314R"]);
+      expect(fields["parent.kid1.kid11"]).toEqual(["159R"]);
+      expect(fields["parent.kid2"]).toEqual(["265R"]);
+      expect(fields.parent).toEqual(["358R"]);
     });
   });
 });

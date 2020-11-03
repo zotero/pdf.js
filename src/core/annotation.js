@@ -25,6 +25,7 @@ import {
   escapeString,
   getModificationDate,
   isString,
+  objectSize,
   OPS,
   shadow,
   stringToPDFString,
@@ -1137,7 +1138,8 @@ class WidgetAnnotation extends Annotation {
   }
 
   async save(evaluator, task, annotationStorage) {
-    if (this.data.fieldValue === annotationStorage[this.data.id]) {
+    const value = annotationStorage[this.data.id];
+    if (value === this.data.fieldValue || value === undefined) {
       return null;
     }
 
@@ -1156,7 +1158,6 @@ class WidgetAnnotation extends Annotation {
       return null;
     }
 
-    const value = annotationStorage[this.data.id];
     const bbox = [
       0,
       0,
@@ -1222,7 +1223,13 @@ class WidgetAnnotation extends Annotation {
       return null;
     }
     const value = annotationStorage[this.data.id];
+    if (value === undefined) {
+      // The annotation hasn't been rendered so use the appearance
+      return null;
+    }
+
     if (value === "") {
+      // the field is empty: nothing to render
       return "";
     }
 
@@ -1320,14 +1327,14 @@ class WidgetAnnotation extends Annotation {
 
   _computeFontSize(font, fontName, fontSize, height) {
     if (fontSize === null || fontSize === 0) {
-      const em = font.charsToGlyphs("M", true)[0].width / 1000;
+      const em = font.charsToGlyphs("M")[0].width / 1000;
       // According to https://en.wikipedia.org/wiki/Em_(typography)
       // an average cap height should be 70% of 1em
       const capHeight = 0.7 * em;
       // 1.5 * capHeight * fontSize seems to be a good value for lineHeight
       fontSize = Math.max(1, Math.floor(height / (1.5 * capHeight)));
 
-      let fontRegex = new RegExp(`/${fontName}\\s+[0-9\.]+\\s+Tf`);
+      let fontRegex = new RegExp(`/${fontName}\\s+[0-9.]+\\s+Tf`);
       if (this.data.defaultAppearance.search(fontRegex) === -1) {
         // The font size is missing
         fontRegex = new RegExp(`/${fontName}\\s+Tf`);
@@ -1454,18 +1461,20 @@ class WidgetAnnotation extends Annotation {
     if (dict.has("AA")) {
       const additionalActions = dict.get("AA");
       for (const key of additionalActions.getKeys()) {
-        if (key in AnnotationActionEventType) {
-          const actionDict = additionalActions.getRaw(key);
-          const parents = new RefSet();
-          const list = [];
-          this._collectJS(actionDict, xref, list, parents);
-          if (list.length > 0) {
-            actions[AnnotationActionEventType[key]] = list;
-          }
+        const action = AnnotationActionEventType[key];
+        if (!action) {
+          continue;
+        }
+        const actionDict = additionalActions.getRaw(key);
+        const parents = new RefSet();
+        const list = [];
+        this._collectJS(actionDict, xref, list, parents);
+        if (list.length > 0) {
+          actions[action] = list;
         }
       }
     }
-    // Collect the Action if any (we may have one on pushbutton)
+    // Collect the Action if any (we may have one on pushbutton).
     if (dict.has("A")) {
       const actionDict = dict.get("A");
       const parents = new RefSet();
@@ -1475,7 +1484,7 @@ class WidgetAnnotation extends Annotation {
         actions.Action = list;
       }
     }
-    return actions;
+    return objectSize(actions) > 0 ? actions : null;
   }
 
   getFieldObject() {
@@ -1591,7 +1600,7 @@ class TextWidgetAnnotation extends WidgetAnnotation {
     }
 
     const scale = fontSize / 1000;
-    const whitespace = font.charsToGlyphs(" ", true)[0].width * scale;
+    const whitespace = font.charsToGlyphs(" ")[0].width * scale;
     const chunks = [];
 
     let lastSpacePos = -1,
@@ -1612,7 +1621,7 @@ class TextWidgetAnnotation extends WidgetAnnotation {
           lastSpacePos = i;
         }
       } else {
-        const charWidth = font.charsToGlyphs(character, false)[0].width * scale;
+        const charWidth = font.charsToGlyphs(character)[0].width * scale;
         if (currentWidth + charWidth > width) {
           // We must break to the last white position (if available)
           if (lastSpacePos !== -1) {
@@ -1695,7 +1704,16 @@ class ButtonWidgetAnnotation extends WidgetAnnotation {
     }
 
     if (annotationStorage) {
-      const value = annotationStorage[this.data.id] || false;
+      const value = annotationStorage[this.data.id];
+      if (value === undefined) {
+        return super.getOperatorList(
+          evaluator,
+          task,
+          renderForms,
+          annotationStorage
+        );
+      }
+
       let appearance;
       if (value) {
         appearance = this.checkedAppearance;
@@ -1741,9 +1759,12 @@ class ButtonWidgetAnnotation extends WidgetAnnotation {
   }
 
   async _saveCheckbox(evaluator, task, annotationStorage) {
-    const defaultValue = this.data.fieldValue && this.data.fieldValue !== "Off";
     const value = annotationStorage[this.data.id];
+    if (value === undefined) {
+      return null;
+    }
 
+    const defaultValue = this.data.fieldValue && this.data.fieldValue !== "Off";
     if (defaultValue === value) {
       return null;
     }
@@ -1780,9 +1801,12 @@ class ButtonWidgetAnnotation extends WidgetAnnotation {
   }
 
   async _saveRadioButton(evaluator, task, annotationStorage) {
-    const defaultValue = this.data.fieldValue === this.data.buttonValue;
     const value = annotationStorage[this.data.id];
+    if (value === undefined) {
+      return null;
+    }
 
+    const defaultValue = this.data.fieldValue === this.data.buttonValue;
     if (defaultValue === value) {
       return null;
     }

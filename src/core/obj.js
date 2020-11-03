@@ -25,6 +25,7 @@ import {
   isBool,
   isNum,
   isString,
+  objectSize,
   PermissionFlag,
   shadow,
   stringToPDFString,
@@ -150,6 +151,47 @@ class Catalog {
       }
     }
     return shadow(this, "metadata", metadata);
+  }
+
+  get markInfo() {
+    let markInfo = null;
+    try {
+      markInfo = this._readMarkInfo();
+    } catch (ex) {
+      if (ex instanceof MissingDataException) {
+        throw ex;
+      }
+      warn("Unable to read mark info.");
+    }
+    return shadow(this, "markInfo", markInfo);
+  }
+
+  /**
+   * @private
+   */
+  _readMarkInfo() {
+    const obj = this._catDict.get("MarkInfo");
+    if (!isDict(obj)) {
+      return null;
+    }
+
+    const markInfo = Object.assign(Object.create(null), {
+      Marked: false,
+      UserProperties: false,
+      Suspects: false,
+    });
+    for (const key in markInfo) {
+      if (!obj.has(key)) {
+        continue;
+      }
+      const value = obj.get(key);
+      if (!isBool(value)) {
+        continue;
+      }
+      markInfo[key] = value;
+    }
+
+    return markInfo;
   }
 
   get toplevelPagesDict() {
@@ -786,7 +828,7 @@ class Catalog {
    */
   get openAction() {
     const obj = this._catDict.get("OpenAction");
-    let openAction = null;
+    const openAction = Object.create(null);
 
     if (isDict(obj)) {
       // Convert the OpenAction dictionary into a format that works with
@@ -798,23 +840,18 @@ class Catalog {
       Catalog.parseDestDictionary({ destDict, resultObj });
 
       if (Array.isArray(resultObj.dest)) {
-        if (!openAction) {
-          openAction = Object.create(null);
-        }
         openAction.dest = resultObj.dest;
       } else if (resultObj.action) {
-        if (!openAction) {
-          openAction = Object.create(null);
-        }
         openAction.action = resultObj.action;
       }
     } else if (Array.isArray(obj)) {
-      if (!openAction) {
-        openAction = Object.create(null);
-      }
       openAction.dest = obj;
     }
-    return shadow(this, "openAction", openAction);
+    return shadow(
+      this,
+      "openAction",
+      objectSize(openAction) > 0 ? openAction : null
+    );
   }
 
   get attachments() {

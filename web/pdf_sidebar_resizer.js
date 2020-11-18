@@ -81,6 +81,10 @@ class PDFSidebarResizer {
     }
     this._width = width;
     this.doc.style.setProperty(SIDEBAR_WIDTH_VAR, `${width}px`);
+    // pdf.js eventBus is too slow to pass width values
+    if (window.onChangeSidebarWidth) {
+      window.onChangeSidebarWidth(width);
+    }
     return true;
   }
 

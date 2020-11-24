@@ -59,9 +59,9 @@ class IPDFLinkService {
   async goToDestination(dest) {}
 
   /**
-   * @param {number} pageNumber - The page number.
+   * @param {number|string} val - The page number, or page label.
    */
-  goToPage(pageNumber) {}
+  goToPage(val) {}
 
   /**
    * @param dest - The PDF destination object.
@@ -95,6 +95,11 @@ class IPDFLinkService {
    * @param {number} pageNumber
    */
   isPageVisible(pageNumber) {}
+
+  /**
+   * @param {number} pageNumber
+   */
+  isPageCached(pageNumber) {}
 }
 
 /**
@@ -181,6 +186,8 @@ class IPDFAnnotationLayerFactory {
    *   for annotation icons. Include trailing slash.
    * @param {boolean} renderInteractiveForms
    * @param {IL10n} l10n
+   * @param {boolean} [enableScripting]
+   * @param {Promise<boolean>} [hasJSActionsPromise]
    * @returns {AnnotationLayerBuilder}
    */
   createAnnotationLayerBuilder(
@@ -189,7 +196,9 @@ class IPDFAnnotationLayerFactory {
     annotationStorage = null,
     imageResourcesPath = "",
     renderInteractiveForms = true,
-    l10n = undefined
+    l10n = undefined,
+    enableScripting = false,
+    hasJSActionsPromise = null
   ) {}
 }
 

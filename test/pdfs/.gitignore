@@ -179,6 +179,7 @@
 !devicen.pdf
 !cmykjpeg.pdf
 !issue840.pdf
+!160F-2019.pdf
 !issue4402_reduced.pdf
 !issue845r.pdf
 !issue3405r.pdf
@@ -290,6 +291,7 @@
 !noembed-identity.pdf
 !noembed-identity-2.pdf
 !noembed-jis7.pdf
+!issue12504.pdf
 !noembed-eucjp.pdf
 !noembed-sjis.pdf
 !vertical.pdf
@@ -400,3 +402,4 @@
 !tiling-pattern-large-steps.pdf
 !issue11555.pdf
 !issue12337.pdf
+!pr12564.pdf

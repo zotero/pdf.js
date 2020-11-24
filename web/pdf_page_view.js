@@ -38,8 +38,6 @@ import { viewerCompatibilityParams } from "./viewer_compatibility.js";
  * @property {number} id - The page unique ID (normally its number).
  * @property {number} scale - The page scale display.
  * @property {PageViewport} defaultViewport - The page viewport.
- * @property {AnnotationStorage} [annotationStorage] - Storage for annotation
- *   data in forms. The default value is `null`.
  * @property {Promise<OptionalContentConfig>} [optionalContentConfigPromise] -
  *   A promise that is resolved with an {@link OptionalContentConfig} instance.
  *   The default value is `null`.
@@ -63,6 +61,8 @@ import { viewerCompatibilityParams } from "./viewer_compatibility.js";
  *   total pixels, i.e. width * height. Use -1 for no limit. The default value
  *   is 4096 * 4096 (16 mega-pixels).
  * @property {IL10n} l10n - Localization service.
+ * @property {boolean} [enableScripting] - Enable embedded script execution.
+ *   The default value is `false`.
  */
 
 const MAX_CANVAS_PIXELS = viewerCompatibilityParams.maxCanvasPixels || 16777216;
@@ -87,7 +87,6 @@ class PDFPageView {
     this.scale = options.scale || DEFAULT_SCALE;
     this.viewport = defaultViewport;
     this.pdfPageRotate = defaultViewport.rotation;
-    this._annotationStorage = options.annotationStorage || null;
     this._optionalContentConfigPromise =
       options.optionalContentConfigPromise || null;
     this.hasRestrictedScaling = false;
@@ -109,6 +108,7 @@ class PDFPageView {
     this.renderer = options.renderer || RendererType.CANVAS;
     this.enableWebGL = options.enableWebGL || false;
     this.l10n = options.l10n || NullL10n;
+    this.enableScripting = options.enableScripting || false;
 
     this.paintTask = null;
     this.paintedViewportMap = new WeakMap();
@@ -546,10 +546,12 @@ class PDFPageView {
         this.annotationLayer = this.annotationLayerFactory.createAnnotationLayerBuilder(
           div,
           pdfPage,
-          this._annotationStorage,
+          /* annotationStorage = */ null,
           this.imageResourcesPath,
           this.renderInteractiveForms,
-          this.l10n
+          this.l10n,
+          this.enableScripting,
+          /* hasJSActionsPromise = */ null
         );
       }
       this._renderAnnotationLayer();

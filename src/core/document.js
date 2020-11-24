@@ -76,6 +76,7 @@ class Page {
     fontCache,
     builtInCMapCache,
     globalImageCache,
+    nonBlendModesSet,
   }) {
     this.pdfManager = pdfManager;
     this.pageIndex = pageIndex;
@@ -85,6 +86,7 @@ class Page {
     this.fontCache = fontCache;
     this.builtInCMapCache = builtInCMapCache;
     this.globalImageCache = globalImageCache;
+    this.nonBlendModesSet = nonBlendModesSet;
     this.evaluatorOptions = pdfManager.evaluatorOptions;
     this.resourcesPromise = null;
 
@@ -312,7 +314,10 @@ class Page {
       const opList = new OperatorList(intent, sink);
 
       handler.send("StartRenderPage", {
-        transparency: partialEvaluator.hasBlendModes(this.resources),
+        transparency: partialEvaluator.hasBlendModes(
+          this.resources,
+          this.nonBlendModesSet
+        ),
         pageIndex: this.pageIndex,
         intent,
       });
@@ -357,7 +362,10 @@ class Page {
         // is resolved with the complete operator list for a single annotation.
         const opListPromises = [];
         for (const annotation of annotations) {
-          if (isAnnotationRenderable(annotation, intent)) {
+          if (
+            isAnnotationRenderable(annotation, intent) &&
+            !annotation.isHidden(annotationStorage)
+          ) {
             opListPromises.push(
               annotation
                 .getOperatorList(
@@ -932,6 +940,7 @@ class PDFDocument {
         fontCache: catalog.fontCache,
         builtInCMapCache: catalog.builtInCMapCache,
         globalImageCache: catalog.globalImageCache,
+        nonBlendModesSet: catalog.nonBlendModesSet,
       });
     }));
   }
@@ -1026,6 +1035,21 @@ class PDFDocument {
       this,
       "fieldObjects",
       Promise.all(allPromises).then(() => allFields)
+    );
+  }
+
+  get hasJSActions() {
+    return shadow(
+      this,
+      "hasJSActions",
+      this.fieldObjects.then(fieldObjects => {
+        return (
+          fieldObjects !== null &&
+          Object.values(fieldObjects).some(fieldObject =>
+            fieldObject.some(object => object.actions !== null)
+          )
+        );
+      })
     );
   }
 

@@ -24,6 +24,7 @@ import {
   isNum,
   isString,
   OPS,
+  PageActionEventType,
   shadow,
   stringToBytes,
   stringToPDFString,
@@ -42,6 +43,7 @@ import {
   Ref,
 } from "./primitives.js";
 import {
+  collectActions,
   getInheritableProperty,
   isWhiteSpace,
   MissingDataException,
@@ -452,11 +454,8 @@ class Page {
   }
 
   get annotations() {
-    return shadow(
-      this,
-      "annotations",
-      this._getInheritableProperty("Annots") || []
-    );
+    const annots = this._getInheritableProperty("Annots");
+    return shadow(this, "annotations", Array.isArray(annots) ? annots : []);
   }
 
   get _parsedAnnotations() {
@@ -484,6 +483,16 @@ class Page {
       });
 
     return shadow(this, "_parsedAnnotations", parsedAnnotations);
+  }
+
+  get jsActions() {
+    const actions = collectActions(
+      this.xref,
+      this.pageDict,
+      PageActionEventType
+    );
+
+    return shadow(this, "jsActions", actions);
   }
 }
 
@@ -983,7 +992,7 @@ class PDFDocument {
       }
     }
 
-    if (!(name in promises)) {
+    if (!promises.has(name)) {
       promises.set(name, []);
     }
     promises.get(name).push(
@@ -1044,10 +1053,11 @@ class PDFDocument {
       "hasJSActions",
       this.fieldObjects.then(fieldObjects => {
         return (
-          fieldObjects !== null &&
-          Object.values(fieldObjects).some(fieldObject =>
-            fieldObject.some(object => object.actions !== null)
-          )
+          (fieldObjects !== null &&
+            Object.values(fieldObjects).some(fieldObject =>
+              fieldObject.some(object => object.actions !== null)
+            )) ||
+          !!this.catalog.jsActions
         );
       })
     );
@@ -1065,6 +1075,9 @@ class PDFDocument {
     }
 
     const ids = calculationOrder.filter(isRef).map(ref => ref.toString());
+    if (ids.length === 0) {
+      return shadow(this, "calculationOrderIds", null);
+    }
     return shadow(this, "calculationOrderIds", ids);
   }
 }

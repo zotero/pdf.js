@@ -79,6 +79,8 @@ const DEFAULT_CACHE_SIZE = 10;
  * @property {IL10n} l10n - Localization service.
  * @property {boolean} [enableScripting] - Enable embedded script execution.
  *   The default value is `false`.
+ * @property {Object} [mouseState] - The mouse button state. The default value
+ *   is `null`.
  */
 
 function PDFPageViewBuffer(size) {
@@ -194,6 +196,7 @@ class BaseViewer {
     this.maxCanvasPixels = options.maxCanvasPixels;
     this.l10n = options.l10n || NullL10n;
     this.enableScripting = options.enableScripting || false;
+    this._mouseState = options.mouseState || null;
 
     this.defaultRenderingQueue = !options.renderingQueue;
     if (this.defaultRenderingQueue) {
@@ -212,6 +215,7 @@ class BaseViewer {
     if (this.removePageBorders) {
       this.viewer.classList.add("removePageBorders");
     }
+    this._initializeScriptingEvents();
     // Defer the dispatching of this event, to give other viewer components
     // time to initialize *and* register 'baseviewerinit' event listeners.
     Promise.resolve().then(() => {
@@ -281,12 +285,14 @@ class BaseViewer {
     if (!(0 < val && val <= this.pagesCount)) {
       return false;
     }
+    const previous = this._currentPageNumber;
     this._currentPageNumber = val;
 
     this.eventBus.dispatch("pagechanging", {
       source: this,
       pageNumber: val,
       pageLabel: this._pageLabels && this._pageLabels[val - 1],
+      previous,
     });
 
     if (resetCurrentPageView) {
@@ -455,6 +461,8 @@ class BaseViewer {
    */
   setDocument(pdfDocument) {
     if (this.pdfDocument) {
+      this.eventBus.dispatch("pagesdestroy", { source: this });
+
       this._cancelRendering();
       this._resetView();
 
@@ -646,6 +654,7 @@ class BaseViewer {
     this._pagesCapability = createPromiseCapability();
     this._scrollMode = ScrollMode.VERTICAL;
     this._spreadMode = SpreadMode.NONE;
+    this._pageOpenPendingSet = null;
 
     if (this._onBeforeDraw) {
       this.eventBus._off("pagerender", this._onBeforeDraw);
@@ -725,6 +734,20 @@ class BaseViewer {
     }
   }
 
+  /**
+   * @private
+   */
+  get _pageWidthScaleFactor() {
+    if (
+      this.spreadMode !== SpreadMode.NONE &&
+      this.scrollMode !== ScrollMode.HORIZONTAL &&
+      !this.isInPresentationMode
+    ) {
+      return 2;
+    }
+    return 1;
+  }
+
   _setScale(value, noScroll = false) {
     let scale = parseFloat(value);
 
@@ -743,8 +766,9 @@ class BaseViewer {
         [hPadding, vPadding] = [vPadding, hPadding]; // Swap the padding values.
       }
       const pageWidthScale =
-        ((this.container.clientWidth - hPadding) / currentPage.width) *
-        currentPage.scale;
+        (((this.container.clientWidth - hPadding) / currentPage.width) *
+          currentPage.scale) /
+        this._pageWidthScaleFactor;
       const pageHeightScale =
         ((this.container.clientHeight - vPadding) / currentPage.height) *
         currentPage.scale;
@@ -1250,6 +1274,7 @@ class BaseViewer {
    * @param {IL10n} l10n
    * @param {boolean} [enableScripting]
    * @param {Promise<boolean>} [hasJSActionsPromise]
+   * @param {Object} [mouseState]
    * @returns {AnnotationLayerBuilder}
    */
   createAnnotationLayerBuilder(
@@ -1260,7 +1285,8 @@ class BaseViewer {
     renderInteractiveForms = false,
     l10n = NullL10n,
     enableScripting = false,
-    hasJSActionsPromise = null
+    hasJSActionsPromise = null,
+    mouseState = null
   ) {
     return new AnnotationLayerBuilder({
       pageDiv,
@@ -1275,6 +1301,7 @@ class BaseViewer {
       enableScripting,
       hasJSActionsPromise:
         hasJSActionsPromise || this.pdfDocument?.hasJSActions(),
+      mouseState: mouseState || this._mouseState,
     });
   }
 
@@ -1473,8 +1500,67 @@ class BaseViewer {
     if (!pageNumber) {
       return;
     }
+    if (this._currentScaleValue && isNaN(this._currentScaleValue)) {
+      this._setScale(this._currentScaleValue, true);
+    }
     this._setCurrentPageNumber(pageNumber, /* resetCurrentPageView = */ true);
     this.update();
+  }
+
+  /**
+   * @private
+   */
+  _initializeScriptingEvents() {
+    if (!this.enableScripting) {
+      return;
+    }
+    const { eventBus } = this;
+
+    const dispatchPageClose = pageNumber => {
+      eventBus.dispatch("pageclose", { source: this, pageNumber });
+    };
+    const dispatchPageOpen = (pageNumber, force = false) => {
+      const pageView = this._pages[pageNumber - 1];
+      if (force || pageView?.renderingState === RenderingStates.FINISHED) {
+        this._pageOpenPendingSet?.delete(pageNumber);
+
+        eventBus.dispatch("pageopen", { source: this, pageNumber });
+      } else {
+        if (!this._pageOpenPendingSet) {
+          this._pageOpenPendingSet = new Set();
+        }
+        this._pageOpenPendingSet.add(pageNumber);
+      }
+    };
+
+    eventBus._on("pagechanging", ({ pageNumber, previous }) => {
+      if (pageNumber === previous) {
+        return; // The active page didn't change.
+      }
+      dispatchPageClose(previous);
+      dispatchPageOpen(pageNumber);
+    });
+
+    eventBus._on("pagerendered", ({ pageNumber }) => {
+      if (!this._pageOpenPendingSet) {
+        return; // No pending "pageopen" events.
+      }
+      if (!this._pageOpenPendingSet.has(pageNumber)) {
+        return; // No pending "pageopen" event for the newly rendered page.
+      }
+      if (pageNumber !== this._currentPageNumber) {
+        return; // The newly rendered page is no longer the current one.
+      }
+      dispatchPageOpen(pageNumber, /* force = */ true);
+    });
+
+    eventBus._on("pagesinit", () => {
+      dispatchPageOpen(this._currentPageNumber);
+    });
+
+    eventBus._on("pagesdestroy", () => {
+      dispatchPageClose(this._currentPageNumber);
+    });
   }
 }
 

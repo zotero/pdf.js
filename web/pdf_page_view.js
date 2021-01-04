@@ -551,7 +551,8 @@ class PDFPageView {
           this.renderInteractiveForms,
           this.l10n,
           this.enableScripting,
-          /* hasJSActionsPromise = */ null
+          /* hasJSActionsPromise = */ null,
+          /* mouseState = */ null
         );
       }
       this._renderAnnotationLayer();

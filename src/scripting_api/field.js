@@ -13,6 +13,8 @@
  * limitations under the License.
  */
 
+import { Color } from "./color.js";
+import { createActionsMap } from "./common.js";
 import { PDFObject } from "./pdf_object.js";
 
 class Field extends PDFObject {
@@ -41,12 +43,11 @@ class Field extends PDFObject {
     this.editable = data.editable;
     this.exportValues = data.exportValues;
     this.fileSelect = data.fileSelect;
-    this.fillColor = data.fillColor;
     this.hidden = data.hidden;
     this.highlight = data.highlight;
     this.lineWidth = data.lineWidth;
     this.multiline = data.multiline;
-    this.multipleSelection = data.multipleSelection;
+    this.multipleSelection = !!data.multipleSelection;
     this.name = data.name;
     this.numItems = data.numItems;
     this.page = data.page;
@@ -59,20 +60,81 @@ class Field extends PDFObject {
     this.richText = data.richText;
     this.richValue = data.richValue;
     this.rotation = data.rotation;
-    this.strokeColor = data.strokeColor;
     this.style = data.style;
     this.submitName = data.submitName;
-    this.textColor = data.textColor;
     this.textFont = data.textFont;
     this.textSize = data.textSize;
     this.type = data.type;
     this.userName = data.userName;
-    this.value = data.value || "";
-    this.valueAsString = data.valueAsString;
 
     // Private
     this._document = data.doc;
-    this._actions = this._createActionsMap(data.actions);
+    this._value = data.value || "";
+    this._valueAsString = data.valueAsString;
+    this._actions = createActionsMap(data.actions);
+    this._fillColor = data.fillColor || ["T"];
+    this._strokeColor = data.strokeColor || ["G", 0];
+    this._textColor = data.textColor || ["G", 0];
+
+    this._globalEval = data.globalEval;
+  }
+
+  get fillColor() {
+    return this._fillColor;
+  }
+
+  set fillColor(color) {
+    if (Color._isValidColor(color)) {
+      this._fillColor = color;
+    }
+  }
+
+  get strokeColor() {
+    return this._strokeColor;
+  }
+
+  set strokeColor(color) {
+    if (Color._isValidColor(color)) {
+      this._strokeColor = color;
+    }
+  }
+
+  get textColor() {
+    return this._textColor;
+  }
+
+  set textColor(color) {
+    if (Color._isValidColor(color)) {
+      this._textColor = color;
+    }
+  }
+
+  get value() {
+    return this._value;
+  }
+
+  set value(value) {
+    if (!this.multipleSelection) {
+      this._value = value;
+    }
+  }
+
+  get valueAsString() {
+    return this._valueAsString;
+  }
+
+  set valueAsString(val) {
+    this._valueAsString = val ? val.toString() : "";
+  }
+
+  checkThisBox(nWidget, bCheckIt = true) {}
+
+  isBoxChecked(nWidget) {
+    return false;
+  }
+
+  isDefaultChecked(nWidget) {
+    return false;
   }
 
   setAction(cTrigger, cScript) {
@@ -82,32 +144,11 @@ class Field extends PDFObject {
     if (!(cTrigger in this._actions)) {
       this._actions[cTrigger] = [];
     }
-    this._actions[cTrigger].push(
-      // eslint-disable-next-line no-new-func
-      Function("event", `with (this) {${cScript}}`).bind(this._document)
-    );
+    this._actions[cTrigger].push(cScript);
   }
 
   setFocus() {
     this._send({ id: this._id, focus: true });
-  }
-
-  _createActionsMap(actions) {
-    const actionsMap = new Map();
-    if (actions) {
-      const doc = this._document;
-      for (const [eventType, actionsForEvent] of Object.entries(actions)) {
-        // This stuff is running in a sandbox so it's safe to use Function
-        actionsMap.set(
-          eventType,
-          actionsForEvent.map(action =>
-            // eslint-disable-next-line no-new-func
-            Function("event", `with (this) {${action}}`).bind(doc)
-          )
-        );
-      }
-    }
-    return actionsMap;
   }
 
   _isButton() {
@@ -123,19 +164,133 @@ class Field extends PDFObject {
     const actions = this._actions.get(eventName);
     try {
       for (const action of actions) {
-        action(event);
+        // Action evaluation must happen in the global scope
+        this._globalEval(action);
       }
     } catch (error) {
       event.rc = false;
-      const value =
-        `"${error.toString()}" for event ` +
-        `"${eventName}" in object ${this._id}.` +
-        `\n${error.stack}`;
-      this._send({ id: "error", value });
+      throw error;
     }
 
     return true;
   }
 }
 
-export { Field };
+class RadioButtonField extends Field {
+  constructor(otherButtons, data) {
+    super(data);
+
+    this.exportValues = [this.exportValues];
+    this._radioIds = [this._id];
+    this._radioActions = [this._actions];
+
+    for (const radioData of otherButtons) {
+      this.exportValues.push(radioData.exportValues);
+      this._radioIds.push(radioData.id);
+      this._radioActions.push(createActionsMap(radioData.actions));
+      if (this._value === radioData.exportValues) {
+        this._id = radioData.id;
+      }
+    }
+  }
+
+  get value() {
+    return this._value;
+  }
+
+  set value(value) {
+    const i = this.exportValues.indexOf(value);
+    if (0 <= i && i < this._radioIds.length) {
+      this._id = this._radioIds[i];
+      this._value = value;
+    } else if (value === "Off" && this._radioIds.length === 2) {
+      const nextI = (1 + this._radioIds.indexOf(this._id)) % 2;
+      this._id = this._radioIds[nextI];
+      this._value = this.exportValues[nextI];
+    }
+  }
+
+  checkThisBox(nWidget, bCheckIt = true) {
+    if (nWidget < 0 || nWidget >= this._radioIds.length || !bCheckIt) {
+      return;
+    }
+
+    this._id = this._radioIds[nWidget];
+    this._value = this.exportValues[nWidget];
+    this._send({ id: this._id, value: this._value });
+  }
+
+  isBoxChecked(nWidget) {
+    return (
+      nWidget >= 0 &&
+      nWidget < this._radioIds.length &&
+      this._id === this._radioIds[nWidget]
+    );
+  }
+
+  isDefaultChecked(nWidget) {
+    return (
+      nWidget >= 0 &&
+      nWidget < this.exportValues.length &&
+      this.defaultValue === this.exportValues[nWidget]
+    );
+  }
+
+  _getExportValue(state) {
+    const i = this._radioIds.indexOf(this._id);
+    return this.exportValues[i];
+  }
+
+  _runActions(event) {
+    const i = this._radioIds.indexOf(this._id);
+    this._actions = this._radioActions[i];
+    return super._runActions(event);
+  }
+
+  _isButton() {
+    return true;
+  }
+}
+
+class CheckboxField extends RadioButtonField {
+  get value() {
+    return this._value;
+  }
+
+  set value(value) {
+    if (value === "Off") {
+      this._value = "Off";
+    } else {
+      super.value = value;
+    }
+  }
+
+  _getExportValue(state) {
+    return state ? super._getExportValue(state) : "Off";
+  }
+
+  isBoxChecked(nWidget) {
+    if (this._value === "Off") {
+      return false;
+    }
+    return super.isBoxChecked(nWidget);
+  }
+
+  isDefaultChecked(nWidget) {
+    if (this.defaultValue === "Off") {
+      return this._value === "Off";
+    }
+    return super.isDefaultChecked(nWidget);
+  }
+
+  checkThisBox(nWidget, bCheckIt = true) {
+    if (nWidget < 0 || nWidget >= this._radioIds.length) {
+      return;
+    }
+    this._id = this._radioIds[nWidget];
+    this._value = bCheckIt ? this.exportValues[nWidget] : "Off";
+    this._send({ id: this._id, value: this._value });
+  }
+}
+
+export { CheckboxField, Field, RadioButtonField };

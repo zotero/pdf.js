@@ -995,6 +995,50 @@ describe("api", function () {
         .catch(done.fail);
     });
 
+    it("gets JSActions (none)", function (done) {
+      const promise = pdfDocument.getJSActions();
+      promise
+        .then(function (data) {
+          expect(data).toEqual(null);
+          done();
+        })
+        .catch(done.fail);
+    });
+    it("gets JSActions", function (done) {
+      // PDF document with "JavaScript" action in the OpenAction dictionary.
+      const loadingTask = getDocument(
+        buildGetDocumentParams("doc_actions.pdf")
+      );
+      const promise = loadingTask.promise.then(async pdfDoc => {
+        const docActions = await pdfDoc.getJSActions();
+        const page1 = await pdfDoc.getPage(1);
+        const page3 = await pdfDoc.getPage(3);
+        const page1Actions = await page1.getJSActions();
+        const page3Actions = await page3.getJSActions();
+        return [docActions, page1Actions, page3Actions];
+      });
+      promise
+        .then(async ([docActions, page1Actions, page3Actions]) => {
+          expect(docActions).toEqual({
+            DidPrint: [`this.getField("Text2").value = "DidPrint";`],
+            DidSave: [`this.getField("Text2").value = "DidSave";`],
+            WillClose: [`this.getField("Text1").value = "WillClose";`],
+            WillPrint: [`this.getField("Text1").value = "WillPrint";`],
+            WillSave: [`this.getField("Text1").value = "WillSave";`],
+          });
+          expect(page1Actions).toEqual({
+            PageOpen: [`this.getField("Text1").value = "PageOpen 1";`],
+            PageClose: [`this.getField("Text2").value = "PageClose 1";`],
+          });
+          expect(page3Actions).toEqual({
+            PageOpen: [`this.getField("Text5").value = "PageOpen 3";`],
+            PageClose: [`this.getField("Text6").value = "PageClose 3";`],
+          });
+          loadingTask.destroy().then(done);
+        })
+        .catch(done.fail);
+    });
+
     it("gets non-existent outline", function (done) {
       const loadingTask = getDocument(
         buildGetDocumentParams("tracemonkey.pdf")

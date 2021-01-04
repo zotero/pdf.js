@@ -19,6 +19,7 @@ import { AppOptions } from "./app_options.js";
 import { BasePreferences } from "./preferences.js";
 import { DownloadManager } from "./download_manager.js";
 import { GenericL10n } from "./genericl10n.js";
+import { GenericScripting } from "./generic_scripting.js";
 
 if (typeof PDFJSDev === "undefined" || !PDFJSDev.test("CHROME")) {
   throw new Error(
@@ -426,6 +427,10 @@ class ChromeExternalServices extends DefaultExternalServices {
 
   static createL10n(options) {
     return new GenericL10n(navigator.language);
+  }
+
+  static createScripting({ sandboxBundleSrc }) {
+    return new GenericScripting(sandboxBundleSrc);
   }
 }
 PDFViewerApplication.externalServices = ChromeExternalServices;

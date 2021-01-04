@@ -21,11 +21,9 @@ import {
   AnnotationReplyType,
   AnnotationType,
   assert,
-  bytesToString,
   escapeString,
   getModificationDate,
   isString,
-  objectSize,
   OPS,
   shadow,
   stringToPDFString,
@@ -34,17 +32,9 @@ import {
   warn,
 } from "../shared/util.js";
 import { Catalog, FileSpec, ObjectLoader } from "./obj.js";
-import {
-  Dict,
-  isDict,
-  isName,
-  isRef,
-  isStream,
-  Name,
-  RefSet,
-} from "./primitives.js";
+import { collectActions, getInheritableProperty } from "./core_utils.js";
+import { Dict, isDict, isName, isRef, isStream, Name } from "./primitives.js";
 import { ColorSpace } from "./colorspace.js";
-import { getInheritableProperty } from "./core_utils.js";
 import { OperatorList } from "./operator_list.js";
 import { StringStream } from "./stream.js";
 import { writeDict } from "./writer.js";
@@ -227,7 +217,36 @@ function getQuadPoints(dict, rect) {
       quadPointsLists[i].push({ x, y });
     }
   }
-  return quadPointsLists;
+
+  // The PDF specification states in section 12.5.6.10 (figure 64) that the
+  // order of the quadpoints should be bottom left, bottom right, top right
+  // and top left. However, in practice PDF files use a different order,
+  // namely bottom left, bottom right, top left and top right (this is also
+  // mentioned on https://github.com/highkite/pdfAnnotate#QuadPoints), so
+  // this is the actual order we should work with. However, the situation is
+  // even worse since Adobe's own applications and other applications violate
+  // the specification and create annotations with other orders, namely top
+  // left, top right, bottom left and bottom right or even top left, top right,
+  // bottom right and bottom left. To avoid inconsistency and broken rendering,
+  // we normalize all lists to put the quadpoints in the same standard order
+  // (see https://stackoverflow.com/a/10729881).
+  return quadPointsLists.map(quadPointsList => {
+    const [minX, maxX, minY, maxY] = quadPointsList.reduce(
+      ([mX, MX, mY, MY], quadPoint) => [
+        Math.min(mX, quadPoint.x),
+        Math.max(MX, quadPoint.x),
+        Math.min(mY, quadPoint.y),
+        Math.max(MY, quadPoint.y),
+      ],
+      [Number.MAX_VALUE, Number.MIN_VALUE, Number.MAX_VALUE, Number.MIN_VALUE]
+    );
+    return [
+      { x: minX, y: maxY },
+      { x: maxX, y: maxY },
+      { x: minX, y: minY },
+      { x: maxX, y: minY },
+    ];
+  });
 }
 
 function getTransformMatrix(rect, bbox, matrix) {
@@ -948,7 +967,7 @@ class WidgetAnnotation extends Annotation {
 
     data.annotationType = AnnotationType.WIDGET;
     data.fieldName = this._constructFieldName(dict);
-    data.actions = this._collectActions(params.xref, dict);
+    data.actions = collectActions(params.xref, dict, AnnotationActionEventType);
 
     const fieldValue = getInheritableProperty({
       dict,
@@ -965,10 +984,13 @@ class WidgetAnnotation extends Annotation {
     data.defaultFieldValue = this._decodeFormValue(defaultFieldValue);
 
     data.alternativeText = stringToPDFString(dict.get("TU") || "");
-    data.defaultAppearance =
+    const defaultAppearance =
       getInheritableProperty({ dict, key: "DA" }) ||
       params.acroForm.get("DA") ||
       "";
+    data.defaultAppearance = isString(defaultAppearance)
+      ? defaultAppearance
+      : "";
     const fieldType = getInheritableProperty({ dict, key: "FT" });
     data.fieldType = isName(fieldType) ? fieldType.name : null;
 
@@ -1253,6 +1275,15 @@ class WidgetAnnotation extends Annotation {
     const totalHeight = this.data.rect[3] - this.data.rect[1];
     const totalWidth = this.data.rect[2] - this.data.rect[0];
 
+    if (!this.data.defaultAppearance) {
+      // The DA is required and must be a string.
+      // If there is no font named Helvetica in the resource dictionary,
+      // the evaluator will fall back to a default font.
+      // Doing so prevents exceptions and allows saving/printing
+      // the file as expected.
+      this.data.defaultAppearance = "/Helvetica 0 Tf 0 g";
+    }
+
     const fontInfo = await this._getFontData(evaluator, task);
     const [font, fontName] = fontInfo;
     const fontSize = this._computeFontSize(...fontInfo, totalHeight);
@@ -1428,78 +1459,6 @@ class WidgetAnnotation extends Annotation {
       }
     }
     return localResources || Dict.empty;
-  }
-
-  _collectJS(entry, xref, list, parents) {
-    if (!entry) {
-      return;
-    }
-
-    let parent = null;
-    if (isRef(entry)) {
-      if (parents.has(entry)) {
-        // If we've already found entry then we've a cycle.
-        return;
-      }
-      parent = entry;
-      parents.put(parent);
-      entry = xref.fetch(entry);
-    }
-    if (Array.isArray(entry)) {
-      for (const element of entry) {
-        this._collectJS(element, xref, list, parents);
-      }
-    } else if (entry instanceof Dict) {
-      if (isName(entry.get("S"), "JavaScript") && entry.has("JS")) {
-        const js = entry.get("JS");
-        let code;
-        if (isStream(js)) {
-          code = bytesToString(js.getBytes());
-        } else {
-          code = js;
-        }
-        code = stringToPDFString(code);
-        if (code) {
-          list.push(code);
-        }
-      }
-      this._collectJS(entry.getRaw("Next"), xref, list, parents);
-    }
-
-    if (parent) {
-      parents.remove(parent);
-    }
-  }
-
-  _collectActions(xref, dict) {
-    const actions = Object.create(null);
-    if (dict.has("AA")) {
-      const additionalActions = dict.get("AA");
-      for (const key of additionalActions.getKeys()) {
-        const action = AnnotationActionEventType[key];
-        if (!action) {
-          continue;
-        }
-        const actionDict = additionalActions.getRaw(key);
-        const parents = new RefSet();
-        const list = [];
-        this._collectJS(actionDict, xref, list, parents);
-        if (list.length > 0) {
-          actions[action] = list;
-        }
-      }
-    }
-    // Collect the Action if any (we may have one on pushbutton).
-    if (dict.has("A")) {
-      const actionDict = dict.get("A");
-      const parents = new RefSet();
-      const list = [];
-      this._collectJS(actionDict, xref, list, parents);
-      if (list.length > 0) {
-        actions.Action = list;
-      }
-    }
-    return objectSize(actions) > 0 ? actions : null;
   }
 
   getFieldObject() {
@@ -1985,18 +1944,19 @@ class ButtonWidgetAnnotation extends WidgetAnnotation {
 
   getFieldObject() {
     let type = "button";
-    let value = null;
+    let exportValues;
     if (this.data.checkBox) {
       type = "checkbox";
-      value = this.data.fieldValue && this.data.fieldValue !== "Off";
+      exportValues = this.data.exportValue;
     } else if (this.data.radioButton) {
       type = "radiobutton";
-      value = this.data.fieldValue === this.data.buttonValue;
+      exportValues = this.data.buttonValue;
     }
     return {
       id: this.data.id,
-      value,
+      value: this.data.fieldValue || null,
       defaultValue: this.data.defaultFieldValue,
+      exportValues,
       editable: !this.data.readOnly,
       name: this.data.fieldName,
       rect: this.data.rect,
@@ -2077,6 +2037,7 @@ class ChoiceWidgetAnnotation extends WidgetAnnotation {
       editable: !this.data.readOnly,
       name: this.data.fieldName,
       rect: this.data.rect,
+      numItems: this.data.fieldValue.length,
       multipleSelection: this.data.multiSelect,
       hidden: this.data.hidden,
       actions: this.data.actions,

@@ -46,8 +46,10 @@
 !issue7544.pdf
 !issue7507.pdf
 !issue6931_reduced.pdf
+!doc_actions.pdf
 !issue7580.pdf
 !issue7598.pdf
+!issue12750.pdf
 !issue7665.pdf
 !issue7696.pdf
 !issue7835.pdf
@@ -222,6 +224,7 @@
 !issue5734.pdf
 !issue4875.pdf
 !issue11740_reduced.pdf
+!issue12705.pdf
 !issue4881.pdf
 !issue5994.pdf
 !issue6151.pdf
@@ -330,6 +333,7 @@
 !issue5334.pdf
 !annotation-caret-ink.pdf
 !bug1186827.pdf
+!issue12706.pdf
 !issue215.pdf
 !issue5044.pdf
 !issue1512r.pdf
@@ -357,9 +361,11 @@
 !issue6298.pdf
 !issue6889.pdf
 !bug1001080.pdf
+!bug1671312_reduced.pdf
 !issue6108.pdf
 !issue6113.pdf
 !openoffice.pdf
+!js-buttons.pdf
 !issue7014.pdf
 !issue8187.pdf
 !annotation-link-text-popup.pdf
@@ -392,6 +398,7 @@
 !issue11442_reduced.pdf
 !issue11549_reduced.pdf
 !issue8097_reduced.pdf
+!quadpoints.pdf
 !transparent.pdf
 !xobject-image.pdf
 !ccitt_EndOfBlock_false.pdf

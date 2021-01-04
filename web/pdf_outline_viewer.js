@@ -95,7 +95,23 @@ class PDFOutlineViewer extends BaseTreeViewer {
    * @private
    */
   _addToggleButton(div, { count, items }) {
-    const hidden = count < 0 && Math.abs(count) === items.length;
+    let hidden = false;
+    if (count < 0) {
+      let totalCount = items.length;
+      if (totalCount > 0) {
+        const queue = [...items];
+        while (queue.length > 0) {
+          const { count: nestedCount, items: nestedItems } = queue.shift();
+          if (nestedCount > 0 && nestedItems.length > 0) {
+            totalCount += nestedItems.length;
+            queue.push(...nestedItems);
+          }
+        }
+      }
+      if (Math.abs(count) === totalCount) {
+        hidden = true;
+      }
+    }
     super._addToggleButton(div, hidden);
   }
 
@@ -155,16 +171,8 @@ class PDFOutlineViewer extends BaseTreeViewer {
         outlineCount++;
       }
     }
-    if (hasAnyNesting) {
-      this.container.classList.add("treeWithDeepNesting");
 
-      this._lastToggleIsShow =
-        fragment.querySelectorAll(".treeItemsHidden").length === 0;
-    }
-
-    this.container.appendChild(fragment);
-
-    this._dispatchEvent(outlineCount);
+    this._finishRendering(fragment, outlineCount, hasAnyNesting);
   }
 }
 

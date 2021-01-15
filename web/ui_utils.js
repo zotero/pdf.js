@@ -39,6 +39,7 @@ const SidebarView = {
   OUTLINE: 2,
   ATTACHMENTS: 3,
   LAYERS: 4,
+  ANNOTATIONS: 9
 };
 
 const RendererType = {

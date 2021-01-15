@@ -134,6 +134,11 @@ function getViewerConfiguration() {
       attachmentsView: document.getElementById("attachmentsView"),
       layersView: document.getElementById("layersView"),
       annotationsView: document.getElementById('annotationsView'),
+      // View-specific options
+      outlineOptionsContainer: document.getElementById(
+        "outlineOptionsContainer"
+      ),
+      currentOutlineItemButton: document.getElementById("currentOutlineItem"),
     },
     sidebarResizer: {
       outerContainer: document.getElementById("outerContainer"),

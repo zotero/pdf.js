@@ -1136,17 +1136,13 @@ class PDFPageProxy {
   }
 
   /**
-   * @param {GetAnnotationsParameters} params - Annotation parameters.
-   * @returns {Promise<Array<any>>} A promise that is resolved with an
-   *   {Array} of the annotation objects.
+   * @returns {Promise<Object>} A promise that is resolved with an
+   *   {Object} with JS actions.
    */
   getJSActions() {
-    if (!this._jsActionsPromise) {
-      this._jsActionsPromise = this._transport.getPageJSActions(
-        this._pageIndex
-      );
-    }
-    return this._jsActionsPromise;
+    return (this._jsActionsPromise ||= this._transport.getPageJSActions(
+      this._pageIndex
+    ));
   }
 
   /**
@@ -3052,13 +3048,15 @@ const build =
   typeof PDFJSDev !== "undefined" ? PDFJSDev.eval("BUNDLE_BUILD") : null;
 
 export {
+  build,
+  DefaultCanvasFactory,
+  DefaultCMapReaderFactory,
   getDocument,
   LoopbackPort,
   PDFDataRangeTransport,
-  PDFWorker,
   PDFDocumentProxy,
   PDFPageProxy,
+  PDFWorker,
   setPDFNetworkStreamFactory,
   version,
-  build,
 };

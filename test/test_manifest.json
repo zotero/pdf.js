@@ -1163,6 +1163,12 @@
        "link": false,
        "type": "eq"
     },
+    {  "id": "issue12823",
+       "file": "pdfs/issue12823.pdf",
+       "md5": "8391c63006ccc4b41c95de5e8c38deeb",
+       "rounds": 1,
+       "type": "eq"
+    },
     {  "id": "bug1050040",
        "file": "pdfs/bug1050040.pdf",
        "md5": "9076b29bd157e2646b457f29a4472a07",
@@ -1182,6 +1188,12 @@
        "md5": "6c946045ee0f2f663f269717c0f1614a",
        "rounds": 1,
        "link": false,
+       "type": "eq"
+    },
+    {  "id": "issue12295",
+       "file": "pdfs/issue12295.pdf",
+       "md5": "c534f74866ba8ada56010d19b57231ec",
+       "rounds": 1,
        "type": "eq"
     },
     {  "id": "bug1245391-text",
@@ -2295,6 +2307,12 @@
        "rounds": 1,
        "type": "eq"
     },
+    {  "id": "bug1671312_ArialNarrow",
+       "file": "pdfs/bug1671312_ArialNarrow.pdf",
+       "md5": "f4f0a0d1dc9276bd6e3402165ecdc3d7",
+       "rounds": 1,
+       "type": "eq"
+    },
     {  "id": "issue7020",
        "file": "pdfs/issue7020.pdf",
        "md5": "93b464e21c649e64ae92eeafe99fc31b",
@@ -2320,6 +2338,12 @@
        "file": "pdfs/issue7200.pdf",
        "md5": "ddae17424ea23930eecf8b612a66ed0f",
        "link": false,
+       "rounds": 1,
+       "type": "eq"
+    },
+    {  "id": "issue12810",
+       "file": "pdfs/issue12810.pdf",
+       "md5": "585e19781308603dd706f941b1ace774",
        "rounds": 1,
        "type": "eq"
     },
@@ -3228,6 +3252,12 @@
        "md5": "ba2e23d3af93ac2c634d77ccbe2e79d5",
        "rounds": 1,
        "link": true,
+       "type": "eq"
+    },
+    {  "id": "issue12841",
+       "file": "pdfs/issue12841_reduced.pdf",
+       "md5": "5c645897c652853ad86b59df5fc6cce0",
+       "rounds": 1,
        "type": "eq"
     },
     {  "id": "issue1597",
@@ -4403,6 +4433,20 @@
        "link": true,
        "lastPage": 1,
        "type": "eq"
+    },
+    {  "id": "issue12394",
+       "file": "pdfs/issue12392.pdf",
+       "md5": "76c3a34c6520940c45c66c92f7df2de5",
+       "rounds": 1,
+       "link": true,
+       "lastPage": 1,
+       "type": "eq",
+       "print": "true",
+       "annotationStorage": {
+         "35R": {
+           "value": "收文"
+         }
+       }
     },
     {  "id": "issue4883",
       "file": "pdfs/issue4883.pdf",

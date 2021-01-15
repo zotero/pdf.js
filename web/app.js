@@ -32,6 +32,7 @@ import {
   ProgressBar,
   RendererType,
   ScrollMode,
+  SidebarView,
   SpreadMode,
   TextLayerMode,
 } from "./ui_utils.js";
@@ -56,7 +57,6 @@ import {
 } from "pdfjs-lib";
 import { CursorTool, PDFCursorTools } from "./pdf_cursor_tools.js";
 import { PDFRenderingQueue, RenderingStates } from "./pdf_rendering_queue.js";
-import { PDFSidebar, SidebarView } from "./pdf_sidebar.js";
 import { OverlayManager } from "./overlay_manager.js";
 import { PasswordPrompt } from "./password_prompt.js";
 import { PDFAttachmentViewer } from "./pdf_attachment_viewer.js";
@@ -68,6 +68,7 @@ import { PDFLayerViewer } from "./pdf_layer_viewer.js";
 import { PDFLinkService } from "./pdf_link_service.js";
 import { PDFOutlineViewer } from "./pdf_outline_viewer.js";
 import { PDFPresentationMode } from "./pdf_presentation_mode.js";
+import { PDFSidebar } from "./pdf_sidebar.js";
 import { PDFSidebarResizer } from "./pdf_sidebar_resizer.js";
 import { PDFThumbnailViewer } from "./pdf_thumbnail_viewer.js";
 import { PDFViewer } from "./pdf_viewer.js";
@@ -866,7 +867,9 @@ const PDFViewerApplication = {
     if (typeof PDFBug !== "undefined") {
       PDFBug.cleanup();
     }
-    return Promise.all(promises);
+    await Promise.all(promises);
+
+    return undefined;
   },
 
   /**
@@ -1242,7 +1245,8 @@ const PDFViewerApplication = {
   load(pdfDocument) {
     this.pdfDocument = pdfDocument;
 
-    pdfDocument.getDownloadInfo().then(() => {
+    pdfDocument.getDownloadInfo().then(({ length }) => {
+      this._contentLength = length; // Ensure that the correct length is used.
       this.downloadComplete = true;
       this.loadingBar.hide();
 
@@ -1418,7 +1422,7 @@ const PDFViewerApplication = {
 
     onePageRendered.then(() => {
       pdfDocument.getOutline().then(outline => {
-        this.pdfOutlineViewer.render({ outline });
+        this.pdfOutlineViewer.render({ outline, pdfDocument });
       });
       pdfDocument.getAttachments().then(attachments => {
         this.pdfAttachmentViewer.render({ attachments });
@@ -1498,6 +1502,25 @@ const PDFViewerApplication = {
         return; // The document was closed while the metadata resolved.
       }
     }
+    if (!this._contentLength) {
+      // Always waiting for the entire PDF document to be loaded will, most
+      // likely, delay sandbox-creation too much in the general case for all
+      // PDF documents which are not provided as binary data to the API.
+      // Hence we'll simply have to trust that the `contentLength` (as provided
+      // by the server), when it exists, is accurate enough here.
+      await new Promise(resolve => {
+        this.eventBus._on(
+          "documentloaded",
+          evt => {
+            resolve();
+          },
+          { once: true }
+        );
+      });
+      if (pdfDocument !== this.pdfDocument) {
+        return; // The document was closed while the downloadInfo resolved.
+      }
+    }
 
     const updateFromSandbox = ({ detail }) => {
       const { id, command, value } = detail;
@@ -1542,6 +1565,56 @@ const PDFViewerApplication = {
     };
     internalEvents.set("updatefromsandbox", updateFromSandbox);
 
+    const visitedPages = new Map();
+    const pageOpen = ({ pageNumber, actionsPromise }) => {
+      visitedPages.set(
+        pageNumber,
+        (async () => {
+          // Avoid sending, and thus serializing, the `actions` data
+          // when the same page is opened several times.
+          let actions = null;
+          if (!visitedPages.has(pageNumber)) {
+            actions = await actionsPromise;
+
+            if (pdfDocument !== this.pdfDocument) {
+              return; // The document was closed while the actions resolved.
+            }
+          }
+
+          await this._scriptingInstance?.scripting.dispatchEventInSandbox({
+            id: "page",
+            name: "PageOpen",
+            pageNumber,
+            actions,
+          });
+        })()
+      );
+    };
+
+    const pageClose = async ({ pageNumber }) => {
+      const actionsPromise = visitedPages.get(pageNumber);
+      if (!actionsPromise) {
+        // Ensure that the "pageclose" event was preceded by a "pageopen" event.
+        return;
+      }
+      visitedPages.set(pageNumber, null);
+
+      // Ensure that the "pageopen" event is handled first.
+      await actionsPromise;
+
+      if (pdfDocument !== this.pdfDocument) {
+        return; // The document was closed while the actions resolved.
+      }
+
+      await this._scriptingInstance?.scripting.dispatchEventInSandbox({
+        id: "page",
+        name: "PageClose",
+        pageNumber,
+      });
+    };
+    internalEvents.set("pageopen", pageOpen);
+    internalEvents.set("pageclose", pageClose);
+
     const dispatchEventInSandbox = ({ detail }) => {
       scripting.dispatchEventInSandbox(detail);
     };
@@ -1564,20 +1637,6 @@ const PDFViewerApplication = {
       window.addEventListener(name, listener);
     }
 
-    if (!this._contentLength) {
-      // Always waiting for the entire PDF document to be loaded will, most
-      // likely, delay sandbox-creation too much in the general case for all
-      // PDF documents which are not provided as binary data to the API.
-      // Hence we'll simply have to trust that the `contentLength` (as provided
-      // by the server), when it exists, is accurate enough here.
-      const { length } = await pdfDocument.getDownloadInfo();
-
-      if (pdfDocument !== this.pdfDocument) {
-        return; // The document was closed while the download info resolved.
-      }
-      this._contentLength = length;
-    }
-
     try {
       await scripting.createSandbox({
         objects,
@@ -1591,7 +1650,8 @@ const PDFViewerApplication = {
           baseURL: this.baseUrl,
           filesize: this._contentLength,
           filename: this._docFilename,
-          metadata: this.metadata,
+          metadata: this.metadata?.getRaw(),
+          authors: this.metadata?.get("dc:creator"),
           numPages: pdfDocument.numPages,
           URL: this.url,
           actions: docActions,
@@ -1612,6 +1672,7 @@ const PDFViewerApplication = {
       id: "doc",
       name: "Open",
     });
+    await this.pdfViewer.initializeScriptingEvents();
 
     // Used together with the integration-tests, see the `scriptingReady`
     // getter, to enable awaiting full initialization of the scripting/sandbox.
@@ -1701,7 +1762,7 @@ const PDFViewerApplication = {
     this.documentInfo = info;
     this.metadata = metadata;
     this._contentDispositionFilename = contentDispositionFilename;
-    this._contentLength = contentLength;
+    this._contentLength ??= contentLength; // See `getDownloadInfo`-call above.
 
     // Provides some basic debug information
     console.log(
@@ -3413,7 +3474,7 @@ const PDFPrintServiceFactory = {
 };
 
 export {
-  PDFViewerApplication,
   DefaultExternalServices,
   PDFPrintServiceFactory,
+  PDFViewerApplication,
 };

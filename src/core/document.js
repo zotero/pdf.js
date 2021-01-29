@@ -344,12 +344,11 @@ class Page {
           pageOpList.flush(true);
           return { length: pageOpList.totalLength };
         }
-  
+
         const allowedSubtypes = [
           'Link',
           'Widget',
           'Line',
-          'Square',
           'Circle',
           'PolyLine',
           'Polygon',
@@ -358,7 +357,8 @@ class Page {
           'Squiggly',
           'StrikeOut'
         ];
-        annotations = annotations.filter(x => allowedSubtypes.includes(x.data.subtype));
+        annotations = annotations.filter(x => allowedSubtypes.includes(x.data.subtype)
+          || x.data.subtype === 'Square' && (typeof x.data.nm !== 'string' || !x.data.nm.startsWith('Zotero-')));
 
         // Collect the operator list promises for the annotations. Each promise
         // is resolved with the complete operator list for a single annotation.

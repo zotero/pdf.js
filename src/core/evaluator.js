@@ -47,6 +47,7 @@ import {
   Ref,
   RefSet,
 } from "./primitives.js";
+import { DecodeStream, NullStream } from "./stream.js";
 import {
   ErrorFont,
   Font,
@@ -63,7 +64,6 @@ import {
   WinAnsiEncoding,
   ZapfDingbatsEncoding,
 } from "./encodings.js";
-import { getLookupTableFactory, MissingDataException } from "./core_utils.js";
 import {
   getNormalizedUnicodes,
   getUnicodeForGlyph,
@@ -85,8 +85,8 @@ import {
 } from "./image_utils.js";
 import { bidi } from "./bidi.js";
 import { ColorSpace } from "./colorspace.js";
-import { DecodeStream } from "./stream.js";
 import { getGlyphsUnicode } from "./glyphlist.js";
+import { getLookupTableFactory } from "./core_utils.js";
 import { getMetrics } from "./metrics.js";
 import { MurmurHash3_64 } from "./murmurhash3.js";
 import { OperatorList } from "./operator_list.js";
@@ -267,9 +267,6 @@ class PartialEvaluator {
             try {
               graphicState = xref.fetch(graphicState);
             } catch (ex) {
-              if (ex instanceof MissingDataException) {
-                throw ex;
-              }
               // Avoid parsing a corrupt ExtGState more than once.
               processed.put(graphicState);
 
@@ -316,9 +313,6 @@ class PartialEvaluator {
           try {
             xObject = xref.fetch(xObject);
           } catch (ex) {
-            if (ex instanceof MissingDataException) {
-              throw ex;
-            }
             // Avoid parsing a corrupt XObject more than once.
             processed.put(xObject);
 
@@ -609,6 +603,9 @@ class PartialEvaluator {
       .then(imageObj => {
         imgData = imageObj.createImageData(/* forceRGBA = */ false);
 
+        if (cacheKey && imageRef && cacheGlobally) {
+          this.globalImageCache.addByteSize(imageRef, imgData.data.length);
+        }
         return this._sendImgData(objId, imgData, cacheGlobally);
       })
       .catch(reason => {
@@ -633,6 +630,7 @@ class PartialEvaluator {
             objId,
             fn: OPS.paintImageXObject,
             args,
+            byteSize: 0, // Temporary entry, note `addByteSize` above.
           });
         }
       }
@@ -797,12 +795,10 @@ class PartialEvaluator {
     fallbackFontDict = null
   ) {
     // TODO(mack): Not needed?
-    var fontName,
-      fontSize = 0;
+    var fontName;
     if (fontArgs) {
       fontArgs = fontArgs.slice();
       fontName = fontArgs[0].name;
-      fontSize = fontArgs[1];
     }
 
     return this.loadFont(fontName, fontRef, resources, fallbackFontDict)
@@ -835,8 +831,6 @@ class PartialEvaluator {
       })
       .then(translated => {
         state.font = translated.font;
-        state.fontSize = fontSize;
-        state.fontName = fontName;
         translated.send(this.handler);
         return translated.loadedName;
       });
@@ -1066,7 +1060,7 @@ class PartialEvaluator {
     try {
       preEvaluatedFont = this.preEvaluateFont(font);
     } catch (reason) {
-      warn(`loadFont - ignoring preEvaluateFont errors: "${reason}".`);
+      warn(`loadFont - preEvaluateFont failed: "${reason}".`);
       return errorFont();
     }
     const { descriptor, hash } = preEvaluatedFont;
@@ -1156,6 +1150,7 @@ class PartialEvaluator {
         this.handler.send("UnsupportedFeature", {
           featureId: UNSUPPORTED_FEATURES.errorFontTranslate,
         });
+        warn(`loadFont - translateFont failed: "${reason}".`);
 
         try {
           // error, but it's still nice to have font type reported
@@ -1269,9 +1264,6 @@ class PartialEvaluator {
           operatorList.addOp(fn, tilingPatternIR);
           return undefined;
         } catch (ex) {
-          if (ex instanceof MissingDataException) {
-            throw ex;
-          }
           // Handle any errors during normal TilingPattern parsing.
         }
       }
@@ -2077,20 +2069,19 @@ class PartialEvaluator {
       textContentItem.transform = trm;
       if (!font.vertical) {
         textContentItem.width = 0;
-        textContentItem.height = Math.sqrt(trm[2] * trm[2] + trm[3] * trm[3]);
+        textContentItem.height = Math.hypot(trm[2], trm[3]);
         textContentItem.vertical = false;
       } else {
-        textContentItem.width = Math.sqrt(trm[0] * trm[0] + trm[1] * trm[1]);
+        textContentItem.width = Math.hypot(trm[0], trm[1]);
         textContentItem.height = 0;
         textContentItem.vertical = true;
       }
 
-      var a = textState.textLineMatrix[0];
-      var b = textState.textLineMatrix[1];
-      var scaleLineX = Math.sqrt(a * a + b * b);
-      a = textState.ctm[0];
-      b = textState.ctm[1];
-      var scaleCtmX = Math.sqrt(a * a + b * b);
+      const scaleLineX = Math.hypot(
+        textState.textLineMatrix[0],
+        textState.textLineMatrix[1]
+      );
+      const scaleCtmX = Math.hypot(textState.ctm[0], textState.ctm[1]);
       textContentItem.textAdvanceScale = scaleCtmX * scaleLineX;
       textContentItem.lastAdvanceWidth = 0;
       textContentItem.lastAdvanceHeight = 0;
@@ -2570,6 +2561,15 @@ class PartialEvaluator {
                 let xobj = xobjs.getRaw(name);
                 if (xobj instanceof Ref) {
                   if (emptyXObjectCache.getByRef(xobj)) {
+                    resolveXObject();
+                    return;
+                  }
+
+                  const globalImage = self.globalImageCache.getData(
+                    xobj,
+                    self.pageIndex
+                  );
+                  if (globalImage) {
                     resolveXObject();
                     return;
                   }
@@ -3255,7 +3255,7 @@ class PartialEvaluator {
 
   getBaseFontMetrics(name) {
     var defaultWidth = 0;
-    var widths = [];
+    var widths = Object.create(null);
     var monospace = false;
     var stdFontMap = getStdFontMap();
     var lookupName = stdFontMap[name] || name;
@@ -3509,7 +3509,16 @@ class PartialEvaluator {
       throw new FormatError("invalid font name");
     }
 
-    var fontFile = descriptor.get("FontFile", "FontFile2", "FontFile3");
+    let fontFile;
+    try {
+      fontFile = descriptor.get("FontFile", "FontFile2", "FontFile3");
+    } catch (ex) {
+      if (!this.options.ignoreErrors) {
+        throw ex;
+      }
+      warn(`translateFont - fetching "${fontName.name}" font file: "${ex}".`);
+      fontFile = new NullStream();
+    }
     if (fontFile) {
       if (fontFile.dict) {
         var subtype = fontFile.dict.get("Subtype");
@@ -3746,7 +3755,7 @@ class TranslatedFont {
           continue;
 
         case OPS.setGState:
-          const gStateObj = operatorList.argsArray[i];
+          const [gStateObj] = operatorList.argsArray[i];
           let j = 0,
             jj = gStateObj.length;
           while (j < jj) {
@@ -3773,7 +3782,7 @@ class TranslatedFont {
 }
 
 class StateManager {
-  constructor(initialState) {
+  constructor(initialState = new EvalState()) {
     this.state = initialState;
     this.stateStack = [];
   }
@@ -4044,7 +4053,7 @@ class EvaluatorPreprocessor {
     return shadow(this, "MAX_INVALID_PATH_OPS", 20);
   }
 
-  constructor(stream, xref, stateManager) {
+  constructor(stream, xref, stateManager = new StateManager()) {
     // TODO(mduan): pass array of knownCommands rather than this.opMap
     // dictionary
     this.parser = new Parser({
@@ -4185,4 +4194,4 @@ class EvaluatorPreprocessor {
   }
 }
 
-export { PartialEvaluator };
+export { EvaluatorPreprocessor, PartialEvaluator };

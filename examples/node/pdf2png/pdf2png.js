@@ -24,8 +24,8 @@ NodeCanvasFactory.prototype = {
     var canvas = Canvas.createCanvas(width, height);
     var context = canvas.getContext("2d");
     return {
-      canvas: canvas,
-      context: context,
+      canvas,
+      context,
     };
   },
 
@@ -48,7 +48,7 @@ NodeCanvasFactory.prototype = {
   },
 };
 
-var pdfjsLib = require("pdfjs-dist/es5/build/pdf.js");
+var pdfjsLib = require("pdfjs-dist/legacy/build/pdf.js");
 
 // Some PDFs need external cmaps.
 var CMAP_URL = "../../../node_modules/pdfjs-dist/cmaps/";
@@ -61,7 +61,7 @@ var data = new Uint8Array(fs.readFileSync(pdfPath));
 
 // Load the PDF file.
 var loadingTask = pdfjsLib.getDocument({
-  data: data,
+  data,
   cMapUrl: CMAP_URL,
   cMapPacked: CMAP_PACKED,
 });
@@ -80,8 +80,8 @@ loadingTask.promise
       );
       var renderContext = {
         canvasContext: canvasAndContext.context,
-        viewport: viewport,
-        canvasFactory: canvasFactory,
+        viewport,
+        canvasFactory,
       };
 
       var renderTask = page.render(renderContext);

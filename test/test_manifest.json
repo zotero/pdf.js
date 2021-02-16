@@ -1127,6 +1127,15 @@
        "rounds": 1,
        "type": "load"
     },
+    {  "id": "issue9462",
+       "file": "pdfs/issue9462.pdf",
+       "md5": "0a2895b0aa8a8ef730a20b4116cd996c",
+       "rounds": 1,
+       "link": true,
+       "firstPage": 3,
+       "lastPage": 3,
+       "type": "eq"
+    },
     {  "id": "f1040",
        "file": "pdfs/f1040.pdf",
        "md5": "7323b50c6d28d959b8b4b92c469b2469",
@@ -4338,7 +4347,7 @@
     },
     {  "id": "js-buttons",
        "file": "pdfs/js-buttons.pdf",
-       "md5": "2c56d419c1fb533349fd1ddef3f14da6",
+       "md5": "26f552398b77f8e85b2a8a166ca2ba6a",
        "rounds": 1,
        "type": "eq"
     },
@@ -4525,6 +4534,14 @@
        "rounds": 1,
        "link": false,
        "type": "eq"
+    },
+    {  "id": "issue12909",
+       "file": "pdfs/issue12909.pdf",
+       "md5": "0faa1cb029c3323c168595cccbe46ec0",
+       "link": true,
+       "rounds": 1,
+       "lastPage": 1,
+       "type": "text"
     },
     {  "id": "issue5592",
        "file": "pdfs/issue5592.pdf",
@@ -4877,6 +4894,13 @@
          }
        }
     },
+    {  "id": "issue6127",
+       "file": "pdfs/issue6127.pdf",
+       "md5": "65ef9572bddef5fddfaf7172f10a0df2",
+       "rounds": 1,
+       "lastPage": 1,
+       "type": "eq"
+    },
     {  "id": "annotation-polyline-polygon",
        "file": "pdfs/annotation-polyline-polygon.pdf",
        "md5": "e68611602f58c8ca70cc40575ba3b04e",
@@ -4908,6 +4932,14 @@
        "file": "pdfs/issue6108.pdf",
        "md5": "8961cb55149495989a80bf0487e0f076",
        "rounds": 1,
+       "type": "load"
+    },
+    {  "id": "issue6961",
+       "file": "pdfs/issue6961.pdf",
+       "md5": "a80e4357a8fda758d96c2c76f2980b03",
+       "link": false,
+       "rounds": 1,
+       "lastPage": 1,
        "type": "load"
     },
     {  "id": "zero_descent",
@@ -4998,5 +5030,23 @@
       "rounds": 1,
       "type": "eq",
       "annotations": true
+    },
+    {
+      "id": "pr12828",
+      "file": "pdfs/pr12828.pdf",
+      "md5": "e44d364fba2f146aed04f9d9abbb0f28",
+      "rounds": 1,
+      "type": "eq",
+      "forms": true
+    },
+    {
+      "id": "issue12716",
+      "file": "pdfs/issue12716.pdf",
+      "md5": "9bdc9c552bcfccd629f5f97385e79ca5",
+      "rounds": 1,
+      "link": true,
+      "type": "eq",
+      "forms": true,
+      "lastPage": 1
     }
 ]

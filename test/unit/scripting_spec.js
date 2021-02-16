@@ -18,7 +18,7 @@ import { loadScript } from "../../src/display/display_utils.js";
 const sandboxBundleSrc = "../../build/generic/build/pdf.sandbox.js";
 
 describe("Scripting", function () {
-  let sandbox, send_queue, test_id, ref;
+  let sandbox, send_queue, test_id, ref, windowAlert;
 
   function getId() {
     const id = `${ref++}R`;
@@ -48,6 +48,7 @@ describe("Scripting", function () {
         send_queue.set(event.detail.id, event.detail);
       }
     };
+    windowAlert = window.alert;
     window.alert = value => {
       const command = "alert";
       send_queue.set(command, { command, value });
@@ -76,6 +77,7 @@ describe("Scripting", function () {
     sandbox.nukeSandbox();
     sandbox = null;
     send_queue = null;
+    window.alert = windowAlert;
   });
 
   describe("Sandbox", function () {
@@ -858,7 +860,8 @@ describe("Scripting", function () {
           expect(send_queue.has("alert")).toEqual(true);
           expect(send_queue.get("alert")).toEqual({
             command: "alert",
-            value: "Invalid number in [ MyField ]",
+            value:
+              "The value entered does not match the format of the field [ MyField ]",
           });
           done();
         } catch (ex) {
@@ -1052,7 +1055,8 @@ describe("Scripting", function () {
           expect(send_queue.has("alert")).toEqual(true);
           expect(send_queue.get("alert")).toEqual({
             command: "alert",
-            value: "12 is not between 123 and 456",
+            value:
+              "Invalid value: must be greater than or equal to 123 and less than or equal to 456.",
           });
 
           done();

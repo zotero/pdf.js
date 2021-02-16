@@ -16,6 +16,7 @@
 "use strict";
 
 if (!pdfjsLib.getDocument || !pdfjsViewer.PDFViewer) {
+  // eslint-disable-next-line no-alert
   alert("Please build the pdfjs-dist library using\n `gulp dist-install`");
 }
 
@@ -47,7 +48,7 @@ var PDFViewerApplication = {
    * @returns {Promise} - Returns the promise, which is resolved when document
    *                      is opened.
    */
-  open: function (params) {
+  open(params) {
     if (this.pdfLoadingTask) {
       // We need to destroy already opened document
       return this.close().then(
@@ -64,7 +65,7 @@ var PDFViewerApplication = {
 
     // Loading document.
     var loadingTask = pdfjsLib.getDocument({
-      url: url,
+      url,
       maxImageSize: MAX_IMAGE_SIZE,
       cMapUrl: CMAP_URL,
       cMapPacked: CMAP_PACKED,
@@ -120,7 +121,7 @@ var PDFViewerApplication = {
         }
 
         loadingErrorMessage.then(function (msg) {
-          self.error(msg, { message: message });
+          self.error(msg, { message });
         });
         self.loadingBar.hide();
       }
@@ -132,9 +133,9 @@ var PDFViewerApplication = {
    * @returns {Promise} - Returns the promise, which is resolved when all
    *                      destruction is completed.
    */
-  close: function () {
+  close() {
     var errorWrapper = document.getElementById("errorWrapper");
-    errorWrapper.setAttribute("hidden", "true");
+    errorWrapper.hidden = true;
 
     if (!this.pdfLoadingTask) {
       return Promise.resolve();
@@ -175,7 +176,7 @@ var PDFViewerApplication = {
     this.setTitle(title);
   },
 
-  setTitleUsingMetadata: function (pdfDocument) {
+  setTitleUsingMetadata(pdfDocument) {
     var self = this;
     pdfDocument.getMetadata().then(function (data) {
       var info = data.info,
@@ -269,32 +270,32 @@ var PDFViewerApplication = {
     }
 
     var errorWrapper = document.getElementById("errorWrapper");
-    errorWrapper.removeAttribute("hidden");
+    errorWrapper.hidden = false;
 
     var errorMessage = document.getElementById("errorMessage");
     errorMessage.textContent = message;
 
     var closeButton = document.getElementById("errorClose");
     closeButton.onclick = function () {
-      errorWrapper.setAttribute("hidden", "true");
+      errorWrapper.hidden = true;
     };
 
     var errorMoreInfo = document.getElementById("errorMoreInfo");
     var moreInfoButton = document.getElementById("errorShowMore");
     var lessInfoButton = document.getElementById("errorShowLess");
     moreInfoButton.onclick = function () {
-      errorMoreInfo.removeAttribute("hidden");
-      moreInfoButton.setAttribute("hidden", "true");
-      lessInfoButton.removeAttribute("hidden");
+      errorMoreInfo.hidden = false;
+      moreInfoButton.hidden = true;
+      lessInfoButton.hidden = false;
       errorMoreInfo.style.height = errorMoreInfo.scrollHeight + "px";
     };
     lessInfoButton.onclick = function () {
-      errorMoreInfo.setAttribute("hidden", "true");
-      moreInfoButton.removeAttribute("hidden");
-      lessInfoButton.setAttribute("hidden", "true");
+      errorMoreInfo.hidden = true;
+      moreInfoButton.hidden = false;
+      lessInfoButton.hidden = true;
     };
-    moreInfoButton.removeAttribute("hidden");
-    lessInfoButton.setAttribute("hidden", "true");
+    moreInfoButton.hidden = false;
+    lessInfoButton.hidden = true;
     Promise.all(moreInfoText).then(function (parts) {
       errorMoreInfo.value = parts.join("\n");
     });
@@ -345,7 +346,7 @@ var PDFViewerApplication = {
     this.eventBus = eventBus;
 
     var linkService = new pdfjsViewer.PDFLinkService({
-      eventBus: eventBus,
+      eventBus,
     });
     this.pdfLinkService = linkService;
 
@@ -353,9 +354,9 @@ var PDFViewerApplication = {
 
     var container = document.getElementById("viewerContainer");
     var pdfViewer = new pdfjsViewer.PDFViewer({
-      container: container,
-      eventBus: eventBus,
-      linkService: linkService,
+      container,
+      eventBus,
+      linkService,
       l10n: this.l10n,
       useOnlyCssZoom: USE_ONLY_CSS_ZOOM,
       textLayerMode: TEXT_LAYER_MODE,
@@ -364,8 +365,8 @@ var PDFViewerApplication = {
     linkService.setViewer(pdfViewer);
 
     this.pdfHistory = new pdfjsViewer.PDFHistory({
-      eventBus: eventBus,
-      linkService: linkService,
+      eventBus,
+      linkService,
     });
     linkService.setHistory(this.pdfHistory);
 

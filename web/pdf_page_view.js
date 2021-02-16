@@ -199,8 +199,7 @@ class PDFPageView {
     const childNodes = div.childNodes;
     const currentZoomLayerNode = (keepZoomLayer && this.zoomLayer) || null;
     const currentAnnotationNode =
-      (keepAnnotations && this.annotationLayer && this.annotationLayer.div) ||
-      null;
+      (keepAnnotations && this.annotationLayer?.div) || null;
     for (let i = childNodes.length - 1; i >= 0; i--) {
       const node = childNodes[i];
       if (currentZoomLayerNode === node || currentAnnotationNode === node) {
@@ -297,7 +296,7 @@ class PDFPageView {
         });
         return;
       }
-      if (!this.zoomLayer && !this.canvas.hasAttribute("hidden")) {
+      if (!this.zoomLayer && !this.canvas.hidden) {
         this.zoomLayer = this.canvas.parentNode;
         this.zoomLayer.style.position = "absolute";
       }
@@ -437,7 +436,7 @@ class PDFPageView {
     canvasWrapper.style.height = div.style.height;
     canvasWrapper.classList.add("canvasWrapper");
 
-    if (this.annotationLayer && this.annotationLayer.div) {
+    if (this.annotationLayer?.div) {
       // The annotation layer needs to stay on top.
       div.insertBefore(canvasWrapper, this.annotationLayer.div);
     } else {
@@ -450,7 +449,7 @@ class PDFPageView {
       textLayerDiv.className = "textLayer";
       textLayerDiv.style.width = canvasWrapper.style.width;
       textLayerDiv.style.height = canvasWrapper.style.height;
-      if (this.annotationLayer && this.annotationLayer.div) {
+      if (this.annotationLayer?.div) {
         // The annotation layer needs to stay on top.
         div.insertBefore(textLayerDiv, this.annotationLayer.div);
       } else {
@@ -588,11 +587,11 @@ class PDFPageView {
 
     // Keep the canvas hidden until the first draw callback, or until drawing
     // is complete when `!this.renderingQueue`, to prevent black flickering.
-    canvas.setAttribute("hidden", "hidden");
+    canvas.hidden = true;
     let isCanvasHidden = true;
     const showCanvas = function () {
       if (isCanvasHidden) {
-        canvas.removeAttribute("hidden");
+        canvas.hidden = false;
         isCanvasHidden = false;
       }
     };

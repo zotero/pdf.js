@@ -564,17 +564,18 @@ function getVisibleElements({
       Math.max(0, top - currentHeight) + Math.max(0, viewBottom - bottom);
     const hiddenWidth =
       Math.max(0, left - currentWidth) + Math.max(0, viewRight - right);
-    const percent =
-      (((viewHeight - hiddenHeight) * (viewWidth - hiddenWidth) * 100) /
-        viewHeight /
-        viewWidth) |
-      0;
+
+    const fractionHeight = (viewHeight - hiddenHeight) / viewHeight,
+      fractionWidth = (viewWidth - hiddenWidth) / viewWidth;
+    const percent = (fractionHeight * fractionWidth * 100) | 0;
+
     visible.push({
       id: view.id,
       x: currentWidth,
       y: currentHeight,
       view,
       percent,
+      widthPercent: (fractionWidth * 100) | 0,
     });
   }
 
@@ -655,7 +656,7 @@ function getPDFFileNameFromURL(url, defaultFilename = "document.pdf") {
 }
 
 function normalizeWheelEventDirection(evt) {
-  let delta = Math.sqrt(evt.deltaX * evt.deltaX + evt.deltaY * evt.deltaY);
+  let delta = Math.hypot(evt.deltaX, evt.deltaY);
   const angle = Math.atan2(evt.deltaY, evt.deltaX);
   if (-0.25 * Math.PI < angle && angle < 0.75 * Math.PI) {
     // All that is left-up oriented has to change the sign.
@@ -787,7 +788,7 @@ function dispatchDOMEvent(eventName, args = null) {
     throw new Error("Not implemented: dispatchDOMEvent");
   }
   const details = Object.create(null);
-  if (args && args.length > 0) {
+  if (args?.length > 0) {
     const obj = args[0];
     for (const key in obj) {
       const value = obj[key];
@@ -1022,7 +1023,7 @@ function getActiveOrFocusedElement() {
   let curActiveOrFocused =
     curRoot.activeElement || curRoot.querySelector(":focus");
 
-  while (curActiveOrFocused && curActiveOrFocused.shadowRoot) {
+  while (curActiveOrFocused?.shadowRoot) {
     curRoot = curActiveOrFocused.shadowRoot;
     curActiveOrFocused =
       curRoot.activeElement || curRoot.querySelector(":focus");

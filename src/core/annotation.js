@@ -35,6 +35,10 @@ import {
 } from "../shared/util.js";
 import { Catalog, FileSpec, ObjectLoader } from "./obj.js";
 import { collectActions, getInheritableProperty } from "./core_utils.js";
+import {
+  createDefaultAppearance,
+  parseDefaultAppearance,
+} from "./default_appearance.js";
 import { Dict, isDict, isName, isRef, isStream, Name } from "./primitives.js";
 import { ColorSpace } from "./colorspace.js";
 import { OperatorList } from "./operator_list.js";
@@ -994,6 +998,8 @@ class WidgetAnnotation extends Annotation {
     data.defaultAppearance = isString(defaultAppearance)
       ? defaultAppearance
       : "";
+    data.defaultAppearanceData = parseDefaultAppearance(data.defaultAppearance);
+
     const fieldType = getInheritableProperty({ dict, key: "FT" });
     data.fieldType = isName(fieldType) ? fieldType.name : null;
 
@@ -1259,22 +1265,27 @@ class WidgetAnnotation extends Annotation {
   }
 
   async _getAppearance(evaluator, task, annotationStorage) {
-    this._fontName = null;
-
     const isPassword = this.hasFieldFlag(AnnotationFieldFlag.PASSWORD);
     if (!annotationStorage || isPassword) {
       return null;
     }
-    const value =
+    let value =
       annotationStorage[this.data.id] && annotationStorage[this.data.id].value;
     if (value === undefined) {
       // The annotation hasn't been rendered so use the appearance
       return null;
     }
 
+    value = value.trim();
+
     if (value === "") {
       // the field is empty: nothing to render
       return "";
+    }
+
+    let lineCount = -1;
+    if (this.data.multiLine) {
+      lineCount = value.split(/\r\n|\r|\n/).length;
     }
 
     const defaultPadding = 2;
@@ -1289,12 +1300,17 @@ class WidgetAnnotation extends Annotation {
       // Doing so prevents exceptions and allows saving/printing
       // the file as expected.
       this.data.defaultAppearance = "/Helvetica 0 Tf 0 g";
+      this.data.defaultAppearanceData = parseDefaultAppearance(
+        this.data.defaultAppearance
+      );
     }
 
-    const fontInfo = await this._getFontData(evaluator, task);
-    const [font, fontName] = fontInfo;
-    const fontSize = this._computeFontSize(...fontInfo, totalHeight);
-    this._fontName = fontName;
+    const [defaultAppearance, fontSize] = this._computeFontSize(
+      totalHeight,
+      lineCount
+    );
+
+    const font = await this._getFontData(evaluator, task);
 
     let descent = font.descent;
     if (isNaN(descent)) {
@@ -1302,7 +1318,6 @@ class WidgetAnnotation extends Annotation {
     }
 
     const vPadding = defaultPadding + Math.abs(descent) * fontSize;
-    const defaultAppearance = this.data.defaultAppearance;
     const alignment = this.data.textAlignment;
 
     if (this.data.multiLine) {
@@ -1365,56 +1380,64 @@ class WidgetAnnotation extends Annotation {
   async _getFontData(evaluator, task) {
     const operatorList = new OperatorList();
     const initialState = {
-      fontSize: 0,
       font: null,
-      fontName: null,
       clone() {
         return this;
       },
     };
 
-    await evaluator.getOperatorList({
-      stream: new StringStream(this.data.defaultAppearance),
-      task,
-      resources: this._fieldResources.mergedResources,
+    const { fontName, fontSize } = this.data.defaultAppearanceData;
+    await evaluator.handleSetFont(
+      this._fieldResources.mergedResources,
+      [fontName, fontSize],
+      /* fontRef = */ null,
       operatorList,
+      task,
       initialState,
-    });
+      /* fallbackFontDict = */ null
+    );
 
-    return [initialState.font, initialState.fontName, initialState.fontSize];
+    return initialState.font;
   }
 
-  _computeFontSize(font, fontName, fontSize, height) {
+  _computeFontSize(height, lineCount) {
+    let { fontSize } = this.data.defaultAppearanceData;
     if (fontSize === null || fontSize === 0) {
-      let capHeight;
-      if (font.capHeight) {
-        capHeight = font.capHeight;
+      // A zero value for size means that the font shall be auto-sized:
+      // its size shall be computed as a function of the height of the
+      // annotation rectangle (see 12.7.3.3).
+
+      const roundWithOneDigit = x => Math.round(x * 10) / 10;
+
+      // Represent the percentage of the font size over the height
+      // of a single-line field.
+      const FONT_FACTOR = 0.8;
+      if (lineCount === -1) {
+        fontSize = roundWithOneDigit(FONT_FACTOR * height);
       } else {
-        const glyphs = font.charsToGlyphs(font.encodeString("M").join(""));
-        if (glyphs.length === 1 && glyphs[0].width) {
-          const em = glyphs[0].width / 1000;
-          // According to https://en.wikipedia.org/wiki/Em_(typography)
-          // an average cap height should be 70% of 1em
-          capHeight = 0.7 * em;
-        } else {
-          capHeight = 0.7;
-        }
+        // Hard to guess how many lines there are.
+        // The field may have been sized to have 10 lines
+        // and the user entered only 1 so if we get font size from
+        // height and number of lines then we'll get something too big.
+        // So we compute a fake number of lines based on height and
+        // a font size equal to 10.
+        // Then we'll adjust font size to what we have really.
+        fontSize = 10;
+        let lineHeight = fontSize / FONT_FACTOR;
+        let numberOfLines = Math.round(height / lineHeight);
+        numberOfLines = Math.max(numberOfLines, lineCount);
+        lineHeight = height / numberOfLines;
+        fontSize = roundWithOneDigit(FONT_FACTOR * lineHeight);
       }
 
-      // 1.5 * capHeight * fontSize seems to be a good value for lineHeight
-      fontSize = Math.max(1, Math.floor(height / (1.5 * capHeight)));
-
-      let fontRegex = new RegExp(`/${fontName}\\s+[0-9.]+\\s+Tf`);
-      if (this.data.defaultAppearance.search(fontRegex) === -1) {
-        // The font size is missing
-        fontRegex = new RegExp(`/${fontName}\\s+Tf`);
-      }
-      this.data.defaultAppearance = this.data.defaultAppearance.replace(
-        fontRegex,
-        `/${fontName} ${fontSize} Tf`
-      );
+      const { fontName, fontColor } = this.data.defaultAppearanceData;
+      this.data.defaultAppearance = createDefaultAppearance({
+        fontSize,
+        fontName,
+        fontColor,
+      });
     }
-    return fontSize;
+    return [this.data.defaultAppearance, fontSize];
   }
 
   _renderText(text, font, fontSize, totalWidth, alignment, hPadding, vPadding) {
@@ -1451,34 +1474,36 @@ class WidgetAnnotation extends Annotation {
       PDFJSDev.test("!PRODUCTION || TESTING")
     ) {
       assert(
-        this._fontName !== undefined,
-        "Expected `_getAppearance()` to have been called."
+        this.data.defaultAppearanceData,
+        "Expected `_defaultAppearanceData` to have been set."
       );
     }
     const {
       localResources,
-      acroFormResources,
       appearanceResources,
+      acroFormResources,
     } = this._fieldResources;
 
-    if (!this._fontName) {
+    const fontNameStr =
+      this.data.defaultAppearanceData &&
+      this.data.defaultAppearanceData.fontName.name;
+    if (!fontNameStr) {
       return localResources || Dict.empty;
     }
 
     for (const resources of [localResources, appearanceResources]) {
       if (resources instanceof Dict) {
         const localFont = resources.get("Font");
-        if (localFont instanceof Dict && localFont.has(this._fontName)) {
+        if (localFont instanceof Dict && localFont.has(fontNameStr)) {
           return resources;
         }
       }
     }
-
     if (acroFormResources instanceof Dict) {
       const acroFormFont = acroFormResources.get("Font");
-      if (acroFormFont instanceof Dict && acroFormFont.has(this._fontName)) {
+      if (acroFormFont instanceof Dict && acroFormFont.has(fontNameStr)) {
         const subFontDict = new Dict(xref);
-        subFontDict.set(this._fontName, acroFormFont.getRaw(this._fontName));
+        subFontDict.set(fontNameStr, acroFormFont.getRaw(fontNameStr));
 
         const subResourcesDict = new Dict(xref);
         subResourcesDict.set("Font", subFontDict);
@@ -1999,7 +2024,7 @@ class ButtonWidgetAnnotation extends WidgetAnnotation {
     }
     return {
       id: this.data.id,
-      value: this.data.fieldValue || null,
+      value: this.data.fieldValue || "Off",
       defaultValue: this.data.defaultFieldValue,
       exportValues,
       editable: !this.data.readOnly,
@@ -2086,6 +2111,7 @@ class ChoiceWidgetAnnotation extends WidgetAnnotation {
       multipleSelection: this.data.multiSelect,
       hidden: this.data.hidden,
       actions: this.data.actions,
+      items: this.data.options,
       type,
     };
   }

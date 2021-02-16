@@ -923,6 +923,10 @@ const CanvasGraphics = (function CanvasGraphicsClosure() {
       this.ctx.transform.apply(this.ctx, viewport.transform);
 
       this.baseTransform = this.ctx.mozCurrentTransform.slice();
+      this._combinedScaleFactor = Math.hypot(
+        this.baseTransform[0],
+        this.baseTransform[2]
+      );
 
       if (this.imageLayer) {
         this.imageLayer.beginLayout();
@@ -1357,22 +1361,23 @@ const CanvasGraphics = (function CanvasGraphicsClosure() {
           const scale = Util.singularValueDecompose2dScale(transform)[0];
           ctx.strokeStyle = strokeColor.getPattern(ctx, this);
           const lineWidth = this.getSinglePixelWidth();
-          if (lineWidth === -1) {
+          const scaledLineWidth = this.current.lineWidth * scale;
+          if (lineWidth < 0 && -lineWidth >= scaledLineWidth) {
             ctx.resetTransform();
-            ctx.lineWidth = 1;
+            ctx.lineWidth = Math.round(this._combinedScaleFactor);
           } else {
-            ctx.lineWidth = Math.max(lineWidth, this.current.lineWidth * scale);
+            ctx.lineWidth = Math.max(lineWidth, scaledLineWidth);
           }
           ctx.stroke();
           ctx.restore();
         } else {
           const lineWidth = this.getSinglePixelWidth();
-          if (lineWidth === -1) {
+          if (lineWidth < 0 && -lineWidth >= this.current.lineWidth) {
             // The current transform will transform a square pixel into a
             // parallelogram where both heights are lower than 1 and not equal.
             ctx.save();
             ctx.resetTransform();
-            ctx.lineWidth = 1;
+            ctx.lineWidth = Math.round(this._combinedScaleFactor);
             ctx.stroke();
             ctx.restore();
           } else {
@@ -1506,10 +1511,7 @@ const CanvasGraphics = (function CanvasGraphicsClosure() {
       if (!fontObj) {
         throw new Error(`Can't find font for ${fontRefName}`);
       }
-
-      current.fontMatrix = fontObj.fontMatrix
-        ? fontObj.fontMatrix
-        : FONT_IDENTITY_MATRIX;
+      current.fontMatrix = fontObj.fontMatrix || FONT_IDENTITY_MATRIX;
 
       // A valid matrix needs all main diagonal elements to be non-zero
       // This also ensures we bypass FF bugzilla bug #719844.
@@ -1574,7 +1576,7 @@ const CanvasGraphics = (function CanvasGraphicsClosure() {
     },
     setTextMatrix: function CanvasGraphics_setTextMatrix(a, b, c, d, e, f) {
       this.current.textMatrix = [a, b, c, d, e, f];
-      this.current.textMatrixScale = Math.sqrt(a * a + b * b);
+      this.current.textMatrixScale = Math.hypot(a, b);
 
       this.current.x = this.current.lineX = 0;
       this.current.y = this.current.lineY = 0;
@@ -1621,7 +1623,7 @@ const CanvasGraphics = (function CanvasGraphicsClosure() {
         ) {
           if (resetLineWidthToOne) {
             ctx.resetTransform();
-            ctx.lineWidth = 1;
+            ctx.lineWidth = Math.round(this._combinedScaleFactor);
           }
           ctx.stroke();
         }
@@ -1641,7 +1643,7 @@ const CanvasGraphics = (function CanvasGraphicsClosure() {
             ctx.save();
             ctx.moveTo(x, y);
             ctx.resetTransform();
-            ctx.lineWidth = 1;
+            ctx.lineWidth = Math.round(this._combinedScaleFactor);
             ctx.strokeText(character, 0, 0);
             ctx.restore();
           } else {
@@ -1744,7 +1746,7 @@ const CanvasGraphics = (function CanvasGraphicsClosure() {
         ) {
           this._cachedGetSinglePixelWidth = null;
           lineWidth = this.getSinglePixelWidth();
-          resetLineWidthToOne = lineWidth === -1;
+          resetLineWidthToOne = lineWidth < 0;
         }
       } else {
         lineWidth /= scale;
@@ -2453,12 +2455,14 @@ const CanvasGraphics = (function CanvasGraphicsClosure() {
       ctx.scale(1 / width, -1 / height);
 
       const currentTransform = ctx.mozCurrentTransformInverse;
-      const a = currentTransform[0],
-        b = currentTransform[1];
-      let widthScale = Math.max(Math.sqrt(a * a + b * b), 1);
-      const c = currentTransform[2],
-        d = currentTransform[3];
-      let heightScale = Math.max(Math.sqrt(c * c + d * d), 1);
+      let widthScale = Math.max(
+        Math.hypot(currentTransform[0], currentTransform[1]),
+        1
+      );
+      let heightScale = Math.max(
+        Math.hypot(currentTransform[2], currentTransform[3]),
+        1
+      );
 
       let imgToPaint, tmpCanvas, tmpCtx;
       // typeof check is needed due to node.js support, see issue #8489
@@ -2664,20 +2668,31 @@ const CanvasGraphics = (function CanvasGraphicsClosure() {
         // This is equivalent to:
         //  h = max(|line_1_inv(M)|, |line_2_inv(M)|)
         const m = this.ctx.mozCurrentTransform;
-        const sqDet = (m[0] * m[3] - m[2] * m[1]) ** 2;
+
+        const absDet = Math.abs(m[0] * m[3] - m[2] * m[1]);
         const sqNorm1 = m[0] ** 2 + m[2] ** 2;
         const sqNorm2 = m[1] ** 2 + m[3] ** 2;
-        if (sqNorm1 !== sqNorm2 && sqNorm1 > sqDet && sqNorm2 > sqDet) {
-          // The parallelogram isn't a losange and both heights
-          // are lower than 1 so the resulting line width must be 1
+        const pixelHeight = Math.sqrt(Math.max(sqNorm1, sqNorm2)) / absDet;
+        if (
+          sqNorm1 !== sqNorm2 &&
+          this._combinedScaleFactor * pixelHeight > 1
+        ) {
+          // The parallelogram isn't a square and at least one height
+          // is lower than 1 so the resulting line width must be 1
           // but it cannot be achieved with one scale: when scaling a pixel
           // we'll get a rectangle (see issue #12295).
-          this._cachedGetSinglePixelWidth = -1;
-        } else if (sqDet > Number.EPSILON ** 2) {
+          // For example with matrix [0.001 0, 0, 100], a pixel is transformed
+          // in a rectangle 0.001x100. If we just scale by 1000 (to have a 1)
+          // then we'll get a rectangle 1x1e5 which is wrong.
+          // In this case, we must reset the transform, set linewidth to 1
+          // and then stroke.
+          this._cachedGetSinglePixelWidth = -(
+            this._combinedScaleFactor * pixelHeight
+          );
+        } else if (absDet > Number.EPSILON) {
           // The multiplication by the constant 1.0000001 is here to have
           // a number slightly greater than what we "exactly" want.
-          this._cachedGetSinglePixelWidth =
-            Math.sqrt(Math.max(sqNorm1, sqNorm2) / sqDet) * 1.0000001;
+          this._cachedGetSinglePixelWidth = pixelHeight * 1.0000001;
         } else {
           // Matrix is non-invertible.
           this._cachedGetSinglePixelWidth = 1;

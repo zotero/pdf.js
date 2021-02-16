@@ -358,7 +358,7 @@ class Page {
           'StrikeOut'
         ];
         annotations = annotations.filter(x => allowedSubtypes.includes(x.data.subtype)
-          || x.data.subtype === 'Square' && (typeof x.data.nm !== 'string' || !x.data.nm.startsWith('Zotero-')));
+          || x.data.subtype === 'Square' && !x.data.isZotero);
 
         // Collect the operator list promises for the annotations. Each promise
         // is resolved with the complete operator list for a single annotation.

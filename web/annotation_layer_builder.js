@@ -97,7 +97,7 @@ class AnnotationLayerBuilder {
         'StrikeOut'
       ];
       annotations = annotations.filter(x => allowedSubtypes.includes(x.data.subtype)
-        || x.data.subtype === 'Square' && (typeof x.data.nm !== 'string' || !x.data.nm.startsWith('Zotero-')));
+        || x.data.subtype === 'Square' && !x.data.isZotero);
 
       const parameters = {
         viewport: viewport.clone({ dontFlip: true }),

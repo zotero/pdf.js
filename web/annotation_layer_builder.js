@@ -96,8 +96,8 @@ class AnnotationLayerBuilder {
         'Squiggly',
         'StrikeOut'
       ];
-      annotations = annotations.filter(x => allowedSubtypes.includes(x.data.subtype)
-        || x.data.subtype === 'Square' && !x.data.isZotero);
+      annotations = annotations.filter(x => allowedSubtypes.includes(x.subtype)
+        || x.subtype === 'Square' && !x.isZotero);
 
       const parameters = {
         viewport: viewport.clone({ dontFlip: true }),

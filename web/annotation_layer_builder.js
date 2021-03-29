@@ -87,6 +87,7 @@ class AnnotationLayerBuilder {
       const allowedSubtypes = [
         'Link',
         'Widget',
+        'FreeText',
         'Line',
         'Circle',
         'PolyLine',
@@ -94,7 +95,8 @@ class AnnotationLayerBuilder {
         'Caret',
         'Ink',
         'Squiggly',
-        'StrikeOut'
+        'StrikeOut',
+        'Stamp'
       ];
       annotations = annotations.filter(x => allowedSubtypes.includes(x.subtype)
         || x.subtype === 'Square' && !x.isZotero);

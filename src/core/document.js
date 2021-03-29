@@ -348,6 +348,7 @@ class Page {
         const allowedSubtypes = [
           'Link',
           'Widget',
+          'FreeText',
           'Line',
           'Circle',
           'PolyLine',
@@ -355,7 +356,8 @@ class Page {
           'Caret',
           'Ink',
           'Squiggly',
-          'StrikeOut'
+          'StrikeOut',
+          'Stamp'
         ];
         annotations = annotations.filter(x => allowedSubtypes.includes(x.data.subtype)
           || x.data.subtype === 'Square' && !x.data.isZotero);

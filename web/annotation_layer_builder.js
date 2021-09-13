@@ -93,13 +93,12 @@ class AnnotationLayerBuilder {
         'PolyLine',
         'Polygon',
         'Caret',
-        'Ink',
         'Squiggly',
         'StrikeOut',
         'Stamp'
       ];
       annotations = annotations.filter(x => allowedSubtypes.includes(x.subtype)
-        || x.subtype === 'Square' && !x.isZotero);
+        || ['Square', 'Ink'].includes(x.subtype) && !x.isZotero);
 
       const parameters = {
         viewport: viewport.clone({ dontFlip: true }),

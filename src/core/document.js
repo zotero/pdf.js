@@ -354,13 +354,12 @@ class Page {
           'PolyLine',
           'Polygon',
           'Caret',
-          'Ink',
           'Squiggly',
           'StrikeOut',
           'Stamp'
         ];
         annotations = annotations.filter(x => allowedSubtypes.includes(x.data.subtype)
-          || x.data.subtype === 'Square' && !x.data.isZotero);
+          || ['Square', 'Ink'].includes(x.data.subtype) && !x.data.isZotero);
 
         // Collect the operator list promises for the annotations. Each promise
         // is resolved with the complete operator list for a single annotation.

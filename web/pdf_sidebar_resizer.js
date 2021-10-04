@@ -16,7 +16,7 @@
 import { NullL10n } from "./ui_utils.js";
 
 const SIDEBAR_WIDTH_VAR = "--sidebar-width";
-const SIDEBAR_MIN_WIDTH = 200; // pixels
+const SIDEBAR_MIN_WIDTH = 180; // pixels
 const SIDEBAR_RESIZING_CLASS = "sidebarResizing";
 
 /**

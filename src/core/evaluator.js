@@ -2222,9 +2222,21 @@ class PartialEvaluator {
         }
 
         let charWidth = textChunk.width + width - prevWidth;
-        let rect = Util.getAxialAlignedBoundingBox(
-          [0, textState.fontSize * descent,
-            charWidth, textState.fontSize * ascent], m);
+        let rect = [0, textState.fontSize * descent, charWidth, textState.fontSize * ascent]
+
+        if (
+          font.isType3Font &&
+          textState.fontSize <= 1 &&
+          !isArrayEqual(textState.fontMatrix, FONT_IDENTITY_MATRIX)
+        ) {
+          const glyphHeight = font.bbox[3] - font.bbox[1];
+          if (glyphHeight > 0) {
+            rect[1] = font.bbox[1] * textState.fontMatrix[3];
+            rect[3] = font.bbox[3] * textState.fontMatrix[3];
+          }
+        }
+
+        rect = Util.getAxialAlignedBoundingBox(rect, m);
 
         let baselineRect = Util.getAxialAlignedBoundingBox([0, 0, 0, 0], m);
         let baseline = 0;

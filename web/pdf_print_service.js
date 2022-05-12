@@ -58,7 +58,9 @@ function renderPage(
         annotationStorage: pdfDocument.annotationStorage,
         optionalContentConfigPromise,
       };
-      return pdfPage.render(renderContext).promise;
+      return pdfPage.render(renderContext).promise.then(() => {
+        window.drawAnnotations(scratchCanvas, renderContext.viewport, pageNumber - 1);
+      });
     })
     .then(function () {
       return {

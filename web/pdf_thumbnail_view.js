@@ -266,6 +266,7 @@ class PDFThumbnailView {
     if (this.renderingState !== RenderingStates.FINISHED) {
       return;
     }
+    window.drawAnnotations(this.canvas, this.viewport, this.pdfPage.pageNumber - 1);
     const className = "thumbnailImage";
 
     if (this.disableCanvasToImageConversion) {

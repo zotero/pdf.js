@@ -11,7 +11,6 @@
     "acorn": "^8.0.5",
     "autoprefixer": "^10.2.4",
     "babel-loader": "^8.2.2",
-    "canvas": "^2.6.1",
     "core-js": "^3.8.3",
     "cross-env": "^7.0.3",
     "es-module-shims": "^0.6.0",
@@ -41,7 +40,6 @@
     "postcss": "^8.2.5",
     "postcss-calc": "^7.0.5",
     "prettier": "^2.2.1",
-    "puppeteer": "^7.0.1",
     "rimraf": "^3.0.2",
     "streamqueue": "^1.1.2",
     "stylelint": "^13.9.0",
@@ -63,7 +61,6 @@
     "yargs": "^11.1.1"
   },
   "scripts": {
-    "postinstall": "cross-env PUPPETEER_PRODUCT=firefox node node_modules/puppeteer/install.js",
     "test": "gulp npm-test"
   },
   "repository": {

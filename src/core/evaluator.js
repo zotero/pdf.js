@@ -2251,6 +2251,7 @@ class PartialEvaluator {
           c: glyphUnicode,
           rect,
           fontSize: textState.fontSize * textChunk.textAdvanceScale,
+          fontName: textState.fontName,
           baseline,
           rotation
         });

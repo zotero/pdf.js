@@ -326,8 +326,14 @@ See https://github.com/adobe-type-tools/cmap-resources
           </div>
         </div>
 
-        <div id="viewerContainer" tabindex="0">
-          <div id="viewer" class="pdfViewer"></div>
+        <div id="splitWrapper">
+          <div id="viewerContainer" tabindex="0">
+            <div id="viewer" class="pdfViewer"></div>
+          </div>
+          <div id="viewSplitter"></div>
+          <div id="secondView">
+            <iframe id="secondViewIframe" src=""></iframe>
+          </div>
         </div>
 
 <!--#if !MOZCENTRAL-->

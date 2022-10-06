@@ -3296,7 +3296,10 @@ function webViewerKeyDown(evt) {
         break;
 
       case 82: // 'r'
-        PDFViewerApplication.rotatePages(90);
+        // Disable view rotation if not on web-library
+        if (window.isWeb) {
+          PDFViewerApplication.rotatePages(90);
+        }
         break;
 
       case 115: // F4
@@ -3335,7 +3338,10 @@ function webViewerKeyDown(evt) {
         break;
 
       case 82: // 'r'
-        PDFViewerApplication.rotatePages(-90);
+        // Disable view rotation if not on web-library
+        if (window.isWeb) {
+          PDFViewerApplication.rotatePages(-90);
+        }
         break;
     }
   }

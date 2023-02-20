@@ -316,6 +316,7 @@ function renderProgress(index, total) {
 window.addEventListener(
   "keydown",
   function (event) {
+    return;
     // Intercept Cmd/Ctrl + P in all browsers.
     // Also intercept Cmd/Ctrl + Shift + P in Chrome and Opera
     if (

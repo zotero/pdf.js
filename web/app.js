@@ -1158,7 +1158,7 @@ const PDFViewerApplication = {
     });
     this.pdfLoadingTask = loadingTask;
 
-    loadingTask.onPassword = (updateCallback, reason) => {
+    loadingTask.onPassword = this.onPassword || ((updateCallback, reason) => {
       if (this.isViewerEmbedded) {
         // The load event can't be triggered until the password is entered, so
         // if the viewer is in an iframe and its visibility depends on the
@@ -1169,7 +1169,7 @@ const PDFViewerApplication = {
       this.pdfLinkService.externalLinkEnabled = false;
       this.passwordPrompt.setUpdateCallback(updateCallback, reason);
       this.passwordPrompt.open();
-    };
+    });
 
     loadingTask.onProgress = ({ loaded, total }) => {
       this.progress(loaded / total);

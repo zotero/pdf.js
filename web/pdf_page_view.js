@@ -1106,9 +1106,9 @@ class PDFPageView {
           viewport.rawDims
         );
 
-        let textLayerPromise = this.#renderTextLayer();
+        that.textLayerPromise = this.#renderTextLayer();
+        window.onAttachPage && window.onAttachPage(that);
 
-        textLayerPromise.then(() => window.onAttachPage && window.onAttachPage(that));
 
         if (this.annotationLayer) {
           await this.#renderAnnotationLayer();

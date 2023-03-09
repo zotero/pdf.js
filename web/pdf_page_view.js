@@ -364,6 +364,7 @@ class PDFPageView {
   }
 
   destroy() {
+    window.onDetachPage && window.onDetachPage(this);
     this.reset();
     this.pdfPage?.cleanup();
   }
@@ -1093,6 +1094,7 @@ class PDFPageView {
     const renderTask = (this.renderTask = pdfPage.render(renderContext));
     renderTask.onContinue = renderContinueCallback;
 
+    let that = this;
     const resultPromise = renderTask.promise.then(
       async () => {
         showCanvas?.(true);
@@ -1103,7 +1105,9 @@ class PDFPageView {
           viewport.rawDims
         );
 
-        this.#renderTextLayer();
+        let textLayerPromise = this.#renderTextLayer();
+
+        textLayerPromise.then(() => window.onAttachPage && window.onAttachPage(that));
 
         if (this.annotationLayer) {
           await this.#renderAnnotationLayer();

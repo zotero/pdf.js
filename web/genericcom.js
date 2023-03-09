@@ -29,11 +29,12 @@ function initCom(app) {}
 
 class Preferences extends BasePreferences {
   async _writeToStorage(prefObj) {
-    localStorage.setItem("pdfjs.preferences", JSON.stringify(prefObj));
+    // localStorage.setItem("pdfjs.preferences", JSON.stringify(prefObj));
   }
 
   async _readFromStorage(prefObj) {
-    return { prefs: JSON.parse(localStorage.getItem("pdfjs.preferences")) };
+    // return JSON.parse(localStorage.getItem("pdfjs.preferences"));
+    return {};
   }
 }
 

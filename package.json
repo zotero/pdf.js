@@ -13,7 +13,6 @@
     "autoprefixer": "^10.4.19",
     "babel-loader": "^9.1.3",
     "caniuse-lite": "^1.0.30001636",
-    "canvas": "^2.11.2",
     "core-js": "^3.37.1",
     "cross-env": "^7.0.3",
     "eslint": "^8.57.0",
@@ -50,7 +49,6 @@
     "postcss-discard-comments": "^7.0.1",
     "postcss-nesting": "^12.1.5",
     "prettier": "^3.3.2",
-    "puppeteer": "^22.12.0",
     "streamqueue": "^1.1.2",
     "stylelint": "^16.6.1",
     "stylelint-prettier": "^5.0.0",
@@ -64,7 +62,6 @@
     "yargs": "^17.7.2"
   },
   "scripts": {
-    "postinstall": "cross-env PUPPETEER_PRODUCT=firefox node node_modules/puppeteer/install.mjs"
   },
   "repository": {
     "type": "git",

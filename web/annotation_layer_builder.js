@@ -109,7 +109,7 @@ class AnnotationLayerBuilder {
       return;
     }
 
-    const [annotations, hasJSActions, fieldObjects] = await Promise.all([
+    let [annotations, hasJSActions, fieldObjects] = await Promise.all([
       this.pdfPage.getAnnotations({ intent }),
       this._hasJSActionsPromise,
       this._fieldObjectsPromise,
@@ -117,6 +117,21 @@ class AnnotationLayerBuilder {
     if (this._cancelled) {
       return;
     }
+
+    const allowedSubtypes = [
+      'Link',
+      'Widget',
+      'Line',
+      'Circle',
+      'PolyLine',
+      'Polygon',
+      'Caret',
+      'Squiggly',
+      'StrikeOut',
+      'Stamp'
+    ];
+    annotations = annotations.filter(x => allowedSubtypes.includes(x.subtype)
+      || ['Square', 'Ink', 'FreeText'].includes(x.subtype) && !x.isZotero);
 
     // Create an annotation layer div and render the annotations
     // if there is at least one annotation.

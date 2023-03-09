@@ -572,6 +572,22 @@ class Page {
         intentDisplay = !!(intent & RenderingIntentFlag.DISPLAY),
         intentPrint = !!(intent & RenderingIntentFlag.PRINT);
 
+      const allowedSubtypes = [
+        'Link',
+        'Widget',
+        'Line',
+        'Circle',
+        'PolyLine',
+        'Polygon',
+        'Caret',
+        'Squiggly',
+        'StrikeOut',
+        'Stamp'
+      ];
+
+      annotations = annotations.filter(x => allowedSubtypes.includes(x.data.subtype)
+        || ['Square', 'Ink', 'FreeText'].includes(x.data.subtype) && !x.data.isZotero);
+
       // Collect the operator list promises for the annotations. Each promise
       // is resolved with the complete operator list for a single annotation.
       const opListPromises = [];

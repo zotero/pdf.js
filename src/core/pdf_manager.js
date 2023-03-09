@@ -65,6 +65,7 @@ class BasePdfManager {
     this._docBaseUrl = parseDocBaseUrl(docBaseUrl);
     this._docId = docId;
     this._password = password;
+    this._handler = handler;
     this.enableXfa = enableXfa;
 
     // Check `OffscreenCanvas` and `ImageDecoder` support once,

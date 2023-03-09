@@ -56,6 +56,7 @@ class ViewHistory {
   }
 
   async _writeToStorage() {
+    return;
     const databaseStr = JSON.stringify(this.database);
 
     if (typeof PDFJSDev !== "undefined" && PDFJSDev.test("MOZCENTRAL")) {

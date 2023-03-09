@@ -1378,22 +1378,7 @@ const PDFViewerApplication = {
 
     this.pdfThumbnailViewer?.setDocument(pdfDocument);
 
-    const storedPromise = (this.store = new ViewHistory(
-      pdfDocument.fingerprints[0]
-    ))
-      .getMultiple({
-        page: null,
-        zoom: DEFAULT_SCALE_VALUE,
-        scrollLeft: "0",
-        scrollTop: "0",
-        rotation: null,
-        sidebarView: SidebarView.UNKNOWN,
-        scrollMode: ScrollMode.UNKNOWN,
-        spreadMode: SpreadMode.UNKNOWN,
-      })
-      .catch(() => {
-        /* Unable to read from storage; ignoring errors. */
-      });
+    const storedPromise = {};
 
     firstPagePromise.then(pdfPage => {
       this.loadingBar?.setWidth(this.appConfig.viewerContainer);

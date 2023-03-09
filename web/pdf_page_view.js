@@ -350,6 +350,7 @@ class PDFPageView extends BasePDFPageView {
   }
 
   destroy() {
+    window.onDetachPage && window.onDetachPage(this);
     this.reset();
     this.pdfPage?.cleanup();
   }
@@ -1035,6 +1036,7 @@ class PDFPageView extends BasePDFPageView {
       this.#scaleRoundY = sfy[1];
     }
 
+    let that = this;
     // Rendering area
     const transform = outputScale.scaled
       ? [outputScale.sx, 0, 0, outputScale.sy, 0, 0]
@@ -1063,6 +1065,8 @@ class PDFPageView extends BasePDFPageView {
       );
 
       const textLayerPromise = this.#renderTextLayer();
+      that.textLayerPromise = textLayerPromise;
+      textLayerPromise.then(() => window.onAttachPage && window.onAttachPage(that));
 
       if (this.annotationLayer) {
         await this.#renderAnnotationLayer();

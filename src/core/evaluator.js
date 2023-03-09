@@ -2356,6 +2356,7 @@ class PartialEvaluator {
       transform: null,
       fontName: null,
       hasEOL: false,
+      chars: [],
     };
 
     // Use a circular buffer (length === 2) to save the last chars in the
@@ -2595,6 +2596,7 @@ class PartialEvaluator {
         transform: textChunk.transform,
         fontName: textChunk.fontName,
         hasEOL: textChunk.hasEOL,
+        chars: textChunk.chars,
       };
     }
 
@@ -2916,6 +2918,9 @@ class PartialEvaluator {
           scaledDim = 0;
         }
 
+        let prevWidth = textChunk.width;
+        let m = Util.transform(textState.ctm, textState.textMatrix);
+
         if (!font.vertical) {
           scaledDim *= textState.textHScale;
           textState.translateTextMatrix(scaledDim, 0);
@@ -2941,6 +2946,121 @@ class PartialEvaluator {
           textChunk.str.push(" ");
         }
         textChunk.str.push(glyphUnicode);
+
+        function closestStandardAngle(degrees) {
+          const standardAngles = [0, 90, 180, 270];
+          let closestAngle = standardAngles[0];
+          let minDifference = Math.abs(degrees - closestAngle);
+
+          for (let i = 1; i < standardAngles.length; i++) {
+            const difference = Math.abs(degrees - standardAngles[i]);
+            if (difference < minDifference) {
+              minDifference = difference;
+              closestAngle = standardAngles[i];
+            }
+          }
+
+          return closestAngle;
+        }
+
+        function matrixToDegrees(matrix) {
+          let radians = Math.atan2(matrix[1], matrix[0]);
+          if (radians < 0) {
+            radians += (2 * Math.PI);
+          }
+          let degrees = Math.round(radians * (180 / Math.PI));
+          degrees = degrees % 360;
+          if (degrees < 0) {
+            degrees += 360;
+          }
+          degrees = closestStandardAngle(degrees);
+          return degrees;
+        }
+
+        let rotation = matrixToDegrees(m);
+
+        let ascent = font.ascent;
+        let descent = font.descent;
+        if (descent > 0) {
+          descent = -descent;
+        }
+        if (ascent && descent) {
+          if (ascent > 1) {
+            ascent = 0.75;
+          }
+          if (descent < -0.5) {
+            descent = -0.25;
+          }
+        }
+        else {
+          ascent = 0.75;
+          descent = -0.25;
+        }
+
+        if (font.capHeight && font.capHeight < ascent && font.capHeight > 0) {
+          ascent = font.capHeight;
+        }
+
+        let charWidth = textChunk.width - prevWidth;
+        let rect = [0, textState.fontSize * descent, charWidth, textState.fontSize * ascent]
+
+        if (
+          font.isType3Font &&
+          textState.fontSize <= 1 &&
+          !isArrayEqual(textState.fontMatrix, FONT_IDENTITY_MATRIX)
+        ) {
+          const glyphHeight = font.bbox[3] - font.bbox[1];
+          if (glyphHeight > 0) {
+            rect[1] = font.bbox[1] * textState.fontMatrix[3];
+            rect[3] = font.bbox[3] * textState.fontMatrix[3];
+          }
+        }
+
+        rect = Util.getAxialAlignedBoundingBox(rect, m);
+
+        let baselineRect = Util.getAxialAlignedBoundingBox([0, 0, 0, 0], m);
+        let baseline = 0;
+        if (rotation === 0 || rotation === 180) {
+          baseline = baselineRect[1];
+        }
+        else if (rotation === 90 || rotation === 270) {
+          baseline = baselineRect[0];
+        }
+
+        let p1 = [0, 0];
+        let p2 = [0, 1];
+
+        let [x1, y1] = Util.applyTransform(p1, getCurrentTextTransform());
+        let [x2, y2] = Util.applyTransform(p2, getCurrentTextTransform());
+        let fontSize = Math.hypot(x1 - x2, y1 - y2);
+
+        let diagonal = rotation % 90 !== 0;
+
+        if (
+          glyph.unicode !== ' ' &&
+          fontSize !== 0 &&
+          // Sometimes char can map to null and break strings
+          glyph.unicode.charCodeAt(0)
+        ) {
+          textChunk.chars.push({
+            // Decomposed ligatures, normalized Arabic characters
+            c: glyphUnicode,
+            // Normalizes Arabic characters others characters where length remains 1, but preserves
+            // ligatures and more importantly avoids 'e\u00be' being converted into 'e \u0301'
+            // which is quite common in Spanish author names and because of the space prevents
+            // author name recognition
+            u: glyphUnicode.length === 1 ? glyphUnicode : glyph.unicode,
+            rect,
+            fontSize,
+            fontName: textState.font.name,
+            bold: textState.font.bold,
+            italic: textState.font.italic,
+            glyphWidth,
+            baseline,
+            rotation,
+            diagonal,
+          });
+        }
 
         if (charSpacing) {
           if (!font.vertical) {
@@ -3022,6 +3142,7 @@ class PartialEvaluator {
       textContent.items.push(runBidiTransform(textContentItem));
       textContentItem.initialized = false;
       textContentItem.str.length = 0;
+      textContentItem.chars = [];
     }
 
     function enqueueChunk(batch = false) {

@@ -76,6 +76,7 @@ import { StreamsSequenceStream } from "./decode_stream.js";
 import { StructTreePage } from "./struct_tree.js";
 import { XFAFactory } from "./xfa/factory.js";
 import { XRef } from "./xref.js";
+import { Module } from "./module/module.js";
 
 const LETTER_SIZE_MEDIABOX = [0, 0, 612, 792];
 
@@ -947,6 +948,7 @@ class PDFDocument {
     this.pdfManager = pdfManager;
     this.stream = stream;
     this.xref = new XRef(stream, pdfManager);
+    this.module = new Module(this);
 
     const idCounters = {
       font: 0,

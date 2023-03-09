@@ -802,6 +802,59 @@ class WorkerMessageHandler {
       });
     });
 
+    handler.on("GetPageData", async function (data) {
+      let pageIndex = data.pageIndex;
+      let task = new WorkerTask('GetPageData: ' + pageIndex);
+      startWorkerTask(task);
+      let pageData;
+      try {
+        pageData = await pdfManager.pdfDocument.module.getPageData(data);
+      } catch (e) {
+        console.log(e);
+      }
+      finishWorkerTask(task);
+      return pageData;
+    });
+
+    handler.on("GetProcessedData", async function (data) {
+      let task = new WorkerTask('GetProcessedData: ');
+      startWorkerTask(task);
+      let pageData;
+      try {
+        pageData = await pdfManager.pdfDocument.module.getProcessedData(data);
+      } catch (e) {
+        console.log(e);
+      }
+      finishWorkerTask(task);
+      return pageData;
+    });
+
+    handler.on("GetPageLabels2", async function (data) {
+      let task = new WorkerTask('GetPageLabels2: ');
+      startWorkerTask(task);
+      let pageLabels;
+      try {
+        pageLabels = await pdfManager.pdfDocument.module.getPageLabels(data);
+      } catch (e) {
+        console.log(e);
+      }
+      finishWorkerTask(task);
+      return pageLabels;
+    });
+
+    handler.on("GetOutline2", async function (data) {
+      let task = new WorkerTask('GetOutline2');
+      startWorkerTask(task);
+      let pageData;
+      try {
+        pageData = await pdfManager.pdfDocument.module.getOutline();
+      } catch (e) {
+        console.log(e);
+      }
+      finishWorkerTask(task);
+      return pageData;
+    });
+
     handler.on("GetStructTree", function (data) {
       return pdfManager
         .getPage(data.pageIndex)

@@ -940,6 +940,22 @@ class PDFDocumentProxy {
     return this._transport.getOutline();
   }
 
+  getPageData(data) {
+    return this._transport.messageHandler.sendWithPromise("GetPageData", data);
+  }
+
+  getProcessedData(data) {
+    return this._transport.messageHandler.sendWithPromise("GetProcessedData", data);
+  }
+
+  getPageLabels2(data) {
+    return this._transport.messageHandler.sendWithPromise("GetPageLabels2", data);
+  }
+
+  getOutline2(data) {
+    return this._transport.messageHandler.sendWithPromise("GetOutline2", data);
+  }
+
   /**
    * @typedef {Object} GetOptionalContentConfigParameters
    * @property {string} [intent] - Determines the optional content groups that

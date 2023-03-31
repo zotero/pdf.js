@@ -1591,6 +1591,10 @@ class PDFPageProxy {
     return intentState.opListReadCapability.promise;
   }
 
+  getStructuredText(data) {
+    return this._transport.messageHandler.sendWithPromise("GetStructuredText", data);
+  }
+
   /**
    * NOTE: All occurrences of whitespace will be replaced by
    * standard spaces (0x20).

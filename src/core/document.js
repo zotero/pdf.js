@@ -58,6 +58,7 @@ import { StructTreePage } from "./struct_tree.js";
 import { writeObject } from "./writer.js";
 import { XFAFactory } from "./xfa/factory.js";
 import { XRef } from "./xref.js";
+import { getParagraphs } from './text_structure';
 
 const DEFAULT_USER_UNIT = 1.0;
 const LETTER_SIZE_MEDIABOX = [0, 0, 612, 792];
@@ -568,6 +569,47 @@ class Page {
         viewBox: this.view,
       });
     });
+  }
+
+  async getStructuredText({ handler, task, data }) {
+    let items = [];
+    let sink = {};
+    sink.enqueue = function (a, b) {
+      items.push(...a.items);
+    };
+
+    try {
+      await this.extractTextContent({
+        handler,
+        task,
+        sink,
+        includeMarkedContent: data.includeMarkedContent,
+        combineTextItems: data.combineTextItems,
+      });
+    } catch (e) {
+      console.log(e);
+      throw e;
+    }
+
+    let fingerprints = new Set();
+    let chars = [];
+    for (let item of items) {
+      if (!item.chars) {
+        continue;
+      }
+      for (let char of item.chars) {
+        // Some PDF files have their text layer characters repeated many times, therefore remove them
+        let fingerprint = char.c + char.rect.join('');
+        if (!fingerprints.has(fingerprint)) {
+          fingerprints.add(fingerprint);
+          char.index = chars.length;
+          chars.push(char);
+
+        }
+      }
+    }
+    let paragraphs = getParagraphs(chars);
+    return { paragraphs };
   }
 
   async getStructTree() {

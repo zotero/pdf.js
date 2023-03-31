@@ -2891,6 +2891,9 @@ class PartialEvaluator {
 
         let ascent = font.ascent;
         let descent = font.descent;
+        if (descent > 0) {
+          descent = -descent;
+        }
         if (ascent && descent) {
           if (ascent > 1) {
             ascent = 0.75;
@@ -2902,6 +2905,10 @@ class PartialEvaluator {
         else {
           ascent = 0.75;
           descent = -0.25;
+        }
+
+        if (font.capHeight && font.capHeight < ascent) {
+          ascent = font.capHeight;
         }
 
         let charWidth = textChunk.width - prevWidth;
@@ -2930,14 +2937,39 @@ class PartialEvaluator {
           baseline = baselineRect[0];
         }
 
-        textChunk.chars.push({
-          c: glyphUnicode,
-          rect,
-          fontSize: textState.fontSize * textChunk.textAdvanceScale,
-          fontName: textState.fontName,
-          baseline,
-          rotation
-        });
+        let p1 = [0, 0];
+        let p2 = [0, 1];
+
+        let [x1, y1] = Util.applyTransform(p1, getCurrentTextTransform());
+        let [x2, y2] = Util.applyTransform(p2, getCurrentTextTransform());
+        let fontSize = Math.hypot(x1 - x2, y1 - y2);
+
+        let diagonal = rotation % 90 !== 0;
+
+        if (
+          glyph.unicode !== ' '
+          && fontSize !== 0
+          // Sometimes char can map to null and break strings
+          && glyph.unicode.charCodeAt(0)
+        ) {
+          textChunk.chars.push({
+            // Decomposed ligatures, normalized Arabic characters
+            c: glyphUnicode,
+            // Normalizes Arabic characters others characters where length remains 1, but preserves
+            // ligatures and more importantly avoids 'e\u00be' being converted into 'e \u0301'
+            // which is quite common in Spanish author names and because of the space prevents
+            // author name recognition
+            u: glyphUnicode.length === 1 ? glyphUnicode : glyph.unicode,
+            rect,
+            fontSize,
+            fontName: textState.fontName,
+            bold: textState.font.bold,
+            italic: textState.font.italic,
+            baseline,
+            rotation,
+            diagonal,
+          });
+        }
 
         if (charSpacing) {
           if (!font.vertical) {

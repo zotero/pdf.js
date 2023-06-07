@@ -963,6 +963,14 @@ class PDFDocumentProxy {
     return this._transport.getOutline();
   }
 
+  getPageData(data) {
+    return this._transport.messageHandler.sendWithPromise("GetPageData", data);
+  }
+
+  getOutline2(data) {
+    return this._transport.messageHandler.sendWithPromise("GetOutline2", data);
+  }
+
   /**
    * @returns {Promise<OptionalContentConfig>} A promise that is resolved with
    *   an {@link OptionalContentConfig} that contains all the optional content
@@ -1589,10 +1597,6 @@ class PDFPageProxy {
       this._pumpOperatorList(intentArgs);
     }
     return intentState.opListReadCapability.promise;
-  }
-
-  getStructuredText(data) {
-    return this._transport.messageHandler.sendWithPromise("GetStructuredText", data);
   }
 
   /**

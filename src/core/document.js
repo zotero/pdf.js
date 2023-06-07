@@ -58,7 +58,8 @@ import { StructTreePage } from "./struct_tree.js";
 import { writeObject } from "./writer.js";
 import { XFAFactory } from "./xfa/factory.js";
 import { XRef } from "./xref.js";
-import { getParagraphs } from './text_structure';
+import { getParagraphs } from './text/structure';
+import { OutlineAnalyzer, PageAnalyzer } from './text/analyzer';
 
 const DEFAULT_USER_UNIT = 1.0;
 const LETTER_SIZE_MEDIABOX = [0, 0, 612, 792];
@@ -838,6 +839,7 @@ class PDFDocument {
     this.xref = new XRef(stream, pdfManager);
     this._pagePromises = new Map();
     this._version = null;
+    this._structuredTexts = [];
 
     const idCounters = {
       font: 0,
@@ -1573,6 +1575,58 @@ class PDFDocument {
         throw new XRefParseException();
       }
     }
+  }
+
+  async getPageData({ handler, task, data }) {
+    let { pageIndex } = data;
+    let structuredTextProvider = async (pageIndex) => {
+      if (this._structuredTexts[pageIndex]) {
+        return this._structuredTexts[pageIndex];
+      }
+      let page = await this.getPage(pageIndex);
+      let structuredText;
+      try {
+        structuredText = await page.getStructuredText({ handler, task, data });
+        this._structuredTexts[pageIndex] = structuredText;
+      } catch (e) {
+        console.log(e);
+      }
+      return structuredText;
+    };
+
+    let structuredText = await structuredTextProvider(pageIndex);
+    let page = await this.getPage(pageIndex);
+
+    let pageAnalyzer = new PageAnalyzer(pageIndex, this, structuredTextProvider);
+    let overlays = await pageAnalyzer.getOverlays();
+    let pageLabel = await pageAnalyzer.getPageLabel();
+    let pageData = {
+      structuredText,
+      overlays,
+      viewBox: page.view,
+      pageLabel
+    };
+    return pageData;
+  }
+
+  async getOutline2({ handler, task, data = {} }) {
+    let { extract } = data;
+    let structuredTextProvider = async (pageIndex) => {
+      if (this._structuredTexts[pageIndex]) {
+        return this._structuredTexts[pageIndex];
+      }
+      let page = await this.getPage(pageIndex);
+      let structuredText;
+      try {
+        structuredText = await page.getStructuredText({ handler, task, data });
+        this._structuredTexts[pageIndex] = structuredText;
+      } catch (e) {
+        console.log(e);
+      }
+      return structuredText;
+    };
+    let outlineAnalyzer = new OutlineAnalyzer(this, structuredTextProvider);
+    return outlineAnalyzer.getOutline(extract);
   }
 
   async checkLastPage(recoveryMode = false) {

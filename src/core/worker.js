@@ -764,33 +764,31 @@ class WorkerMessageHandler {
       });
     });
 
-    handler.on("GetStructuredText", async function (data) {
-      var pageIndex = data.pageIndex;
-      let page = await pdfManager.getPage(pageIndex);
-      var task = new WorkerTask('getStructuredText: page ' + pageIndex);
+    handler.on("GetPageData", async function (data) {
+      let pageIndex = data.pageIndex;
+      let task = new WorkerTask('GetPageData: ' + pageIndex);
       startWorkerTask(task);
-
-      // NOTE: Keep this condition in sync with the `info` helper function.
-      const start = verbosity >= VerbosityLevel.INFOS ? Date.now() : 0;
-
-      let structure;
+      let pageData;
       try {
-        structure = await page.getStructuredText({ handler, task, data });
+        pageData = await pdfManager.pdfDocument.getPageData({ handler, task, data });
       } catch (e) {
         console.log(e);
-        throw e;
-      }
-
-      finishWorkerTask(task);
-
-      if (start) {
-        info(
-          `page=${pageIndex + 1} - getStructuredText: time=` +
-          `${Date.now() - start}ms`
-        );
       }
       finishWorkerTask(task);
-      return structure;
+      return pageData;
+    });
+
+    handler.on("GetOutline2", async function (data) {
+      let task = new WorkerTask('GetOutline2');
+      startWorkerTask(task);
+      let pageData;
+      try {
+        pageData = await pdfManager.pdfDocument.getOutline2({ handler, task, data });
+      } catch (e) {
+        console.log(e);
+      }
+      finishWorkerTask(task);
+      return pageData;
     });
 
     handler.on("GetStructTree", function (data) {

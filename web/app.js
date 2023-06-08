@@ -999,6 +999,7 @@ const PDFViewerApplication = {
       this.progress(loaded / total);
     };
 
+    await this.initializedPromise;
     return loadingTask.promise.then(
       pdfDocument => {
         this.load(pdfDocument);
@@ -1177,9 +1178,9 @@ const PDFViewerApplication = {
       this.downloadComplete = true;
       this.loadingBar?.hide();
 
-      firstPagePromise.then(() => {
-        this.eventBus.dispatch("documentloaded", { source: this });
-      });
+      // firstPagePromise.then(() => {
+      //   this.eventBus.dispatch("documentloaded", { source: this });
+      // });
     });
 
     // Since the `setInitialView` call below depends on this being resolved,
@@ -1213,6 +1214,10 @@ const PDFViewerApplication = {
     const pdfViewer = this.pdfViewer;
     pdfViewer.setDocument(pdfDocument);
     const { firstPagePromise, onePageRendered, pagesPromise } = pdfViewer;
+
+    firstPagePromise.then(() => {
+      this.eventBus.dispatch("documentloaded", { source: this });
+    });
 
     this.pdfThumbnailViewer?.setDocument(pdfDocument);
 

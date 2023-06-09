@@ -58,8 +58,8 @@ import { StructTreePage } from "./struct_tree.js";
 import { writeObject } from "./writer.js";
 import { XFAFactory } from "./xfa/factory.js";
 import { XRef } from "./xref.js";
-import { getParagraphs } from './text/structure';
-import { OutlineAnalyzer, PageAnalyzer } from './text/analyzer';
+import { getParagraphs } from './text/structure.js';
+import { OutlineAnalyzer, PageAnalyzer } from './text/analyzer.js';
 
 const DEFAULT_USER_UNIT = 1.0;
 const LETTER_SIZE_MEDIABOX = [0, 0, 612, 792];

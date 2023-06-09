@@ -859,6 +859,6 @@ function sortParagraphs(paragraphs) {
 
 export function getParagraphs(chars) {
   let paragraphs = split(chars);
-  paragraphs = sortParagraphs(paragraphs);
+  // paragraphs = sortParagraphs(paragraphs);
   return paragraphs;
 }

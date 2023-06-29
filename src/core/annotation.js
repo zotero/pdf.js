@@ -700,6 +700,7 @@ class Annotation {
       noHTML: isLocked && isContentLocked,
       isEditable: false,
       structParent: -1,
+      isZotero: (dict.get("NM") || '').startsWith('Zotero-') || dict.get("Zotero:Key"),
     };
 
     if (annotationGlobals.structTreeRoot) {

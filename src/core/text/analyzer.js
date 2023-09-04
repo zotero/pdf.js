@@ -381,11 +381,13 @@ export class PageAnalyzer {
     let points = await this._extractPageLabelPoints(this._pageIndex);
     if (points) {
       pageLabel = await this._extractPageLabel(this._pageIndex, points);
-      if (!pageLabel) {
-        if (existingPageLabels && existingPageLabels[this._pageIndex]) {
-          pageLabel = existingPageLabels[this._pageIndex];
-        }
-      }
+    }
+    if (
+      (!pageLabel || pageLabel === '0')
+      && existingPageLabels
+      && existingPageLabels[this._pageIndex]
+    ) {
+      pageLabel = existingPageLabels[this._pageIndex];
     }
     return pageLabel;
   }

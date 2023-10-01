@@ -2874,6 +2874,22 @@ class PartialEvaluator {
         }
         textChunk.str.push(glyphUnicode);
 
+        function closestStandardAngle(degrees) {
+          const standardAngles = [0, 90, 180, 270];
+          let closestAngle = standardAngles[0];
+          let minDifference = Math.abs(degrees - closestAngle);
+
+          for (let i = 1; i < standardAngles.length; i++) {
+            const difference = Math.abs(degrees - standardAngles[i]);
+            if (difference < minDifference) {
+              minDifference = difference;
+              closestAngle = standardAngles[i];
+            }
+          }
+
+          return closestAngle;
+        }
+
         function matrixToDegrees(matrix) {
           let radians = Math.atan2(matrix[1], matrix[0]);
           if (radians < 0) {
@@ -2884,6 +2900,7 @@ class PartialEvaluator {
           if (degrees < 0) {
             degrees += 360;
           }
+          degrees = closestStandardAngle(degrees);
           return degrees;
         }
 

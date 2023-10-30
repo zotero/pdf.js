@@ -465,12 +465,16 @@ export class OutlineAnalyzer {
       for (let item of items) {
         let newItem = {
           title: item.title,
-          location: {
-            dest: item.dest,
-          },
           items: transformItems(item.items),
           expanded: false,
         };
+        if (item.dest) {
+          newItem.location = {
+            dest: item.dest,
+          };
+        } else if (item.unsafeUrl) {
+          newItem.url = item.unsafeUrl;
+        }
         newItems.push(newItem);
       }
       return newItems;

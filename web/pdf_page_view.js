@@ -1011,6 +1011,8 @@ class PDFPageView extends BasePDFPageView {
     const { outputScale } = this;
     this.#hasRestrictedScaling = this.#needsRestrictedScaling;
 
+    this.currentCanvasWidth = width * outputScale.sx;
+
     const sfx = approximateFraction(outputScale.sx);
     const sfy = approximateFraction(outputScale.sy);
 

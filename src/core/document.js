@@ -465,7 +465,6 @@ class Page {
       const allowedSubtypes = [
         'Link',
         'Widget',
-        'FreeText',
         'Line',
         'Circle',
         'PolyLine',
@@ -475,8 +474,9 @@ class Page {
         'StrikeOut',
         'Stamp'
       ];
+
       annotations = annotations.filter(x => allowedSubtypes.includes(x.data.subtype)
-        || ['Square', 'Ink'].includes(x.data.subtype) && !x.data.isZotero);
+        || ['Square', 'Ink', 'FreeText'].includes(x.data.subtype) && !x.data.isZotero);
 
       // Collect the operator list promises for the annotations. Each promise
       // is resolved with the complete operator list for a single annotation.

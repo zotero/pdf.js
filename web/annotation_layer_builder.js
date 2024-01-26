@@ -117,7 +117,6 @@ class AnnotationLayerBuilder {
     const allowedSubtypes = [
       'Link',
       'Widget',
-      'FreeText',
       'Line',
       'Circle',
       'PolyLine',
@@ -128,7 +127,7 @@ class AnnotationLayerBuilder {
       'Stamp'
     ];
     annotations = annotations.filter(x => allowedSubtypes.includes(x.subtype)
-      || ['Square', 'Ink'].includes(x.subtype) && !x.isZotero);
+      || ['Square', 'Ink', 'FreeText'].includes(x.subtype) && !x.isZotero);
 
     // Create an annotation layer div and render the annotations
     // if there is at least one annotation.

@@ -78,7 +78,7 @@ import { Toolbar } from "web-toolbar";
 import { ViewHistory } from "./view_history.js";
 
 const FORCE_PAGES_LOADED_TIMEOUT = 10000; // ms
-const WHEEL_ZOOM_DISABLED_TIMEOUT = 1000; // ms
+const WHEEL_ZOOM_DISABLED_TIMEOUT = 20; // ms
 
 const ViewOnLoad = {
   UNKNOWN: -1,

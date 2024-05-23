@@ -500,7 +500,9 @@ class FreeTextEditor extends AnnotationEditor {
   }
 
   #setContent() {
-    this.editorDiv.replaceChildren();
+    while (this.editorDiv.lastElementChild) {
+      this.editorDiv.removeChild(this.editorDiv.lastElementChild);
+    }
     if (!this.#content) {
       return;
     }

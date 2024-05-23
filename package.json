@@ -5,12 +5,14 @@
     "@babel/plugin-transform-modules-commonjs": "^7.21.5",
     "@babel/preset-env": "^7.22.2",
     "@babel/runtime": "^7.22.3",
+    "@csstools/postcss-is-pseudo-class": "^4.0.8",
     "@javascript-obfuscator/escodegen": "2.3.0",
+    "@juggle/resize-observer": "^3.4.0",
     "acorn": "^8.8.2",
     "autoprefixer": "^10.4.14",
     "babel-loader": "^9.1.2",
     "caniuse-lite": "^1.0.30001489",
-    "core-js": "^3.30.2",
+    "core-js": "^3.37.0",
     "cross-env": "^7.0.3",
     "es-module-shims": "1.4.7",
     "eslint": "^8.41.0",
@@ -56,8 +58,7 @@
     "wintersmith": "^2.5.0",
     "yargs": "^17.7.2"
   },
-  "scripts": {
-  },
+  "scripts": {},
   "repository": {
     "type": "git",
     "url": "git://github.com/mozilla/pdf.js.git"

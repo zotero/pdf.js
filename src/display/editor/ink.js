@@ -21,6 +21,8 @@ import {
 import { AnnotationEditor } from "./editor.js";
 import { InkAnnotationElement } from "../annotation_layer.js";
 import { opacityToHex } from "./tools.js";
+import { ResizeObserver as ResizeObserverPolyfill } from '@juggle/resize-observer';
+const ResizeObserver = window.ResizeObserver || ResizeObserverPolyfill;
 
 // The dimensions of the resizer is 15x15:
 // https://searchfox.org/mozilla-central/rev/1ce190047b9556c3c10ab4de70a0e61d893e2954/toolkit/content/minimal-xul.css#136-137

@@ -1917,14 +1917,24 @@ const PDFViewerApplication = {
       const mediaQueryList = window.matchMedia(
         `(resolution: ${window.devicePixelRatio || 1}dppx)`
       );
-      mediaQueryList.addEventListener("change", addWindowResolutionChange, {
-        once: true,
-      });
+      if (mediaQueryList.removeListener) {
+        mediaQueryList.removeListener(webViewerResolutionChange);
+      }
+      if (mediaQueryList.addListener) {
+        mediaQueryList.addListener(webViewerResolutionChange);
+      } else {
+        mediaQueryList.addEventListener("change", addWindowResolutionChange, {
+          once: true,
+        });
+      }
 
       if (typeof PDFJSDev !== "undefined" && PDFJSDev.test("MOZCENTRAL")) {
         return;
       }
       _boundEvents.removeWindowResolutionChange ||= function () {
+        if (mediaQueryList.removeListener) {
+          mediaQueryList.removeListener(webViewerResolutionChange);
+        }
         mediaQueryList.removeEventListener("change", addWindowResolutionChange);
         _boundEvents.removeWindowResolutionChange = null;
       };

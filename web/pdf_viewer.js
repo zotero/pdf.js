@@ -62,6 +62,8 @@ import { NullL10n } from "./l10n_utils.js";
 import { PDFPageView } from "./pdf_page_view.js";
 import { PDFRenderingQueue } from "./pdf_rendering_queue.js";
 import { SimpleLinkService } from "./pdf_link_service.js";
+import { ResizeObserver as ResizeObserverPolyfill } from '@juggle/resize-observer';
+const ResizeObserver = window.ResizeObserver || ResizeObserverPolyfill;
 
 const DEFAULT_CACHE_SIZE = 10;
 

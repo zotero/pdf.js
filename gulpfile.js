@@ -18,6 +18,7 @@
 
 const autoprefixer = require("autoprefixer");
 const postcssDirPseudoClass = require("postcss-dir-pseudo-class");
+const postcssIsPseudoClass = require("@csstools/postcss-is-pseudo-class");
 const fs = require("fs");
 const gulp = require("gulp");
 const postcss = require("gulp-postcss");
@@ -77,9 +78,9 @@ const config = JSON.parse(fs.readFileSync(CONFIG_FILE).toString());
 
 const ENV_TARGETS = [
   "last 2 versions",
-  "Chrome >= 92",
-  "Firefox ESR",
-  "Safari >= 15.4",
+  "Chrome >= 67",
+  "Firefox >= 68",
+  "Safari >= 11",
   "Node >= 18",
   "> 1%",
   "not IE > 0",
@@ -208,9 +209,10 @@ function createWebpackConfig(
   // `src/core/{glyphlist,unicode}.js` (Babel is too slow for those when
   // source-maps are enabled) should be excluded from processing.
   const babelExcludes = ["node_modules[\\\\\\/]core-js"];
-  if (enableSourceMaps) {
-    babelExcludes.push("src[\\\\\\/]core[\\\\\\/](glyphlist|unicode)");
-  }
+  // NOTE: Re-included files below in babel translation to enable compatiblity with older Safari
+  // if (enableSourceMaps) {
+  //   babelExcludes.push("src[\\\\\\/]core[\\\\\\/](glyphlist|unicode)");
+  // }
   const babelExcludeRegExp = new RegExp(`(${babelExcludes.join("|")})`);
 
   const babelPlugins = ["@babel/plugin-transform-modules-commonjs"];
@@ -291,7 +293,7 @@ function createWebpackConfig(
           loader: "babel-loader",
           exclude: babelExcludeRegExp,
           options: {
-            presets: skipBabel ? undefined : ["@babel/preset-env"],
+            presets: skipBabel ? undefined : [["@babel/preset-env", { useBuiltIns: "usage", corejs: { version: "3.37" } }]],
             plugins: babelPlugins,
             targets: BABEL_TARGETS,
           },
@@ -923,7 +925,7 @@ function buildGeneric(defines, dir) {
     preprocessHTML("web/viewer.html", defines).pipe(gulp.dest(dir + "web")),
     preprocessCSS("web/viewer.css", defines)
       .pipe(
-        postcss([postcssDirPseudoClass(), autoprefixer(AUTOPREFIXER_CONFIG)])
+        postcss([postcssDirPseudoClass(), postcssIsPseudoClass(), autoprefixer(AUTOPREFIXER_CONFIG)])
       )
       .pipe(gulp.dest(dir + "web")),
 
@@ -1000,7 +1002,7 @@ function buildComponents(defines, dir) {
     gulp.src(COMPONENTS_IMAGES).pipe(gulp.dest(dir + "images")),
     preprocessCSS("web/pdf_viewer.css", defines)
       .pipe(
-        postcss([postcssDirPseudoClass(), autoprefixer(AUTOPREFIXER_CONFIG)])
+        postcss([postcssDirPseudoClass(), postcssIsPseudoClass(), autoprefixer(AUTOPREFIXER_CONFIG)])
       )
       .pipe(gulp.dest(dir)),
   ]);
@@ -1092,7 +1094,7 @@ function buildMinified(defines, dir) {
     preprocessHTML("web/viewer.html", defines).pipe(gulp.dest(dir + "web")),
     preprocessCSS("web/viewer.css", defines)
       .pipe(
-        postcss([postcssDirPseudoClass(), autoprefixer(AUTOPREFIXER_CONFIG)])
+        postcss([postcssDirPseudoClass(), postcssIsPseudoClass(), autoprefixer(AUTOPREFIXER_CONFIG)])
       )
       .pipe(gulp.dest(dir + "web")),
 
@@ -1422,6 +1424,7 @@ gulp.task(
           .pipe(
             postcss([
               postcssDirPseudoClass(),
+              postcssIsPseudoClass(),
               autoprefixer(AUTOPREFIXER_CONFIG),
             ])
           )

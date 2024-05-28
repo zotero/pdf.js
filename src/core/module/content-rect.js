@@ -106,7 +106,7 @@ export async function getContentRect(pdfDocument, structuredCharsProvider) {
     }
   }
 
-  let { view } = await pdfDocument.getPage(1);
+  let { view } = await pdfDocument.getPage(numPages === 2 ? 1 : 0);
   let width = view[2] - view[0];
   rect[0] = 0;
   rect[2] = width;

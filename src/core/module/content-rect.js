@@ -36,8 +36,8 @@ function getLinesFromChars(chars) {
 export async function getContentRect(pdfDocument, structuredCharsProvider) {
   let numPages = pdfDocument.catalog.numPages;
   let pageIndex = Math.floor(numPages / 2);
-  let startPage = pageIndex - 2;
-  let endPage = pageIndex + 2;
+  let startPage = Math.max(pageIndex - 2, 0);
+  let endPage = Math.min(pageIndex + 2, numPages - 1);
 
   let x;
 

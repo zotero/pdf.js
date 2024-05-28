@@ -132,6 +132,9 @@ function getPageWords(chars, viewportRect) {
 }
 
 function getClusters(objects, property, eps) {
+  if (!objects.length) {
+    return [];
+  }
   // Sort objects based on the specified property
   objects.sort((a, b) => a[property] - b[property]);
 

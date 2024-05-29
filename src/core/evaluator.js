@@ -3036,6 +3036,62 @@ class PartialEvaluator {
 
         let diagonal = rotation % 90 !== 0;
 
+        function normalizeText(text) {
+          // Normalize the text to NFKD form to decompose ligatures and combined characters
+          let normalizedText = text.normalize('NFKD');
+
+          // Handling known special cases where combining characters may still be decomposed
+          const specialCases = {
+            'e\u0301': 'é',  // e + ´ -> é
+            'a\u0301': 'á',  // a + ´ -> á
+            'i\u0301': 'í',  // i + ´ -> í
+            'o\u0301': 'ó',  // o + ´ -> ó
+            'u\u0301': 'ú',  // u + ´ -> ú
+            'e\u0300': 'è',  // e + ` -> è
+            'a\u0300': 'à',  // a + ` -> à
+            'i\u0300': 'ì',  // i + ` -> ì
+            'o\u0300': 'ò',  // o + ` -> ò
+            'u\u0300': 'ù',  // u + ` -> ù
+            'e\u0302': 'ê',  // e + ^ -> ê
+            'a\u0302': 'â',  // a + ^ -> â
+            'i\u0302': 'î',  // i + ^ -> î
+            'o\u0302': 'ô',  // o + ^ -> ô
+            'u\u0302': 'û',  // u + ^ -> û
+            'e\u0308': 'ë',  // e + ¨ -> ë
+            'a\u0308': 'ä',  // a + ¨ -> ä
+            'i\u0308': 'ï',  // i + ¨ -> ï
+            'o\u0308': 'ö',  // o + ¨ -> ö
+            'u\u0308': 'ü',  // u + ¨ -> ü
+            'c\u0327': 'ç',  // c + ¸ -> ç
+            'n\u0303': 'ñ',  // n + ˜ -> ñ
+            // Add other special cases here
+          };
+
+          // Convert specialCases to a map for fast lookup
+          const specialCasesMap = new Map(Object.entries(specialCases));
+
+          // Create a new array to hold the result characters
+          let result = [];
+          for (let i = 0; i < normalizedText.length; i++) {
+            // Try to find a match in the specialCasesMap
+            let found = false;
+            for (let [decomposed, composed] of specialCasesMap) {
+              if (normalizedText.startsWith(decomposed, i)) {
+                result.push(composed);
+                i += decomposed.length - 1; // Adjust index to skip the matched decomposed sequence
+                found = true;
+                break;
+              }
+            }
+            // If no match is found, just add the current character
+            if (!found) {
+              result.push(normalizedText[i]);
+            }
+          }
+
+          return result.join('');
+        }
+
         if (
           glyph.unicode !== ' ' &&
           fontSize !== 0 &&
@@ -3044,7 +3100,7 @@ class PartialEvaluator {
         ) {
           textChunk.chars.push({
             // Decomposed ligatures, normalized Arabic characters
-            c: glyphUnicode,
+            c: normalizeText(glyphUnicode),
             // Normalizes Arabic characters others characters where length remains 1, but preserves
             // ligatures and more importantly avoids 'e\u00be' being converted into 'e \u0301'
             // which is quite common in Spanish author names and because of the space prevents

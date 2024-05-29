@@ -1,4 +1,4 @@
-import { getBoundingRect, getRectCenter } from './utilities.js';
+import { getBoundingRect, getRectCenter } from './util.js';
 
 function romanToInteger(str) {
   // Check if the string is empty or mixed case

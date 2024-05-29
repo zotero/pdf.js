@@ -3,7 +3,7 @@ import {
   getCenterRect,
   intersectRects,
   getClusters
-} from './utilities.js';
+} from './util.js';
 import { getRegularLinkOverlays } from './link/link.js';
 
 function removeASCIISymbolsAndNumbers(inputString) {

@@ -1,4 +1,4 @@
-import { getRangeRects, getSortIndex } from '../utilities.js';
+import { getRangeRects, getSortIndex } from '../util.js';
 
 export async function getParsedOverlays(pdfDocument, structuredCharsProvider, pageIndex) {
   let chars = await structuredCharsProvider(pageIndex);

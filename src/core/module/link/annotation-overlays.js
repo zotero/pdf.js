@@ -1,8 +1,9 @@
+import { overlayDestinationsEqual } from './util.js';
 import {
   getPositionFromDestination,
-  overlayDestinationsEqual
-} from './util.js';
-import { getRectCenter, getSortIndex } from '../utilities.js';
+  getRectCenter,
+  getSortIndex,
+} from '../util.js';
 
 async function _getLinkAnnotationOverlays(pdfDocument, structuredCharsProvider, pageIndex){
   let overlays = [];

@@ -3,7 +3,7 @@ import {
   getClosestDistance,
   getSortIndex,
   printOutline,
-} from "./utilities.js";
+} from "./util.js";
 
 function charsToText(chars) {
   let text = [];

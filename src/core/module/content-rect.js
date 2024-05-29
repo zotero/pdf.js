@@ -1,6 +1,6 @@
 import { distance } from './lib/levenstein.js';
 import { getPageLabel } from './page-label.js';
-import { getCenterRect, getClusters, getRectCenter } from './utilities.js';
+import { getCenterRect, getClusters, getRectCenter } from './util.js';
 
 // TODO: Take into account horizontal pages
 

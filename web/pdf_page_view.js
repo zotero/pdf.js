@@ -1048,10 +1048,8 @@ class PDFPageView {
       async () => {
         showCanvas?.(true);
         await this.#finishRenderTask(renderTask);
-
-        let textLayerPromise = this.#renderTextLayer();
-
-        textLayerPromise.then(() => window.onAttachPage && window.onAttachPage(that));
+        that.textLayerPromise = this.#renderTextLayer();
+        window.onAttachPage && window.onAttachPage(that);
 
         if (this.annotationLayer) {
           await this.#renderAnnotationLayer();

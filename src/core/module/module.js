@@ -9,12 +9,13 @@ import { extractReferences } from './reference-extractor.js';
 import { getExistingOutline } from './outline-reader.js';
 import { extractOutline } from './outline-extractor.js';
 import { getContentRect } from './content-rect.js';
-import { intersectRects, overlaysIntersect } from './utilities.js';
+import { intersectRects, overlaysIntersect } from './util.js';
 
 export class Module {
   constructor(pdfDocument) {
     this._pdfDocument = pdfDocument;
     this._structuredCharsCache = new Map();
+    this._temporaryStructuredCharsCache = new Map();
     this._initializePromise = new Promise((resolve) => {
       this._initializePromiseResolve = resolve;
     });
@@ -26,6 +27,22 @@ export class Module {
     if (cached) {
       return cached;
     }
+
+    cached = this._temporaryStructuredCharsCache.get(pageIndex);
+    if (cached) {
+      if (this._contentRect) {
+        let chars = cached;
+        for (let char of chars) {
+          if (!intersectRects(this._contentRect, char.rect)) {
+            char.isolated = true;
+          }
+        }
+        this._structuredCharsCache.set(pageIndex, chars)
+        this._temporaryStructuredCharsCache.delete(pageIndex);
+      }
+      return cached;
+    }
+
     let page = await this._pdfDocument.getPage(pageIndex);
     let task = {
       name: 'dummy-task',
@@ -71,10 +88,9 @@ export class Module {
           char.isolated = true;
         }
       }
-    }
-
-    if (this._initialized && this._enableCache) {
       this._structuredCharsCache.set(pageIndex, chars);
+    } else {
+      this._temporaryStructuredCharsCache.set(pageIndex, chars);
     }
 
     return chars;

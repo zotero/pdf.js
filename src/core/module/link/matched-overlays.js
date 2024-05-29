@@ -1,4 +1,4 @@
-import { getSortIndex } from '../utilities.js';
+import { getSortIndex } from '../util.js';
 
 let labels = [
   ['figure', 'fig'],

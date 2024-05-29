@@ -197,3 +197,75 @@ export function overlaysIntersect(overlay1, overlay2) {
   }
   return false;
 }
+
+export async function getPositionFromDestination(pdfDocument, dest) {
+  if (!pdfDocument || !dest || !dest.length) {
+    // No PDF document available or invalid destination provided.
+    return;
+  }
+
+  let destArray;
+
+  // If the destination is a string, it's a named destination.
+  // We'll need to resolve it to get the actual destination array.
+  if (typeof dest === 'string') {
+    try {
+      destArray = await pdfDocument.pdfManager.ensureCatalog("getDestination", [dest]);
+      if (!destArray) {
+        // Unable to resolve named destination
+        return;
+      }
+    } catch (e) {
+      console.log(e);
+      return;
+    }
+  } else {
+    destArray = dest;
+  }
+
+  const ref = destArray[0];
+  let pageIndex;
+  try {
+    pageIndex = await pdfDocument.pdfManager.ensureCatalog("getPageIndex", [ref]);
+  } catch (e) {
+    console.log(e);
+    return;
+  }
+  let { rotate, view } = await pdfDocument.getPage(pageIndex);
+  let width = view[2] - view[0];
+  let height = view[3] - view[1];
+
+  let x = 0, y = 0;
+  const changeOrientation = rotate % 180 !== 0;
+  const pageHeight = (changeOrientation ? width : height);
+
+  switch (destArray[1].name) {
+    case "XYZ":
+      x = destArray[2] !== null ? destArray[2] : 0;
+      y = destArray[3] !== null ? destArray[3] : pageHeight;
+      break;
+    case "Fit":
+    case "FitB":
+      break;
+    case "FitH":
+    case "FitBH":
+      y = destArray[2] !== null ? destArray[2] : pageHeight;
+      break;
+    case "FitV":
+    case "FitBV":
+      x = destArray[2] !== null ? destArray[2] : 0;
+      break;
+    case "FitR":
+      x = destArray[2];
+      y = destArray[5];
+      break;
+    default:
+      // Not a valid destination type.
+      return;
+  }
+
+  return {
+    pageIndex,
+    rects: [[x, y, x, y]],
+  };
+}

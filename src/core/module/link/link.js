@@ -1,7 +1,7 @@
 import { getParsedOverlays } from './parsed-overlays.js';
 import { getAnnotationOverlays } from './annotation-overlays.js';
 import { getMatchedOverlays } from './matched-overlays.js';
-import { overlaysIntersect } from '../utilities.js';
+import { overlaysIntersect } from '../util.js';
 
 export async function getRegularLinkOverlays(pdfDocument, structuredCharsProvider, pageIndex) {
   let annotationOverlays = await getAnnotationOverlays(pdfDocument, structuredCharsProvider, pageIndex);

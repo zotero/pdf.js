@@ -1,4 +1,4 @@
-import { getRectsFromChars, getSortIndex } from './utilities.js';
+import { getRectsFromChars, getSortIndex } from './util.js';
 
 function getPositionFromRects(chars, pageIndex) {
   let chars1 = [];

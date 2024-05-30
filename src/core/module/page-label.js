@@ -190,6 +190,12 @@ function getLabelSequence(words) {
   return sequences.sort((a, b) => b.length - a.length)[0];
 }
 
+function getClusterMaxDistance(cluster, property) {
+  let min = Math.min(...cluster.map(x => x[property]));
+  let max = Math.max(...cluster.map(x => x[property]));
+  return max - min;
+}
+
 export async function getPageLabel(pdfDocument, structuredCharsProvider, pageIndex, metadataPagesField) {
   const NEXT_PREV_PAGES = 2;
   let numPages = pdfDocument.catalog.numPages;
@@ -221,14 +227,27 @@ export async function getPageLabel(pdfDocument, structuredCharsProvider, pageInd
     }
   }
 
-  let yClusters = getClusters(candidateWords, 'relativeY', 5);
+  let eps = 5;
+
+  let yClusters = getClusters(candidateWords, 'relativeY', eps);
 
   let bestSequence = [];
   for (let yCluster of yClusters) {
-    let clusters = getClusters(yCluster, 'relativeX', 5);
+    let clusters = getClusters(yCluster, 'relativeX', eps);
     for (let cluster of clusters) {
+      // Ignore clusters with too many values
+      if (cluster.length > eps * 5) {
+        continue;
+      }
       let sequence = getLabelSequence(cluster);
-      if (sequence && sequence.length > bestSequence) {
+
+      if (
+        sequence &&
+        sequence.length > bestSequence &&
+        // Make sure the final sequence page label min and max distance doesn't surpass eps
+        getClusterMaxDistance(sequence, 'relativeY') <= eps &&
+        getClusterMaxDistance(sequence, 'relativeX') <= eps
+      ) {
         bestSequence = sequence;
       }
     }

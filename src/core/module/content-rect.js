@@ -109,7 +109,8 @@ export async function getContentRect(pdfDocument, structuredCharsProvider) {
   let { view } = await pdfDocument.getPage(numPages === 2 ? 1 : 0);
   let width = view[2] - view[0];
   rect[0] = 0;
-  rect[2] = width;
-
+  // Note: Even if page width/height is the same, some pages, in the same PDF,
+  // can have bigger mediaBox with a smaller cropBox applied on it
+  rect[2] = Infinity;
   return rect;
 }

@@ -19,7 +19,7 @@ function removeASCIISymbolsAndNumbers(inputString) {
 }
 
 function getReferencesTitleOffset(chars) {
-  let titles = ['references', 'bibliography', 'literature', 'bibliographie'];
+  let titles = ['references', 'bibliography', 'literature', 'bibliographie', 'literatur'];
 
   let paragraphs = []; // This will hold the start and end indices of each paragraph
   let start = 0; // Start index of the current paragraph
@@ -244,6 +244,10 @@ function extractByLayout(chars) {
 
   let clusters = getClusters(deltas, 'delta', 1);
 
+  if (!clusters.length) {
+    return [];
+  }
+
   let paragraphBreaks = clusters[0];
 
   // Extracting by layout depends on first line of each reference being shifted more on the left
@@ -320,11 +324,11 @@ function extractByLayout(chars) {
     references.push({
       text,
       chars,
-      position
+      position,
     });
   }
 
-  return references
+  return references;
 }
 
 function extractByParagraphSpacing(chars) {

@@ -906,7 +906,9 @@ function split(chars, reflowRTL) {
   }
 
   for (let char of chars) {
-    if (char.lineBreakAfter && !char.paragraphBreakAfter && dashChars.has(char.c)) {
+    // OCRed PDFs sometimes result in each line being a separate paragraph
+    // while, normal PDFs only need this when paragraph is wrapped to another column
+    if (char.lineBreakAfter /*&& !char.paragraphBreakAfter*/ && dashChars.has(char.c)) {
       char.ignorable = true;
     }
   }

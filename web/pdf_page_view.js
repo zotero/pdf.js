@@ -1035,9 +1035,9 @@ class PDFPageView {
       canvasContext: ctx,
       transform,
       viewport,
-      annotationMode: this.#annotationMode,
+      annotationMode: AnnotationMode.ENABLE_FORMS,
       optionalContentConfigPromise: this._optionalContentConfigPromise,
-      annotationCanvasMap: this._annotationCanvasMap,
+      // annotationCanvasMap: this._annotationCanvasMap,
       pageColors,
     };
     const renderTask = (this.renderTask = pdfPage.render(renderContext));

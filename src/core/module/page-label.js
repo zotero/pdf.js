@@ -293,7 +293,7 @@ function arabicToRoman(num) {
 export function predictPageLabels(extractedPageLabels, catalogPageLabels, pagesCount) {
   let pageLabels = [];
 
-  if (!catalogPageLabels || !catalogPageLabels.length) {
+  if (!catalogPageLabels && Object.values(extractedPageLabels).length < 2) {
     for (let i = 0; i < pagesCount; i++) {
       pageLabels[i] = (i + 1).toString();
     }

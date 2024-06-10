@@ -1,15 +1,15 @@
 import { getStructuredChars } from './structure.js';
-import { getLinkOverlays } from './link/link.js';
-import { getPageLabel } from './page-label.js';
-import {
-  getCitationOverlays,
-  getReferenceOverlays
-} from './reference-matcher.js';
-import { extractReferences } from './reference-extractor.js';
+import { getLinkOverlays, getRegularLinkOverlays } from './link/link.js';
+import { getPageLabel, getPageLabels } from './page-label.js';
+// import {
+//   getCitationOverlays,
+//   getReferenceOverlays
+// } from './reference-matcher.js';
 import { getExistingOutline } from './outline-reader.js';
 import { extractOutline } from './outline-extractor.js';
 import { getContentRect } from './content-rect.js';
 import { intersectRects, overlaysIntersect } from './util.js';
+import { getCitationAndReferenceOverlays } from './reference/reference.js';
 
 export class Module {
   constructor(pdfDocument) {
@@ -22,10 +22,15 @@ export class Module {
     this._initializing = false;
   }
 
-  _structuredCharsProvider = async (pageIndex, onlyContent) => {
+  _structuredCharsProvider = async (pageIndex, priority) => {
+
     let cached = this._structuredCharsCache.get(pageIndex);
     if (cached) {
       return cached;
+    }
+
+    if (!priority) {
+      await new Promise((resolve) => setTimeout(resolve));
     }
 
     cached = this._temporaryStructuredCharsCache.get(pageIndex);
@@ -96,38 +101,69 @@ export class Module {
     return chars;
   };
 
-  async getPageData({ pageIndex, metadataPagesField }) {
-    if (!this._initializing) {
-      this._initializeDocument();
-      this._initializing = true;
-    }
-    await this._initializePromise;
-
-    let chars = await this._structuredCharsProvider(pageIndex);
-
-    let pageLabel = await getPageLabel(this._pdfDocument, this._structuredCharsProvider, pageIndex);
-    let linkOverlays = await getLinkOverlays(this._pdfDocument, this._structuredCharsProvider, this._contentRect, pageIndex);
-    let citationOverlays = await getCitationOverlays(this._pdfDocument, this._structuredCharsProvider, pageIndex, this._referenceData, linkOverlays);
-    let referenceOverlays = [];// await getReferenceOverlays(this._referenceData, pageIndex);
-
-    let overlays = [...citationOverlays, ...referenceOverlays];
-
-    // Exclude link overlays that intersect reference overlays and aren't a bibliography record or external url link
-    // Don't include link annotations overlays that overlap with citation overlays
-    for (let linkOverlay of linkOverlays) {
-      if (!citationOverlays.some(x => overlaysIntersect(x, linkOverlay))) {
-        overlays.push(linkOverlay);
-      }
-    }
-
+  async getPageData({ pageIndex }) {
     let page = await this._pdfDocument.getPage(pageIndex);
-
+    let r = Math.random().toString();
+    let chars = await this._structuredCharsProvider(pageIndex, true);
+    let overlays = await getRegularLinkOverlays(this._pdfDocument, chars, pageIndex);
     return {
-      pageLabel,
+      partial: true,
       chars,
       overlays,
       viewBox: page.view,
     };
+  }
+
+  async getProcessedData({ metadataPagesField } = {}) {
+    const MAX_PAGES = 100;
+    await this._pdfDocument.pdfManager.ensureDoc("numPages");
+    this._contentRect = await getContentRect(this._pdfDocument, this._structuredCharsProvider);
+    let citationAndReferenceOverlays = await getCitationAndReferenceOverlays(this._pdfDocument, this._structuredCharsProvider, 100);
+
+    let pages = new Map();
+
+    for (let overlay of citationAndReferenceOverlays) {
+      let { pageIndex } = overlay.position;
+      if (overlay.type === 'reference') {
+        continue;
+      }
+      let page = pages.get(pageIndex);
+      if (!page) {
+        page = { overlays: [] };
+        pages.set(pageIndex, page);
+      }
+      page.overlays.push(overlay);
+    }
+
+
+    let linkOverlaysMap = await getLinkOverlays(this._pdfDocument, this._structuredCharsProvider, this._contentRect);
+
+
+    for (let [pageIndex, linkOverlays] of linkOverlaysMap) {
+      // Exclude link overlays that intersect reference overlays and aren't a bibliography record or external url link
+      // Don't include link annotations overlays that overlap with citation overlays
+      for (let linkOverlay of linkOverlays) {
+        let page = pages.get(pageIndex);
+        if (!page) {
+          page = { overlays: [] };
+          pages.set(pageIndex, page);
+        }
+        if (!page.overlays.some(x => overlaysIntersect(x, linkOverlay))) {
+          page.overlays.push(linkOverlay);
+        }
+      }
+    }
+
+    for (let [pageIndex, page] of pages) {
+      page.viewBox = (await this._pdfDocument.getPage(pageIndex)).view;
+      page.chars = await this._structuredCharsProvider(pageIndex);
+    }
+
+    let pageLabels = await getPageLabels(this._pdfDocument, this._structuredCharsProvider);
+
+    pages = Object.fromEntries(pages);
+
+    return { pageLabels, pages };
   }
 
   async getOutline() {
@@ -140,9 +176,7 @@ export class Module {
 
   async _initializeDocument() {
     // As soon as contentRect is set, extractReferences below can use it
-    this._contentRect = await getContentRect(this._pdfDocument, this._structuredCharsProvider);
-    await this._pdfDocument.pdfManager.ensureDoc("numPages");
-    this._referenceData = await extractReferences(this._pdfDocument, this._structuredCharsProvider);
+
     this._initializePromiseResolve();
     this._initialized = true;
   }

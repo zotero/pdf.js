@@ -39,12 +39,9 @@ export async function getContentRect(pdfDocument, structuredCharsProvider) {
   let startPage = Math.max(pageIndex - 2, 0);
   let endPage = Math.min(pageIndex + 2, numPages - 1);
 
-  let x;
-
   let combinedLines = [];
   for (let i = startPage; i <= endPage; i++) {
     let chars = await structuredCharsProvider(i);
-    if (!x) x = chars[2743];
     let lines = getLinesFromChars(chars);
     combinedLines.push(...lines);
   }

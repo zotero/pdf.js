@@ -1,8 +1,9 @@
 import { getRangeRects, getSortIndex } from '../util.js';
 
-export async function getParsedOverlays(pdfDocument, structuredCharsProvider, pageIndex) {
-  let chars = await structuredCharsProvider(pageIndex);
-
+export function getParsedOverlays(chars) {
+  if (!chars.length) {
+    return [];
+  }
   let sequences = [];
   let sequence = { from: 0, to: 0, lbp: [] };
 
@@ -65,6 +66,8 @@ export async function getParsedOverlays(pdfDocument, structuredCharsProvider, pa
       continue;
     }
   }
+
+  let { pageIndex } = chars[0];
 
   let overlays = [];
   for (let link of links) {

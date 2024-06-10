@@ -837,6 +837,19 @@ class WorkerMessageHandler {
       return pageData;
     });
 
+    handler.on("GetProcessedData", async function (data) {
+      let task = new WorkerTask('GetProcessedData: ');
+      startWorkerTask(task);
+      let pageData;
+      try {
+        pageData = await pdfManager.pdfDocument.module.getProcessedData(data);
+      } catch (e) {
+        console.log(e);
+      }
+      finishWorkerTask(task);
+      return pageData;
+    });
+
     handler.on("GetOutline2", async function (data) {
       let task = new WorkerTask('GetOutline2');
       startWorkerTask(task);

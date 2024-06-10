@@ -67,6 +67,10 @@ function getItemsWithDepth(parentItems, rangeGroups, depth) {
     }
   }
 
+  if (!depthItemGroups.length) {
+    return [];
+  }
+
   return depthItemGroups.sort((a, b) => b.length - a.length)[0];
 }
 
@@ -85,6 +89,7 @@ export async function extractOutline(pdfDocument, structuredCharsProvider) {
   let pagesNum = await pdfDocument.pdfManager.ensureDoc('numPages');
   let from = 0;
   let to = pagesNum - 1;
+  to = Math.min(to, 100);
 
   let pages = [];
   for (let i = from; i <= to; i++) {
@@ -288,7 +293,7 @@ export async function extractOutline(pdfDocument, structuredCharsProvider) {
     }
   }
   // Try to use next available font ranges after the H1, but only for H2 level
-  else if (fontRanges.length >= 1) {
+  else if (fontRanges.length) {
     let ranges = fontRanges[0];
     if (!rangeGroupHasDuplicates(ranges)) {
       h2 = fontRanges[0];

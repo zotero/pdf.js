@@ -1,4 +1,24 @@
-import { getRectsFromChars, getSortIndex } from './util.js';
+import {
+  getCenterRect,
+  getPositionFromDestination,
+  getRectsFromChars,
+  getSortIndex, intersectRects
+} from '../util.js';
+
+/*
+  - Number must be in a proper line, there should be enough characters (to exclude equations and formulas)
+  - [] must have \p, \n, ' ' at the left, and ' ', \n, \p a at the right
+  - If number has internal link and it points to the same then only use this method to determine if numbe is in-text citation
+  - Also exclude all numbers with internal links that aren't pointing to reference page (to avoid author affiliatons in superscripts) https://forums.zotero.org/discussion/114783/zotero-7-beta-affiliations-interpreted-as-references#latest
+  - Detect special word before number i.e Eq., Equation, Ref. Reference, etc.
+
+  - Disable reference extraction and matching, link matching for large papers
+
+
+
+  - Consider using isolation zones if paragraph font is completely different than the main font
+  - Consider always rendering the full page in preview, but just show it with scrollbars and focused to matched or linked exact point
+ */
 
 function getPositionFromRects(chars, pageIndex) {
   let chars1 = [];
@@ -22,8 +42,9 @@ function getPositionFromRects(chars, pageIndex) {
   return position;
 }
 
-function matchByNameAndYear(combinedChars, pageIndex, references, index, currentPageLength) {
+function matchByNameAndYear(combinedChars, references, index) {
   // TODO: Don't match names after the year
+  // TODO: Sort results by year offset distance from the name
   // let index = new Map();
   let matches = [];
   let matchIndex = 0;
@@ -120,9 +141,9 @@ function matchByNameAndYear(combinedChars, pageIndex, references, index, current
 
     let minOffset = matches.reduce((acc, val) => Math.min(acc, val.referenceOffset), Infinity);
 
-    let someInCurrentPage = matches.some(x => x.pageOffset <= currentPageLength - 1);
+    // let someInCurrentPage = matches.some(x => x.pageOffset <= currentPageLength - 1);
 
-    if (hasName && minOffset < 15 && someInCurrentPage) {
+    if (hasName && minOffset < 15/* && someInCurrentPage*/) {
       groups2.push(group);
     }
   }
@@ -153,14 +174,14 @@ function matchByNameAndYear(combinedChars, pageIndex, references, index, current
 
     let word = combinedChars.slice(offset, offset + length);
 
-    let position = getPositionFromRects(word, pageIndex);
+    let position = getPositionFromRects(word, word[0].pageIndex);
 
     overlays.push({
       type: 'citation',
       word,
       offset,
       position,
-      sortIndex: getSortIndex(pageIndex, offset, 0),
+      sortIndex: getSortIndex(word[0].pageIndex, offset, 0),
       references,
     });
   }
@@ -170,7 +191,7 @@ function matchByNameAndYear(combinedChars, pageIndex, references, index, current
   return overlays;
 }
 
-function matchByNumber(combinedChars, pageIndex, references) {
+async function matchByNumber(pdfDocument, combinedChars, references) {
 
   let ranges = [];
   let range = null;
@@ -191,6 +212,7 @@ function matchByNumber(combinedChars, pageIndex, references) {
         ) {
           range = {
             type: 'superscript',
+            pageIndex: char.pageIndex,
             chars: [char],
             offsetFrom: i,
             offsetTo: i,
@@ -202,6 +224,7 @@ function matchByNumber(combinedChars, pageIndex, references) {
           range = {
             type: 'brackets',
             chars: [prevChar, char],
+            pageIndex: char.pageIndex,
             offsetFrom: i,
             offsetTo: i,
           };
@@ -209,6 +232,16 @@ function matchByNumber(combinedChars, pageIndex, references) {
           range = {
             type: 'parentheses',
             chars: [prevChar, char],
+            pageIndex: char.pageIndex,
+            offsetFrom: i,
+            offsetTo: i,
+          };
+        } else {
+          range = {
+            type: 'other',
+            chars: [char],
+            before: [prevChar],
+            pageIndex: char.pageIndex,
             offsetFrom: i,
             offsetTo: i,
           };
@@ -218,25 +251,81 @@ function matchByNumber(combinedChars, pageIndex, references) {
     // After starting character collection above, continue the collection until it's one of the characters
     // below and font size doesn't change (superscript)
     else {
-      let allowed = ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9', ',', '-', '–', '[', ']', '(', ')'];
+      let allowed = ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9', ',', '-', '–'];
 
-      if (allowed.includes(char.c) && Math.abs(prevChar.fontSize - char.fontSize) < 1) {
+      if (
+        (!prevChar || prevChar.pageIndex === char.pageIndex) &&
+        (
+          allowed.includes(char.c) ||
+          ['brackets', 'parentheses'].includes(range.type) && [']', ')'].includes(char.c)
+        ) &&
+        Math.abs(prevChar.fontSize - char.fontSize) < 1
+      ) {
         range.chars.push(char);
         range.offsetTo = i;
-
-        if (['brackets', 'parentheses'].includes(range.type) && (range.chars.filter(x => ['(', '[', ']', ')'].includes(x.c)).length % 2 === 0)) {
-          ranges.push(range);
-          range = null;
-        }
       }
       else {
-        if (range.type === 'superscript') {
-          ranges.push(range);
-        }
+        ranges.push(range);
         range = null;
       }
     }
   }
+
+  let pageIndexes = Array.from(new Set(ranges.map(x => x.pageIndex))).sort();
+
+
+  let internalLinks = new Map();
+  for (let pageIndex of pageIndexes) {
+    let page = await pdfDocument.getPage(pageIndex);
+    let annotations = await page._parsedAnnotations;
+    for (let annotation of annotations) {
+      annotation = annotation.data;
+      let { dest, rect } = annotation;
+      if (!dest || !rect) {
+        continue;
+      }
+      let destinationPosition = await getPositionFromDestination(pdfDocument, dest);
+      if (destinationPosition) {
+
+        let list = internalLinks.get(pageIndex);
+        if (!list) {
+          list = [];
+          internalLinks.set(pageIndex, list);
+        }
+        list.push({
+          rect,
+          destinationPosition,
+        });
+      }
+    }
+  }
+
+
+  // console.log('internal links', internalLinks)
+
+  for (let range of ranges) {
+    range.destinationIndexes = [];
+    let { pageIndex, chars } = range;
+    let pageInternalLinks = internalLinks.get(pageIndex);
+    if (pageInternalLinks) {
+      for (let internalLink of pageInternalLinks) {
+        for (let i = 0; i < chars.length; i++) {
+          let char = chars[i];
+          let centerRect = getCenterRect(char.rect);
+          if (intersectRects(centerRect, internalLink.rect)) {
+            let targetPageIndex = internalLink.destinationPosition.pageIndex;
+            if (!range.destinationIndexes.includes(targetPageIndex)) {
+              range.destinationIndexes.push(targetPageIndex);
+            }
+          }
+        }
+      }
+    }
+  }
+
+  ranges = ranges.filter(x => !(x.type === 'other' && !x.destinationIndexes.length));
+
+
 
   let overlays = [];
 
@@ -253,15 +342,14 @@ function matchByNumber(combinedChars, pageIndex, references) {
       let number = parseInt(part);
       if (number) {
         numbers.add(number);
-
         if (fillInterval) {
-          for (let i = lastNum + 1; i < number; i++) {
+          // Fill the interval but make sure it doesn't grow uncontrollably
+          for (let i = lastNum + 1; i < number && numbers.size < 50; i++) {
             numbers.add(i);
           }
         }
         lastNum = number;
-      }
-      else {
+      } else {
         if (part.split('').some(x => ['-', '–'].includes(x))) {
           fillInterval = true;
         }
@@ -278,59 +366,88 @@ function matchByNumber(combinedChars, pageIndex, references) {
       let reference = references.find(x => x.index === number);
       if (reference) {
         refs.push(reference);
+        range.internalLinkType = 0;
+        if (range.destinationIndexes.length) {
+          range.internalLinkType = range.destinationIndexes.includes(reference.position.pageIndex) ? 1 : -1;
+        }
       }
     }
 
-    if (numbers.length !== refs.length || !refs.length) {
-      continue;
+    range.numbers = numbers;
+    range.references = refs;
+
+    // if (numbers.length !== refs.length || !refs.length) {
+    //   continue;
+    // }
+  }
+
+  ranges = ranges.filter(x => x.internalLinkType !== -1);
+  ranges = ranges.filter(x => x.numbers.length);
+  ranges = ranges.filter(x => x.references.length);
+
+
+
+  // for (let range of ranges) {
+  //   console.log(range.type, range.chars.map(x => x.c).join(''), range);
+  // }
+
+
+  let groups = new Map();
+  for (let range of ranges) {
+    let char = range.chars.find(x => x.c >= '0' && x.c <= '9');
+
+    let id = range.type + '-' + (Math.round(char.fontSize * 10) / 10).toString() + '-' + char.fontName + '-' + range.internalLinkType;
+
+    let group = groups.get(id);
+    if (!group) {
+      group = {
+        ranges: [],
+        references: new Set(),
+      };
+      groups.set(id, group);
     }
+
+    group.ranges.push(range);
+    for (let reference of range.references) {
+      group.references.add(reference);
+    }
+  }
+
+  let bestGroup;
+  for (let [id, group] of groups) {
+    if (!bestGroup || bestGroup.references.size < group.references.size) {
+      bestGroup = group;
+    }
+  }
+  if (!bestGroup) {
+    return [];
+  }
+
+  for (let range of bestGroup.ranges) {
+
+    let { references } = range;
 
     let word = range.chars;
 
-    let position = getPositionFromRects(word, pageIndex);
+    let position = getPositionFromRects(word, range.chars[0].pageIndex);
     overlays.push({
       type: 'citation',
       word,
       offset: range.offsetFrom,
       position,
-      sortIndex: getSortIndex(pageIndex, range.offsetFrom, 0),
-      references: refs,
+      sortIndex: getSortIndex(range.chars[0].pageIndex, range.offsetFrom, 0),
+      references,
     });
   }
   return overlays;
 }
 
-export async function getReferenceOverlays(referenceData, pageIndex) {
-  if (!referenceData) {
-    return [];
-  }
-  let { references } = referenceData;
-  let overlays = [];
-  for (let reference of references) {
-    if (reference.position.pageIndex === pageIndex) {
-      overlays.push({
-        type: 'reference',
-        position: reference.position,
-        sortIndex: getSortIndex(pageIndex, reference.chars[0].offset, 0),
-        references: [reference],
-      });
-    }
-  }
-  return overlays;
-}
-
-export async function getCitationOverlays(pdfDocument, structuredCharsProvider, pageIndex, referenceData) {
-  if (!referenceData) {
-    return [];
-  }
-  let {references, start} = referenceData;
-  if (pageIndex > start.pageIndex) {
-    return [];
-  }
-
+export async function getOverlays(pdfDocument, combinedChars, references) {
   let index = new Map();
 
+
   for (let reference of references) {
+    // console.log('reference', reference, references)
     let word = [];
     let wordOffsetFrom = 0;
     for (let i = 0; i < reference.chars.length; i++) {
@@ -360,40 +477,52 @@ export async function getCitationOverlays(pdfDocument, structuredCharsProvider, 
     }
   }
 
-  let chars = await structuredCharsProvider(pageIndex);
-  let combinedChars = chars.slice();
-
-  if (pageIndex === start.pageIndex) {
-    combinedChars = combinedChars.slice(0, start.offset);
-  }
-
-  let currentPageLength = combinedChars.length;
-
-  for (let char of combinedChars) {
-    char.pageIndex = pageIndex;
-  }
-  if (pageIndex + 1 < pdfDocument.catalog.numPages && pageIndex < start.pageIndex) {
-    let chars = await structuredCharsProvider(pageIndex + 1);
-    let index = chars.findIndex(x => x.lineBreakAfter);
-    chars = chars.slice(0, index + 1);
-    for (let char of chars) {
-      char.pageIndex = pageIndex + 1;
-    }
-    combinedChars.push(...chars);
-  }
-
-  combinedChars = combinedChars.filter(x => !x.isolated);
-
-  let overlays;
+  let citationOverlays;
 
   if (references[0].index) {
-    overlays = matchByNumber(combinedChars, pageIndex, references);
+    citationOverlays = await matchByNumber(pdfDocument, combinedChars, references);
   }
   else {
-    overlays = matchByNameAndYear(combinedChars, pageIndex, references, index, currentPageLength);
+    citationOverlays = matchByNameAndYear(combinedChars, references, index);
   }
 
-  return overlays;
+
+
+
+
+  let referenceMap = new Map();
+
+  for (let citationOverlay of citationOverlays) {
+    for (let reference of citationOverlay.references) {
+      let group = referenceMap.get(reference);
+      if (!group) {
+        group = [];
+        referenceMap.set(reference, group);
+      }
+      group.push(citationOverlay)
+    }
+  }
+
+  let referenceOverlays = [];
+  for (let [reference, citationOverlays] of referenceMap) {
+    let { pageIndex, offset } = reference.chars[0];
+    let referenceOverlay = {
+      type: 'reference',
+      position: reference.position,
+      sortIndex: getSortIndex(pageIndex, offset, 0),
+      references: [reference],
+      citations: [],
+    };
+
+    for (let citationOverlay of citationOverlays) {
+      let { word, offset, position } = citationOverlay;
+      referenceOverlay.citations.push({ word, offset, position });
+    }
+
+    referenceOverlays.push(referenceOverlay);
+  }
+
+  return { citationOverlays, referenceOverlays };
 }
 
 function canJoinMatches(chars, match1, match2, matches) {

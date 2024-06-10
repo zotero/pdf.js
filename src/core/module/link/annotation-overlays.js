@@ -5,9 +5,8 @@ import {
   getSortIndex,
 } from '../util.js';
 
-async function _getLinkAnnotationOverlays(pdfDocument, structuredCharsProvider, pageIndex){
+async function _getLinkAnnotationOverlays(pdfDocument, chars, pageIndex){
   let overlays = [];
-  let chars = await structuredCharsProvider(pageIndex);
   let page = await pdfDocument.getPage(pageIndex);
   let annotations = await page._parsedAnnotations;
   for (let annotation of annotations) {
@@ -60,7 +59,7 @@ async function _getLinkAnnotationOverlays(pdfDocument, structuredCharsProvider, 
       overlay.url = url;
       overlays.push(overlay);
     } else if (annotation.dest) {
-      overlay.type = 'internal-link'
+      overlay.type = 'internal-link';
       let destinationPosition = await getPositionFromDestination(pdfDocument, annotation.dest);
       if (destinationPosition) {
         overlay.destinationPosition = destinationPosition;
@@ -95,8 +94,8 @@ async function _getLinkAnnotationOverlays(pdfDocument, structuredCharsProvider, 
   return combinedOverlays;
 }
 
-export async function getAnnotationOverlays(pdfDocument, structuredCharsProvider, pageIndex) {
-  let linkOverlays = await _getLinkAnnotationOverlays(pdfDocument, structuredCharsProvider, pageIndex);
+export async function getAnnotationOverlays(pdfDocument, chars, pageIndex) {
+  let linkOverlays = await _getLinkAnnotationOverlays(pdfDocument, chars, pageIndex);
   for (let linkOverlay of linkOverlays) {
     delete linkOverlay.offsetFrom;
     delete linkOverlay.offsetTo;

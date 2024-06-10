@@ -189,132 +189,6 @@ function matchCandidates(candidates, pageIndex) {
   return matches;
 }
 
-function expandRect(currentRect, otherRects, surroundingRect) {
-  let [x1, y1, x2, y2] = currentRect;
-  let collision = { top: false, bottom: false, left: false, right: false };
-
-  function intersects(rectA, rectB) {
-    return rectA[0] < rectB[2] && rectA[2] > rectB[0] && rectA[1] < rectB[3] && rectA[3] > rectB[1];
-  }
-
-  while (!collision.top || !collision.bottom || !collision.left || !collision.right) {
-    if (!collision.top && y1 > surroundingRect[1]) {
-      y1 -= Math.min(10, y1 - surroundingRect[1]);
-      if (otherRects.some(rect => intersects([x1, y1, x2, y2], rect))) {
-        y1 += Math.min(10, y1 - surroundingRect[1]); // Revert if collision
-        collision.top = true;
-      }
-    } else {
-      collision.top = true;
-    }
-
-    if (!collision.bottom && y2 < surroundingRect[3]) {
-      y2 += Math.min(10, surroundingRect[3] - y2);
-      if (otherRects.some(rect => intersects([x1, y1, x2, y2], rect))) {
-        y2 -= Math.min(10, surroundingRect[3] - y2); // Revert if collision
-        collision.bottom = true;
-      }
-    } else {
-      collision.bottom = true;
-    }
-
-    if (!collision.left && x1 > surroundingRect[0]) {
-      x1 -= Math.min(10, x1 - surroundingRect[0]);
-      if (otherRects.some(rect => intersects([x1, y1, x2, y2], rect))) {
-        x1 += Math.min(10, x1 - surroundingRect[0]); // Revert if collision
-        collision.left = true;
-      }
-    } else {
-      collision.left = true;
-    }
-
-    if (!collision.right && x2 < surroundingRect[2]) {
-      x2 += Math.min(10, surroundingRect[2] - x2);
-      if (otherRects.some(rect => intersects([x1, y1, x2, y2], rect))) {
-        x2 -= Math.min(10, surroundingRect[2] - x2); // Revert if collision
-        collision.right = true;
-      }
-    } else {
-      collision.right = true;
-    }
-  }
-
-  return [x1, y1, x2, y2];
-}
-
-function getRect(destination, chars, contentRect) {
-  let paragraph = { from: destination.offsetFrom, to: destination.offsetTo };
-
-  while (chars[paragraph.from - 1] && !chars[paragraph.from - 1].paragraphBreakAfter) {
-    paragraph.from--;
-  }
-
-  while (!chars[paragraph.to].paragraphBreakAfter) {
-    paragraph.to++;
-  }
-
-  let rect = getBoundingRect(chars.slice(paragraph.from, paragraph.to + 1));
-
-
-
-
-  let paragraphs = []; // This will hold the start and end indices of each paragraph
-  let start = 0; // Start index of the current paragraph
-
-  for (let i = 0; i < chars.length; i++) {
-    if (chars[i].paragraphBreakAfter || i === chars.length - 1) {
-      // If current char has .paragraphBreakAfter or it's the last element of the array
-      let end = i; // End index of the current paragraph
-
-      let rect = getBoundingRect(chars.slice(start, end + 1));
-
-      let sumParagraph = (rect[2] - rect[0]) * (rect[3] - rect[1]);
-
-      let sumLines = 0;
-
-      let linesNum = 0;
-      let lineStart = start;
-      for (let k = start; k <= end; k++) {
-        if (chars[k].lineBreakAfter) {
-          let lineEnd = k + 1;
-          let rect = getBoundingRect(chars.slice(lineStart, lineEnd));
-          // console.log('uuu', chars.slice(lineStart, lineEnd).map(x => x.c).join(''), rect[2] - rect[0]);
-          sumLines += (rect[2] - rect[0]) * (rect[3] - rect[1]);
-          linesNum++;
-          lineStart = k + 1;
-        }
-      }
-
-      let sum = 0;
-      for (let j = start; j <= end; j++) {
-        let char = chars[j];
-        sum += (char.rect[2] - char.rect[0]) * (char.rect[3] - char.rect[1]);
-      }
-
-      let densityRatio = sum / sumLines;
-      if (end - start > 50 && densityRatio > 0.8 && linesNum >= 2 && !(paragraph.from>=start && paragraph.from <=end)) {
-        paragraphs.push({
-          start: start,
-          end: end,
-          densityRatio,
-          rect,
-          text: chars.slice(start, end + 1).map(x => x.c).join('')
-        });
-      }
-
-
-
-      start = i + 1; // The next paragraph starts after the current one ends
-    }
-  }
-
-  let rects = paragraphs.map(x => x.rect);
-
-  let expandedRect = expandRect(rect, rects, [0, 0, 595.276, 790.866]);
-
-  return expandedRect;
-}
-
 export async function getMatchedOverlays(pdfDocument, structuredCharsProvider, pageIndex, annotationOverlays, contentRect) {
   let MAX_PAGES_AROUND = 5;
   let from = Math.max(pageIndex - MAX_PAGES_AROUND, 0);
@@ -330,11 +204,6 @@ export async function getMatchedOverlays(pdfDocument, structuredCharsProvider, p
 
   let matches = matchCandidates(allCandidates, pageIndex);
 
-  for (let match of matches) {
-    let destination = match.destination;
-    destination.rect = getRect(destination, pages[destination.pageIndex], contentRect);
-  }
-
   let overlays = [];
   for (let match of matches) {
     let sourceChars = pages[match.source.pageIndex].slice(match.source.offsetFrom, match.source.offsetTo + 1);
@@ -342,14 +211,8 @@ export async function getMatchedOverlays(pdfDocument, structuredCharsProvider, p
 
     let destinationChars = pages[match.destination.pageIndex].slice(match.destination.offsetFrom, match.destination.offsetTo + 1);
     let destinationRect = getBoundingRect(destinationChars);
-
-    let previewRect = match.destination.rect;
-    previewRect = [
-      Math.max(previewRect[0], contentRect[0]),
-      Math.max(previewRect[1], contentRect[1]),
-      Math.min(previewRect[2], contentRect[2]),
-      Math.min(previewRect[3], contentRect[3]),
-    ];
+    // destinationRect[2] = destinationRect[0];
+    // destinationRect[1] = destinationRect[3];
 
     let overlay = {
       type: 'internal-link',
@@ -362,10 +225,6 @@ export async function getMatchedOverlays(pdfDocument, structuredCharsProvider, p
       destinationPosition: {
         pageIndex: match.destination.pageIndex,
         rects: [destinationRect],
-      },
-      previewPosition: {
-        pageIndex: match.destination.pageIndex,
-        rects: [previewRect],
       },
     };
 

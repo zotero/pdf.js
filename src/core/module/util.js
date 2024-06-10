@@ -170,7 +170,9 @@ export function getClusters(objects, property, eps) {
 
   for (let i = 1; i < objects.length; i++) {
     const object = objects[i];
-    const distance = Math.abs(object[property] - currentCluster[currentCluster.length - 1][property]);
+    let min = Math.min(object[property], currentCluster[currentCluster.length - 1][property]);
+    let max = Math.max(object[property], currentCluster[currentCluster.length - 1][property]);
+    const distance = max - min;
 
     // Add to current cluster if within eps; otherwise, start a new cluster
     if (distance <= eps) {

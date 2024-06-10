@@ -260,3 +260,89 @@ export async function getPageLabel(pdfDocument, structuredCharsProvider, pageInd
 
   return null;
 }
+
+
+function arabicToRoman(num) {
+  const romanKeys = {
+    M: 1000,
+    CM: 900,
+    D: 500,
+    CD: 400,
+    C: 100,
+    XC: 90,
+    L: 50,
+    XL: 40,
+    X: 10,
+    IX: 9,
+    V: 5,
+    IV: 4,
+    I: 1
+  };
+  let roman = '';
+
+  for (let key in romanKeys) {
+    while (num >= romanKeys[key]) {
+      roman += key;
+      num -= romanKeys[key];
+    }
+  }
+
+  return roman;
+}
+
+export function predictPageLabels(extractedPageLabels, catalogPageLabels, pagesCount) {
+  let pageLabels = [];
+
+  if (!catalogPageLabels || !catalogPageLabels.length) {
+    for (let i = 0; i < pagesCount; i++) {
+      pageLabels[i] = (i + 1).toString();
+    }
+    return pageLabels;
+  }
+
+  for (let i = 0; i < pagesCount; i++) {
+    pageLabels[i] = '-';
+  }
+
+  let allPageLabels = Object.values(extractedPageLabels).sort((a, b) => a.pageIndex - b.pageIndex);
+  if (
+    catalogPageLabels
+    && catalogPageLabels.length === pagesCount
+    && (
+      allPageLabels[0] && catalogPageLabels[allPageLabels[0].pageIndex] === allPageLabels[0].chars.map(x => x.u).join('')
+      || allPageLabels.length === 0
+    )
+  ) {
+    for (let i = 0; i < pagesCount; i++) {
+      pageLabels[i] = catalogPageLabels[i];
+    }
+  }
+
+  let firstArabicPageLabel = Object.values(extractedPageLabels).filter(x => x.type === 'arabic')[0];
+
+  if (firstArabicPageLabel) {
+    let startInteger = firstArabicPageLabel.integer - firstArabicPageLabel.pageIndex;
+    for (let i = 0; i < pagesCount; i++) {
+      if (startInteger + i >= 1) {
+        pageLabels[i] = (startInteger + i).toString();
+      }
+    }
+  }
+  return pageLabels;
+}
+
+export async function getPageLabels(pdfDocument, structuredCharsProvider) {
+  let extractedLabels = {};
+  for (let i = 0; i < 25; i++) {
+    let pageLabel = await getPageLabel(pdfDocument, structuredCharsProvider, i);
+    if (pageLabel) {
+      extractedLabels[i] = pageLabel;
+    }
+  }
+
+  let catalogPageLabels = await pdfDocument.pdfManager.ensureCatalog("pageLabels");
+
+  let pageLabels = predictPageLabels(extractedLabels, catalogPageLabels, pdfDocument.catalog.numPages)
+
+  return pageLabels;
+}

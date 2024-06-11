@@ -174,19 +174,11 @@ export class Module {
     return data;
   }
 
-  async _initializeDocument() {
-    // As soon as contentRect is set, extractReferences below can use it
-
-    this._initializePromiseResolve();
-    this._initialized = true;
-  }
-
   async getPageChars(pageIndex) {
     return this._structuredCharsProvider(pageIndex);
   }
 
-  async getPageLabel(pageIndex) {
-    let pageLabel = await getPageLabel(this._pdfDocument, this._structuredCharsProvider, pageIndex);
-    return pageLabel?.chars.map(x => x.c).join('');
+  async getPageLabels() {
+    return getPageLabels(this._pdfDocument, this._structuredCharsProvider);
   }
 }

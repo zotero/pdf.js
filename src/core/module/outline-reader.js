@@ -38,7 +38,9 @@ export async function getExistingOutline(pdfDocument, structuredCharsProvider) {
         items: await transformItems(item.items),
       };
       if (item.dest) {
-        newItem.sortIndex = await getSortIndexFromTitle(pdfDocument, structuredCharsProvider, item.title, item.dest);
+        // Disable sortIndex calculation because 2 we aren't using it yet,
+        // and it causes significant slowdown for document with many papers
+        // newItem.sortIndex = await getSortIndexFromTitle(pdfDocument, structuredCharsProvider, item.title, item.dest);
         newItem.location = {
           dest: item.dest,
         };

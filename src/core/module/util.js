@@ -90,6 +90,31 @@ export function getRectCenter(rect) {
   return [centerX, centerY];
 }
 
+export function getCharsDistance(a, b) {
+  // Extract the coordinates of rectangles a and b
+  const [ax1, ay1, ax2, ay2] = a.rect;
+  const [bx1, by1, bx2, by2] = b.rect;
+
+  // Calculate the shortest x distance between rectangles a and b
+  let xDistance = 0;
+  if (ax2 < bx1) {
+    xDistance = bx1 - ax2; // a is to the left of b
+  } else if (bx2 < ax1) {
+    xDistance = ax1 - bx2; // b is to the left of a
+  }
+
+  // Calculate the shortest y distance between rectangles a and b
+  let yDistance = 0;
+  if (ay2 < by1) {
+    yDistance = by1 - ay2; // a is above b
+  } else if (by2 < ay1) {
+    yDistance = ay1 - by2; // b is above a
+  }
+
+  // Return the Euclidean distance using Math.hypot
+  return Math.hypot(xDistance, yDistance);
+}
+
 export function getRangeRects(chars, offsetStart, offsetEnd) {
   let rects = [];
   let start = offsetStart;
@@ -133,6 +158,26 @@ export function getRectsFromChars(chars) {
     lineRects.push(currentLineRect);
   }
   return lineRects;
+}
+
+export function getPositionFromRects(chars, pageIndex) {
+  let chars1 = [];
+  let chars2 = [];
+  for (let char of chars) {
+    if (char.pageIndex === pageIndex) {
+      chars1.push(char);
+    } else {
+      chars2.push(char);
+    }
+  }
+  let position = {
+    pageIndex,
+    rects: getRectsFromChars(chars1),
+  };
+  if (chars2.length) {
+    position.nextPageRects = getRectsFromChars(chars2);
+  }
+  return position;
 }
 
 export function printOutline(items, level = 0) {
@@ -237,6 +282,7 @@ export async function getPositionFromDestination(pdfDocument, dest) {
   let width = view[2] - view[0];
   let height = view[3] - view[1];
 
+
   let x = 0, y = 0;
   const changeOrientation = rotate % 180 !== 0;
   const pageHeight = (changeOrientation ? width : height);
@@ -265,6 +311,12 @@ export async function getPositionFromDestination(pdfDocument, dest) {
       // Not a valid destination type.
       return;
   }
+
+  x = Math.max(view[0], x);
+  x = Math.min(view[2], x);
+
+  y = Math.max(view[1], y);
+  y = Math.min(view[3], y);
 
   return {
     pageIndex,

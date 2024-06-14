@@ -1,10 +1,6 @@
 import { getStructuredChars } from './structure.js';
 import { getLinkOverlays, getRegularLinkOverlays } from './link/link.js';
-import { getPageLabel, getPageLabels } from './page-label.js';
-// import {
-//   getCitationOverlays,
-//   getReferenceOverlays
-// } from './reference-matcher.js';
+import { getPageLabels } from './page-label.js';
 import { getExistingOutline } from './outline-reader.js';
 import { extractOutline } from './outline-extractor.js';
 import { getContentRect } from './content-rect.js';
@@ -16,14 +12,9 @@ export class Module {
     this._pdfDocument = pdfDocument;
     this._structuredCharsCache = new Map();
     this._temporaryStructuredCharsCache = new Map();
-    this._initializePromise = new Promise((resolve) => {
-      this._initializePromiseResolve = resolve;
-    });
-    this._initializing = false;
   }
 
   _structuredCharsProvider = async (pageIndex, priority) => {
-
     let cached = this._structuredCharsCache.get(pageIndex);
     if (cached) {
       return cached;
@@ -135,9 +126,7 @@ export class Module {
       page.overlays.push(overlay);
     }
 
-
     let linkOverlaysMap = await getLinkOverlays(this._pdfDocument, this._structuredCharsProvider, this._contentRect);
-
 
     for (let [pageIndex, linkOverlays] of linkOverlaysMap) {
       // Exclude link overlays that intersect reference overlays and aren't a bibliography record or external url link
@@ -148,7 +137,12 @@ export class Module {
           page = { overlays: [] };
           pages.set(pageIndex, page);
         }
-        if (!page.overlays.some(x => overlaysIntersect(x, linkOverlay))) {
+        // Push all external links, and all internal links that doesn't intersect with citations
+        // pointing to the same page as the first reference.
+        if (linkOverlay.type === 'external-link' || !citationAndReferenceOverlays.some(x =>
+          x.references[0].position.pageIndex === linkOverlay.destinationPosition.pageIndex &&
+          overlaysIntersect(x, linkOverlay))
+        ) {
           page.overlays.push(linkOverlay);
         }
       }

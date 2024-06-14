@@ -1,5 +1,5 @@
 import { extractReferences } from './extractor/extractor.js';
-import { getOverlays } from './matcher.js';
+import { getOverlays } from './matcher/matcher.js';
 
 export async function getCitationAndReferenceOverlays(pdfDocument, structuredCharsProvider) {
   let { numPages } = pdfDocument.catalog;

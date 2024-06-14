@@ -37,7 +37,7 @@ function trimNonLettersUsingCase(str) {
   return str.slice(start, end + 1);
 }
 
-function getDist(a, b) {
+function getCharDistanceMinHorizontalOrVertical(a, b) {
   // Extract the coordinates of rectangles a and b
   const [ax1, ay1, ax2, ay2] = a.rect;
   const [bx1, by1, bx2, by2] = b.rect;
@@ -133,7 +133,7 @@ function getCandidates(chars, pageIndex) {
         // First letter is uppercase and there are at least two characters
         if (label && label[0].toUpperCase() === label[0] &&
           label.length >= 2 &&
-          getDist(prevWord.chars.at(-1), word.chars[0]) < 10
+          getCharDistanceMinHorizontalOrVertical(prevWord.chars.at(-1), word.chars[0]) < 10
         ) {
           candidate.label = label;
           candidate.offsetFrom = prevWord.offsetFrom;
@@ -142,7 +142,7 @@ function getCandidates(chars, pageIndex) {
 
       if (
         candidate.offsetFrom === 0 ||
-        getDist(chars[candidate.offsetFrom - 1], chars[candidate.offsetFrom]) < 10
+        getCharDistanceMinHorizontalOrVertical(chars[candidate.offsetFrom - 1], chars[candidate.offsetFrom]) < 10
       ) {
         if (candidate.label) {
           candidate.src = true;

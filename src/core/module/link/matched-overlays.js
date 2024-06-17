@@ -132,7 +132,7 @@ function getCandidates(chars, pageIndex) {
         label = trimNonLettersUsingCase(label);
         // First letter is uppercase and there are at least two characters
         if (label && label[0].toUpperCase() === label[0] &&
-          label.length >= 2 &&
+          label.length >= 3 &&
           getCharDistanceMinHorizontalOrVertical(prevWord.chars.at(-1), word.chars[0]) < 10
         ) {
           candidate.label = label;

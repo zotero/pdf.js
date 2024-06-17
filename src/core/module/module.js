@@ -140,7 +140,7 @@ export class Module {
         // Push all external links, and all internal links that doesn't intersect with citations
         // pointing to the same page as the first reference.
         if (linkOverlay.type === 'external-link' || !citationAndReferenceOverlays.some(x =>
-          x.references[0].position.pageIndex === linkOverlay.destinationPosition.pageIndex &&
+          x.references.some(y => y.position.pageIndex === linkOverlay.destinationPosition.pageIndex) &&
           overlaysIntersect(x, linkOverlay))
         ) {
           page.overlays.push(linkOverlay);
@@ -165,7 +165,7 @@ export class Module {
     if (!data.length) {
       data = await extractOutline(this._pdfDocument, this._structuredCharsProvider);
     }
-    return data;
+    return data || [];
   }
 
   async getPageChars(pageIndex) {

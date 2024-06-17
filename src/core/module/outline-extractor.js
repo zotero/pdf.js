@@ -92,9 +92,15 @@ export async function extractOutline(pdfDocument, structuredCharsProvider) {
   to = Math.min(to, 100);
 
   let pages = [];
+  let charsCount = 0;
   for (let i = from; i <= to; i++) {
     let chars = await structuredCharsProvider(i);
     pages.push(chars);
+    charsCount += chars.length;
+  }
+  // No text layer
+  if (!charsCount) {
+    return;
   }
 
   let fontRanges = new Map();
@@ -155,12 +161,18 @@ export async function extractOutline(pdfDocument, structuredCharsProvider) {
         let upperCase = allUpperCase(chars.slice(start, end + 1));
 
         if (range) {
+          let pushedToRange = false;
           if (lineFontsEqual && range.fontID === fontID && (!range.upperCase || range.upperCase === upperCase)) {
             range.to = end;
             range.text = chars.slice(range.from, range.to + 1).map(x => x.c).join('');
             range.chars = chars.slice(range.from, range.to + 1);
+            pushedToRange = true;
           }
-          else {
+
+          if (!pushedToRange || i === chars.length - 1) {
+            if (range.upperCase) {
+              range.fontID += '-U';
+            }
             let list = fontRanges.get(range.fontID) || [];
             list.push(range);
             fontRanges.set(range.fontID, list);
@@ -202,14 +214,6 @@ export async function extractOutline(pdfDocument, structuredCharsProvider) {
         start = end + 1;
       }
 
-      // Push the current range if this is the last character in the page
-      if (range && i === chars.length - 1) {
-        let list = fontRanges.get(range.fontID) || [];
-        list.push(range);
-        fontRanges.set(range.fontID, list);
-        range = null;
-      }
-
       globalOffset++;
     }
   }
@@ -222,12 +226,19 @@ export async function extractOutline(pdfDocument, structuredCharsProvider) {
 
   fontRanges.sort((a, b) => b[0].fontSize - a[0].fontSize);
 
+  for (let i = 0; i < fontRanges.length; i++) {
+    fontRanges[i] = fontRanges[i].filter(x => x.text.length < 100);
+  }
+
+  // Keep ranges with only 3 or more items
+  fontRanges = fontRanges.filter(x => x.length >= 3);
+
   // Try to determine H1 font
   let titles = [
-    'References',
-    'Bibliography',
-    'Acknowledgments',
-    'Bibliographie'
+    'references',
+    'bibliography',
+    'acknowledgments',
+    'bibliographie'
   ];
 
   // Determine if the font is prevalent in the document
@@ -252,13 +263,13 @@ export async function extractOutline(pdfDocument, structuredCharsProvider) {
     }
 
     for (let range of ranges) {
-      if (titles.includes(range.text)) {
+      if (titles.includes(range.text.toLowerCase())) {
         h1 = ranges;
         fontRanges.splice(0, i + 1);
         break;
       }
     }
-    if (h1) {
+    if (h1.length) {
       break;
     }
   }
@@ -393,7 +404,7 @@ export async function extractOutline(pdfDocument, structuredCharsProvider) {
     ...h1,
     ...h2,
     ...h3,
-    ...list
+    // ...list
   ];
 
   items.sort((a, b) => a.globalOffset - b.globalOffset);

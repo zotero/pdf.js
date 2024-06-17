@@ -7,6 +7,7 @@ import { getReferencesTitleOffset } from './common.js';
 
 // TODO: In Mills - 2015 some lines a single therefore they won't be break.
 //  Fix that. Use line that aligns other reference start and break everything else that is next to this line
+// - Use embedded outline to determine references page
 
 export async function extractReferences(pdfDocument, combinedChars) {
   let sectionOffset = getReferencesTitleOffset(combinedChars);

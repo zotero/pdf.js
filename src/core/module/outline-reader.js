@@ -1,5 +1,8 @@
 import { getPositionFromDestination, getSortIndex } from './util.js';
 
+// TODO:
+// - If root node is single and is a document title, remove it and use its children as top level nodes
+
 async function getSortIndexFromTitle(pdfDocument, structuredCharsProvider, title, dest){
   let position = await getPositionFromDestination(pdfDocument, dest);
   if (!position) {

@@ -44,7 +44,8 @@ export function getParsedOverlays(chars) {
     let text = '';
     for (let j = sequence.from; j <= sequence.to; j++) {
       let char = chars[j];
-      text += char.c;
+      // Use the original char to avoid decomposed ligatures increasing match length
+      text += char.u;
     }
     let match = text.match(urlRegExp);
     if (match) {

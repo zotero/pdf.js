@@ -275,7 +275,7 @@ export async function extractOutline(pdfDocument, structuredCharsProvider) {
   }
 
   // If no common title found, use the biggest font
-  if (!h1) {
+  if (!h1.length && 0) {
     for (let i = 0; i < fontRanges.length; i++) {
       let ranges = fontRanges[i];
 
@@ -399,6 +399,10 @@ export async function extractOutline(pdfDocument, structuredCharsProvider) {
   }
 
   // console.log('bold ranges', list)
+
+  if (h1.length < 4) {
+    return;
+  }
 
   let items = [
     ...h1,

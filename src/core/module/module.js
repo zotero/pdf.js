@@ -3,7 +3,7 @@ import { getLinkOverlays, getRegularLinkOverlays } from './link/link.js';
 import { getPageLabels } from './page-label.js';
 import { getExistingOutline } from './outline-reader.js';
 import { extractOutline } from './outline-extractor.js';
-import { getContentRect } from './content-rect.js';
+import { getContentRects } from './content-rect.js';
 import { intersectRects, overlaysIntersect } from './util.js';
 import { getCitationAndReferenceOverlays } from './reference/reference.js';
 
@@ -26,14 +26,14 @@ export class Module {
 
     cached = this._temporaryStructuredCharsCache.get(pageIndex);
     if (cached) {
-      if (this._contentRect) {
+      if (this._contentRects) {
         let chars = cached;
         for (let char of chars) {
-          if (!intersectRects(this._contentRect, char.rect)) {
+          if (!intersectRects(this._contentRects[pageIndex], char.rect)) {
             char.isolated = true;
           }
         }
-        this._structuredCharsCache.set(pageIndex, chars)
+        this._structuredCharsCache.set(pageIndex, chars);
         this._temporaryStructuredCharsCache.delete(pageIndex);
       }
       return cached;
@@ -78,9 +78,9 @@ export class Module {
       char.pageIndex = pageIndex;
     }
 
-    if (this._contentRect) {
+    if (this._contentRects) {
       for (let char of chars) {
-        if (!intersectRects(this._contentRect, char.rect)) {
+        if (!intersectRects(this._contentRects[pageIndex], char.rect)) {
           char.isolated = true;
         }
       }
@@ -108,7 +108,8 @@ export class Module {
   async getProcessedData({ metadataPagesField } = {}) {
     const MAX_PAGES = 100;
     await this._pdfDocument.pdfManager.ensureDoc("numPages");
-    this._contentRect = await getContentRect(this._pdfDocument, this._structuredCharsProvider);
+    let pageLabels = await getPageLabels(this._pdfDocument, this._structuredCharsProvider);
+    this._contentRects = await getContentRects(this._pdfDocument, this._structuredCharsProvider, pageLabels);
     let citationAndReferenceOverlays = await getCitationAndReferenceOverlays(this._pdfDocument, this._structuredCharsProvider, 100);
 
     let pages = new Map();
@@ -152,8 +153,6 @@ export class Module {
       page.viewBox = (await this._pdfDocument.getPage(pageIndex)).view;
       page.chars = await this._structuredCharsProvider(pageIndex);
     }
-
-    let pageLabels = await getPageLabels(this._pdfDocument, this._structuredCharsProvider);
 
     pages = Object.fromEntries(pages);
 

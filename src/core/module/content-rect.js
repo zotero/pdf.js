@@ -1,10 +1,9 @@
 import { distance } from './lib/levenstein.js';
-import { getPageLabel } from './page-label.js';
-import { getCenterRect, getClusters, getRectCenter } from './util.js';
+import { getCenterRect, getClusters, intersectRects } from './util.js';
 
 // TODO: Take into account horizontal pages
 
-function getLinesFromChars(chars) {
+function getLinesFromChars(chars, view) {
   let lines = [];
   let line = null;
   for (let char of chars) {
@@ -27,87 +26,153 @@ function getLinesFromChars(chars) {
   }
 
   for (let line of lines) {
+    let [x, y] = getCenterRect(line.rect);
+    line.pageIndex = line.chars[0].pageIndex;
     line.text = line.chars.map(x => x.c).join('');
-    line.centerY = getCenterRect(line.rect)[1];
+    // line.centerX = x - view[0];
+    line.centerY = y - view[1];
   }
   return lines;
 }
 
-export async function getContentRect(pdfDocument, structuredCharsProvider) {
-  let numPages = pdfDocument.catalog.numPages;
-  let pageIndex = Math.floor(numPages / 2);
-  let startPage = Math.max(pageIndex - 2, 0);
-  let endPage = Math.min(pageIndex + 2, numPages - 1);
+function getPageSizeIntervals(pages) {
+  let intervals = [];
+  let currentInterval = [];
 
-  let combinedLines = [];
-  for (let i = startPage; i <= endPage; i++) {
-    let chars = await structuredCharsProvider(i);
-    let lines = getLinesFromChars(chars);
-    combinedLines.push(...lines);
-  }
-
-  let clusters = getClusters(combinedLines, 'centerY', 0.2);
-
-  combinedLines = [];
-
-  for (let cluster of clusters) {
-    let removeLines = new Set();
-    for (let i = 0; i < cluster.length; i++) {
-      let currentLine = cluster[i];
-      for (let j = 0; j < cluster.length; j++) {
-        if (i === j || removeLines.has(i) && removeLines.has(j)) {
-          continue;
-        }
-        let otherLine = cluster[j];
-        let dist = distance(currentLine.text, otherLine.text);
-        let stringsEqual = dist / currentLine.text.length <= 0.2;
-        if (stringsEqual) {
-          removeLines.add(i);
-          removeLines.add(j);
-        }
-      }
-    }
-    for (let i = 0; i < cluster.length; i++) {
-      let line = cluster[i];
-      if (!removeLines.has(i)) {
-        combinedLines.push(line);
-      }
-    }
-  }
-
-  let max = combinedLines.reduce((acc, cur) => cur.rect[0] < acc.rect[0] ? cur : acc, combinedLines[0])
-
-  let eps = 0.1;
-  let rect = [
-    Math.min(...combinedLines.map(x => x.rect[0])) + eps,
-    Math.min(...combinedLines.map(x => x.rect[1])) + eps,
-    Math.max(...combinedLines.map(x => x.rect[2])) - eps,
-    Math.max(...combinedLines.map(x => x.rect[3])) - eps,
-  ];
-
-  for (let i = startPage; i <= endPage; i++) {
-    let pageLabel = await getPageLabel(pdfDocument, structuredCharsProvider, i);
-    if (!pageLabel) {
-      continue;
-    }
-    let { rotate, view } = await pdfDocument.getPage(i);
+  for (let i = 0; i < pages.length; i++) {
+    let { view } = pages[i];
     let width = view[2] - view[0];
     let height = view[3] - view[1];
 
-    let centerRect = getRectCenter(pageLabel.rect);
-    if (centerRect[1] < height / 8) {
-      rect[1] = Math.max(rect[1], pageLabel.rect[3] + eps);
-    }
-    else if (centerRect[1] > (height / 8) * 7) {
-      rect[3] = Math.min(rect[3], pageLabel.rect[1] - eps);
+    if (currentInterval.length === 0) {
+      currentInterval.push(i);
+    } else {
+      let lastPageIndex = currentInterval[currentInterval.length - 1];
+      let { view: lastView } = pages[lastPageIndex];
+      let lastWidth = lastView[2] - lastView[0];
+      let lastHeight = lastView[3] - lastView[1];
+
+      if (width === lastWidth && height === lastHeight) {
+        currentInterval.push(i);
+      } else {
+        intervals.push(currentInterval);
+        currentInterval = [i];
+      }
     }
   }
 
-  let { view } = await pdfDocument.getPage(numPages === 2 ? 1 : 0);
-  let width = view[2] - view[0];
-  rect[0] = 0;
-  // Note: Even if page width/height is the same, some pages, in the same PDF,
-  // can have bigger mediaBox with a smaller cropBox applied on it
-  rect[2] = Infinity;
-  return rect;
+  if (currentInterval.length > 0) {
+    intervals.push(currentInterval);
+  }
+
+  return intervals;
+}
+
+export async function getContentRects(pdfDocument, structuredCharsProvider, pageLabels) {
+  let contentRects = [];
+  let { numPages } = pdfDocument.catalog;
+
+  let pages = [];
+  for (let i = 0; i < numPages; i++) {
+    let page = await pdfDocument.getPage(i);
+    pages.push(page);
+  }
+
+  for (let i = 0; i < numPages; i++) {
+    let { view } = pages[i];
+    contentRects.push(view.slice());
+  }
+
+  if (numPages > 100) {
+    return contentRects;
+  }
+
+  let intervals = getPageSizeIntervals(pages);
+
+  let maxInterval = intervals.reduce((a, b) => a.length > b.length ? a : b);
+
+  if (intervals.length > 3) {
+    return contentRects;
+  }
+
+  let pageLines = [];
+
+  for (let i = 0; i < numPages; i++) {
+    let { view } = pages[i];
+    let chars = await structuredCharsProvider(i);
+    let lines = getLinesFromChars(chars, view);
+    pageLines.push(lines);
+  }
+
+  for (let i = 0; i < numPages; i++) {
+    let pageIndex = i;
+    let startPage = Math.max(pageIndex - 2, 0);
+    let endPage = Math.min(pageIndex + 2, numPages - 1);
+
+    let combinedLines = [];
+    for (let i = startPage; i <= endPage; i++) {
+      let lines = pageLines[i];
+      combinedLines.push(...lines);
+    }
+
+    let clusters = getClusters(combinedLines, 'centerY', 0.2);
+    let removeLines = new Set();
+
+    for (let cluster of clusters) {
+      if (cluster.length < 2 || cluster.length > 10) {
+        continue;
+      }
+      for (let i = 0; i < cluster.length; i++) {
+        let currentLine = cluster[i];
+        if (currentLine.pageIndex !== pageIndex) {
+          continue;
+        }
+        for (let j = 0; j < cluster.length; j++) {
+          let otherLine = cluster[j];
+          if (otherLine.pageIndex === pageIndex) {
+            continue;
+          }
+          let min = Math.min(currentLine.text.length, otherLine.text.length);
+          let max = Math.max(currentLine.text.length, otherLine.text.length);
+          if (i === j || removeLines.has(currentLine) || (max - min) / max > 0.2) {
+            continue;
+          }
+          let dist = distance(currentLine.text, otherLine.text);
+          let stringsEqual = dist / currentLine.text.length <= 0.2;
+          if (stringsEqual) {
+            removeLines.add(currentLine);
+          }
+        }
+      }
+    }
+
+    let currentPageLines = [];
+    for (let line of combinedLines) {
+      let pageLabel = pageLabels[pageIndex];
+
+
+      if (
+        !removeLines.has(line) &&
+        line.pageIndex === pageIndex &&
+        // Exclude lines that contain current page label. This can definitely lead to many
+        // false positives, but most of them are compensated by the final bounding rect calculation,
+        // which means if false positive is anywhere between other lines, the false positives won't have
+        // any effect
+        !(line.text === pageLabel || pageLabel.length >= 2 && line.text.includes(pageLabel)) &&
+        // Exclude lines that are outside PDF page view box
+        intersectRects(line.rect, contentRects[pageIndex])
+      ) {
+        currentPageLines.push(line);
+      }
+    }
+
+    let eps = 0.1;
+    contentRects[i] = [
+      Math.min(...currentPageLines.map(x => x.rect[0])) + eps,
+      Math.min(...currentPageLines.map(x => x.rect[1])) + eps,
+      Math.max(...currentPageLines.map(x => x.rect[2])) - eps,
+      Math.max(...currentPageLines.map(x => x.rect[3])) - eps,
+    ];
+  }
+  return contentRects;
 }

@@ -749,47 +749,47 @@ const PDFViewerApplication = {
       file = AppOptions.get("defaultUrl");
     }
 
-    if (typeof PDFJSDev === "undefined" || PDFJSDev.test("GENERIC")) {
-      const fileInput = (this._openFileInput = document.createElement("input"));
-      fileInput.id = "fileInput";
-      fileInput.hidden = true;
-      fileInput.type = "file";
-      fileInput.value = null;
-      document.body.append(fileInput);
-
-      fileInput.addEventListener("change", function (evt) {
-        const { files } = evt.target;
-        if (!files || files.length === 0) {
-          return;
-        }
-        eventBus.dispatch("fileinputchange", {
-          source: this,
-          fileInput: evt.target,
-        });
-      });
-
-      // Enable dragging-and-dropping a new PDF file onto the viewerContainer.
-      appConfig.mainContainer.addEventListener("dragover", function (evt) {
-        for (const item of evt.dataTransfer.items) {
-          if (item.type === "application/pdf") {
-            evt.dataTransfer.dropEffect =
-              evt.dataTransfer.effectAllowed === "copy" ? "copy" : "move";
-            stopEvent(evt);
-            return;
-          }
-        }
-      });
-      appConfig.mainContainer.addEventListener("drop", function (evt) {
-        if (evt.dataTransfer.files?.[0].type !== "application/pdf") {
-          return;
-        }
-        stopEvent(evt);
-        eventBus.dispatch("fileinputchange", {
-          source: this,
-          fileInput: evt.dataTransfer,
-        });
-      });
-    }
+    // if (typeof PDFJSDev === "undefined" || PDFJSDev.test("GENERIC")) {
+    //   const fileInput = (this._openFileInput = document.createElement("input"));
+    //   fileInput.id = "fileInput";
+    //   fileInput.hidden = true;
+    //   fileInput.type = "file";
+    //   fileInput.value = null;
+    //   document.body.append(fileInput);
+    //
+    //   fileInput.addEventListener("change", function (evt) {
+    //     const { files } = evt.target;
+    //     if (!files || files.length === 0) {
+    //       return;
+    //     }
+    //     eventBus.dispatch("fileinputchange", {
+    //       source: this,
+    //       fileInput: evt.target,
+    //     });
+    //   });
+    //
+    //   // Enable dragging-and-dropping a new PDF file onto the viewerContainer.
+    //   appConfig.mainContainer.addEventListener("dragover", function (evt) {
+    //     for (const item of evt.dataTransfer.items) {
+    //       if (item.type === "application/pdf") {
+    //         evt.dataTransfer.dropEffect =
+    //           evt.dataTransfer.effectAllowed === "copy" ? "copy" : "move";
+    //         stopEvent(evt);
+    //         return;
+    //       }
+    //     }
+    //   });
+    //   appConfig.mainContainer.addEventListener("drop", function (evt) {
+    //     if (evt.dataTransfer.files?.[0].type !== "application/pdf") {
+    //       return;
+    //     }
+    //     stopEvent(evt);
+    //     eventBus.dispatch("fileinputchange", {
+    //       source: this,
+    //       fileInput: evt.dataTransfer,
+    //     });
+    //   });
+    // }
 
     if (!AppOptions.get("supportsDocumentFonts")) {
       AppOptions.set("disableFontFace", true);

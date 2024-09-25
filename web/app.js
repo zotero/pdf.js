@@ -2065,7 +2065,7 @@ const PDFViewerApplication = {
       }
 
       mainContainer.removeEventListener("scroll", scroll, { passive: true });
-      this._isScrolling = true;
+      // this._isScrolling = true;
       mainContainer.addEventListener("scrollend", scrollend, { signal });
       mainContainer.addEventListener("blur", scrollend, { signal });
     };

@@ -318,6 +318,8 @@ class CanvasExtraState {
 
   strokeColor = "#000000";
 
+  tilingPatternDims = null;
+
   patternFill = false;
 
   patternStroke = false;
@@ -343,6 +345,7 @@ class CanvasExtraState {
     const clone = Object.create(this);
     clone.clipBox = this.clipBox.slice();
     clone.minMax = this.minMax.slice();
+    clone.tilingPatternDims = this.tilingPatternDims?.slice();
     return clone;
   }
 
@@ -1494,6 +1497,9 @@ class CanvasGraphics {
     if (!minMax) {
       // The path is empty, so no need to update the current minMax.
       path ||= data[0] = new Path2D();
+      if (op !== OPS.stroke && op !== OPS.closeStroke) {
+        this.current.tilingPatternDims = null;
+      }
       this[op](opIdx, path);
       return;
     }
@@ -1521,6 +1527,27 @@ class CanvasGraphics {
       getCurrentTransform(this.ctx),
       this.current.minMax
     );
+
+    const tilingDims = this.current.tilingPatternDims;
+    if (
+      tilingDims &&
+      op !== OPS.stroke &&
+      op !== OPS.closeStroke &&
+      this.current.fillColor instanceof TilingPattern
+    ) {
+      // Intersect with clip box to get the actual fill area, then convert
+      // to pattern space.
+      const clippedBBox = Util.intersect(
+        this.current.clipBox,
+        this.current.minMax
+      );
+      if (!clippedBBox) {
+        this.current.tilingPatternDims = null;
+      } else {
+        this.current.fillColor.updatePatternDims(clippedBBox, tilingDims);
+      }
+    }
+
     this[op](opIdx, path);
 
     this._pathStartIdx = opIdx;
@@ -1590,8 +1617,21 @@ class CanvasGraphics {
     const fillColor = this.current.fillColor;
     const isPatternFill = this.current.patternFill;
     let needRestore = false;
+    const intersect = this.current.getClippedPathBoundingBox();
 
     if (isPatternFill) {
+      const dims = this.current.tilingPatternDims;
+      const tileIdx = dims && fillColor.canSkipPatternCanvas(dims);
+      if (tileIdx) {
+        // Draw the tile directly, skipping the pattern canvas.
+        fillColor.drawPattern(this, path, this.pendingEOFill, tileIdx, opIdx);
+        this.pendingEOFill = false;
+        if (consumePath) {
+          this.consumePath(opIdx, path, intersect);
+        }
+        this.current.tilingPatternDims = null;
+        return;
+      }
       const baseTransform = fillColor.isModifyingCurrentTransform()
         ? ctx.getTransform()
         : null;
@@ -1615,7 +1655,6 @@ class CanvasGraphics {
       needRestore = true;
     }
 
-    const intersect = this.current.getClippedPathBoundingBox();
     if (this.contentVisible && intersect !== null) {
       if (this.pendingEOFill) {
         ctx.fill(path, "evenodd");
@@ -2422,8 +2461,13 @@ class CanvasGraphics {
 
   setFillColorN(opIdx, ...args) {
     this.dependencyTracker?.recordSimpleData("fillColor", opIdx);
-    this.current.fillColor = this.getColorN_Pattern(opIdx, args);
+    const pattern = (this.current.fillColor = this.getColorN_Pattern(
+      opIdx,
+      args
+    ));
     this.current.patternFill = true;
+    this.current.tilingPatternDims =
+      pattern instanceof TilingPattern ? [0, 0, 0, 0] : null;
   }
 
   setStrokeRGBColor(opIdx, color) {
@@ -2442,12 +2486,14 @@ class CanvasGraphics {
     this.dependencyTracker?.recordSimpleData("fillColor", opIdx);
     this.ctx.fillStyle = this.current.fillColor = color;
     this.current.patternFill = false;
+    this.current.tilingPatternDims = null;
   }
 
   setFillTransparent(opIdx) {
     this.dependencyTracker?.recordSimpleData("fillColor", opIdx);
     this.ctx.fillStyle = this.current.fillColor = "transparent";
     this.current.patternFill = false;
+    this.current.tilingPatternDims = null;
   }
 
   _getPattern(opIdx, objId, matrix = null) {

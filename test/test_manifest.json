@@ -14028,5 +14028,12 @@
     "rounds": 1,
     "link": true,
     "type": "eq"
+  },
+  {
+    "id": "tiling_patterns_variations",
+    "file": "pdfs/tiling_patterns_variations.pdf",
+    "md5": "2870c3136be00ddd975149b2c7d1e6df",
+    "rounds": 1,
+    "type": "eq"
   }
 ]

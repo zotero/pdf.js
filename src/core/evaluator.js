@@ -3092,11 +3092,22 @@ class PartialEvaluator {
           return result.join('');
         }
 
+        let charCode = glyph.unicode.charCodeAt(0);
+
         if (
           glyph.unicode !== ' ' &&
           fontSize !== 0 &&
-          // Sometimes char can map to null and break strings
-          glyph.unicode.charCodeAt(0)
+          // Skip null and other control characters to avoid breaking strings, DOM, end even browsers…
+          // TODO: Consider skipping other non-printable characters as well
+          // TODO: Determine whether it's better to skip or replace these characters
+          //  since we may need to keep PDF.js text layer character offsets aligned with
+          //  Zotero reader text layer character offsets
+          !(
+            // ASCII control characters
+            (charCode >= 0x00 && charCode <= 0x1F) ||
+            // Extended control characters
+            (charCode >= 0x7F && charCode <= 0x9F)
+          )
         ) {
           textChunk.chars.push({
             // Decomposed ligatures, normalized Arabic characters

@@ -44,26 +44,29 @@ export function getParsedOverlays(chars) {
     let text = '';
     for (let j = sequence.from; j <= sequence.to; j++) {
       let char = chars[j];
-      // Use the original char to avoid decomposed ligatures increasing match length
-      text += char.u;
+      // Only add single character even if it maps to multiple
+      // characters (ligature). Also make sure char.c isn't empty,
+      // even though that might never happen
+      text += char.c[0] || '_';
     }
     let match = text.match(urlRegExp);
     if (match) {
-      let url = match[0];
+      let from = sequence.from + match.index;
+      let to = from + match[0].length - 1;
+      let url = chars.slice(from, to).map(x => x.c).join('');
       if (url.includes('@')) {
         continue;
       }
       url = url.replace(/[.)]*$/, '');
-      let from = sequence.from + match.index;
-      let to = from + url.length;
       links.push({ from, to, url });
     }
     match = text.match(doiRegExp);
     if (match) {
       let from = sequence.from + match.index;
-      let to = from + match[0].length;
-      let url = 'https://doi.org/' + encodeURIComponent(match[0]);
-      links.push({ from, to, text: match[0], url });
+      let to = from + match[0].length - 1;
+      let doi = chars.slice(from, to).map(x => x.c).join('');
+      let url = 'https://doi.org/' + encodeURIComponent(doi);
+      links.push({ from, to, text: doi, url });
       continue;
     }
   }

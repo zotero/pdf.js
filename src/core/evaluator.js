@@ -3116,6 +3116,8 @@ class PartialEvaluator {
             // ligatures and more importantly avoids 'e\u00be' being converted into 'e \u0301'
             // which is quite common in Spanish author names and because of the space prevents
             // author name recognition
+            // NOTE: THIS CAN STILL HAVE DECOMPOSED LIGATURES IF THE FONT HAS ITS OWN CHARACTER MAPPING,
+            // THEREFORE CONSIDER DITCHING THIS PROPERTY
             u: glyphUnicode.length === 1 ? glyphUnicode : glyph.unicode,
             rect,
             fontSize,

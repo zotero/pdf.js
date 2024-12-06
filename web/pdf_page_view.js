@@ -1075,6 +1075,10 @@ class PDFPageView {
       this.#scaleRoundY = sfy[1];
     }
 
+    const { style } = canvas;
+    style.width = floorToDivide(width, sfx[1]) + "px";
+    style.height = floorToDivide(height, sfy[1]) + "px";
+
     // Add the viewport so it's known what it was originally drawn with.
     this.#viewportMap.set(canvas, viewport);
 

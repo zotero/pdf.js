@@ -272,16 +272,30 @@ export async function getPositionFromDestination(pdfDocument, dest) {
 
   const ref = destArray[0];
   let pageIndex;
-  try {
-    pageIndex = await pdfDocument.pdfManager.ensureCatalog("getPageIndex", [ref]);
-  } catch (e) {
-    console.log(e);
+  if (ref && typeof ref === "object") {
+    try {
+      pageIndex = await pdfDocument.pdfManager.ensureCatalog("getPageIndex", [ref]);
+    } catch (e) {
+      console.log(`Error getting page index from destination "${dest}"`);
+      console.error(e);
+      return;
+    }
+  }
+  else if (Number.isInteger(ref)) {
+    pageIndex = ref;
+    if (pageIndex < 0 || pageIndex > pdfDocument.pagesCount - 1) {
+      console.error(`"${pageIndex}" is not a valid page number, for destination "${dest}"`);
+      return;
+    }
+  }
+  else {
+    console.error(`Invalid destination "${dest}"`);
     return;
   }
+
   let { rotate, view } = await pdfDocument.getPage(pageIndex);
   let width = view[2] - view[0];
   let height = view[3] - view[1];
-
 
   let x = 0, y = 0;
   const changeOrientation = rotate % 180 !== 0;

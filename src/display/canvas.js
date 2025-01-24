@@ -38,6 +38,7 @@ import {
   TilingPattern,
 } from "./pattern_helper.js";
 import { convertBlackAndWhiteToRGBA } from "../shared/image_utils.js";
+import { Blender } from './blender/blender.js';
 
 // <canvas> contexts store most of the state we need natively.
 // However, PDF needs a bit more state, which we store here.
@@ -707,6 +708,19 @@ class CanvasGraphics {
     transparency = false,
     background = null,
   }) {
+    // window.theme = window.theme || {
+    //   background: '#F4ECD8',
+    //   foreground: '#5B4636',
+    // };
+
+    // window.theme = window.theme || {
+    //   background: '#2E3440',
+    //   foreground: '#D8DEE9',
+    // };
+
+    if (window.theme && !this.ctx.skipBlender) {
+      this.blender = new Blender(this.ctx, window.theme);
+    }
     // For pdfs that use blend modes we have to clear the canvas else certain
     // blend modes can look wrong since we'd be blending with a white
     // backdrop. The problem with a transparent backdrop though is we then
@@ -720,7 +734,7 @@ class CanvasGraphics {
     this.ctx.fillRect(0, 0, width, height);
     this.ctx.fillStyle = savedFillStyle;
 
-    if (transparency) {
+    if (transparency && !this.blender) {
       const transparentCanvas = this.cachedCanvases.getCanvas(
         "transparent",
         width,
@@ -858,6 +872,11 @@ class CanvasGraphics {
     }
     this._cachedBitmapsMap.clear();
     this.#drawFilter();
+
+    if (this.blender) {
+      this.blender.unwrap();
+      this.blender = null;
+    }
   }
 
   #drawFilter() {

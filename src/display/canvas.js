@@ -38,7 +38,7 @@ import {
   TilingPattern,
 } from "./pattern_helper.js";
 import { convertBlackAndWhiteToRGBA } from "../shared/image_utils.js";
-import { Blender } from '../../web/blender/blender.js';
+import { Blender } from './blender/blender.js';
 
 // <canvas> contexts store most of the state we need natively.
 // However, PDF needs a bit more state, which we store here.

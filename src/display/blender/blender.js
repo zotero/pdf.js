@@ -185,47 +185,60 @@ class Blender {
     const pageWidth = this.ctx.canvas.width;
     const pageHeight = this.ctx.canvas.height;
 
-    // If image covers the full page
-    if (dWidth >= pageWidth && dHeight >= pageHeight) {
-      const offCanvas = document.createElement("canvas");
-      offCanvas.width = sWidth;
-      offCanvas.height = sHeight;
-      const offCtx = offCanvas.getContext("2d");
-      offCtx.drawImage(img, sx, sy, sWidth, sHeight, 0, 0, sWidth, sHeight);
-      const imageData = offCtx.getImageData(0, 0, sWidth, sHeight);
-      const applyColors = !this.hasDistinctColorsOverThreshold(imageData, 256);
-      const data = imageData.data;
-      const whiteThreshold = 200;
-      const blackThreshold = 50;
-      const colorDeviation = 1;
-      if (applyColors) {
-        for (let i = 0; i < data.length; i += 4) {
-          const r = data[i];
-          const g = data[i + 1];
-          const b = data[i + 2];
-          const avg = (r + g + b) / 3;
-          const isNeutral = this.isColorNeutral(r, g, b, colorDeviation);
-          if (isNeutral && avg > whiteThreshold) {
-            data[i] = bgR;
-            data[i + 1] = bgG;
-            data[i + 2] = bgB;
-          } else if (isNeutral && avg < blackThreshold) {
-            data[i] = fgR;
-            data[i + 1] = fgG;
-            data[i + 2] = fgB;
-          }
+    let entirePage = dWidth >= pageWidth && dHeight >= pageHeight;
+
+    const offCanvas = document.createElement("canvas");
+    offCanvas.width = sWidth;
+    offCanvas.height = sHeight;
+    const offCtx = offCanvas.getContext("2d");
+    offCtx.drawImage(img, sx, sy, sWidth, sHeight, 0, 0, sWidth, sHeight);
+    const imageData = offCtx.getImageData(0, 0, sWidth, sHeight);
+
+    let colorThreshold;
+    if (entirePage) {
+      colorThreshold = 256;
+    } else {
+      // This is mainly necessary for IEEE TRANSACTIONS papers because they
+      // use formulas as images instead of glyphs or vector graphics
+      colorThreshold = 2;
+    }
+
+    const applyColors = !this.hasDistinctColorsOverThreshold(imageData, colorThreshold);
+    const data = imageData.data;
+    const whiteThreshold = 200;
+    const blackThreshold = 50;
+    const colorDeviation = 1;
+    if (applyColors) {
+      for (let i = 0; i < data.length; i += 4) {
+        const r = data[i];
+        const g = data[i + 1];
+        const b = data[i + 2];
+        const avg = (r + g + b) / 3;
+        const isNeutral = this.isColorNeutral(r, g, b, colorDeviation);
+        if (isNeutral && avg > whiteThreshold) {
+          data[i] = bgR;
+          data[i + 1] = bgG;
+          data[i + 2] = bgB;
         }
-        offCtx.putImageData(imageData, 0, 0);
-        // draw the processed offCanvas
-        if (args.length === 3) {
-          this.origDrawImage(offCanvas, dx, dy);
-        } else if (args.length === 5) {
-          this.origDrawImage(offCanvas, dx, dy, dWidth, dHeight);
-        } else {
-          this.origDrawImage(offCanvas, 0, 0, sWidth, sHeight, dx, dy, dWidth, dHeight);
+        else if (isNeutral && avg < blackThreshold) {
+          data[i] = fgR;
+          data[i + 1] = fgG;
+          data[i + 2] = fgB;
         }
-        return;
       }
+      offCtx.putImageData(imageData, 0, 0);
+      // draw the processed offCanvas
+      if (args.length === 3) {
+        this.origDrawImage(offCanvas, dx, dy);
+      }
+      else if (args.length === 5) {
+        this.origDrawImage(offCanvas, dx, dy, dWidth, dHeight);
+      }
+      else {
+        this.origDrawImage(offCanvas, 0, 0, sWidth, sHeight, dx, dy, dWidth, dHeight);
+      }
+      return;
+
     }
 
     // Set the blending mode and global alpha for controlled opacity

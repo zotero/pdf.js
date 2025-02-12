@@ -120,7 +120,10 @@ class Blender {
 
   calcStyle(color) {
     if (color.chroma > 10) {
-      return this.adjustColorForVisibility(this.foreground, color.hex);
+      if (this.dark) {
+        return this.adjustColorForVisibility(this.foreground, color.hex);
+      }
+      return color;
     }
     const whiteL = Color.white.lightness;
     return this.gradient(1 - color.lightness / whiteL);

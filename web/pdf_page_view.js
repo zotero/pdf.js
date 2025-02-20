@@ -662,6 +662,7 @@ class PDFPageView {
     }
 
     if (this.canvas) {
+      this.canvas.style = "";
       let onlyCssZoom = false;
       if (this.#hasRestrictedScaling) {
         if (
@@ -1064,6 +1065,9 @@ class PDFPageView {
       div.style.setProperty("--scale-round-y", `${sfy[1]}px`);
       this.#scaleRoundY = sfy[1];
     }
+
+    canvas.style.width = floorToDivide(width, sfx[1]) + "px";
+    canvas.style.height = floorToDivide(height, sfy[1]) + "px";
 
     // Rendering area
     const transform = outputScale.scaled

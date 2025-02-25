@@ -1066,8 +1066,8 @@ class PDFPageView {
       this.#scaleRoundY = sfy[1];
     }
 
-    canvas.style.width = floorToDivide(width, sfx[1]) + "px";
-    canvas.style.height = floorToDivide(height, sfy[1]) + "px";
+    canvas.style.width = floorToDivide(calcRound(width), sfx[1]) + "px";
+    canvas.style.height = floorToDivide(calcRound(height), sfy[1]) + "px";
 
     // Rendering area
     const transform = outputScale.scaled

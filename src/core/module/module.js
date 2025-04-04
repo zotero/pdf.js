@@ -100,9 +100,9 @@ export class Module {
 
     for (let overlay of citationAndReferenceOverlays) {
       let { pageIndex } = overlay.position;
-      if (overlay.type === 'reference') {
-        continue;
-      }
+      // if (overlay.type === 'reference') {
+      //   continue;
+      // }
       let page = pages.get(pageIndex);
       if (!page) {
         page = { overlays: [] };

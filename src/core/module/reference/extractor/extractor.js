@@ -3,7 +3,7 @@ import { getRegularLinkOverlays } from '../../link/link.js';
 import { extractByListNumberSpacing } from './list-number-spacing.js';
 import { extractByFirstLineIndent } from './first-line-indent.js';
 import { extractByParagraphSpacing } from './paragraph-spacing.js';
-import { getReferencesTitleOffset } from './common.js';
+import { getReferencesTitleOffset, getTextParts } from './common.js';
 
 // TODO: In Mills - 2015 some lines a single therefore they won't be break.
 //  Fix that. Use line that aligns other reference start and break everything else that is next to this line
@@ -34,6 +34,11 @@ export async function extractReferences(pdfDocument, combinedChars) {
   let { references, offset } = bestGroup;
 
   await addUrls(pdfDocument, combinedChars, references);
+
+  // Add textParts using getTextParts function for each reference
+  for (let reference of references) {
+    reference.textParts = getTextParts(reference.chars);
+  }
 
   return { references, offset };
 }

@@ -137,6 +137,46 @@ export function getGroupsFromClusters(chars, clusters) {
   return groups;
 }
 
+export function getTextParts(chars) {
+  let supportedAttributes = ['fontName', 'fontSize', 'url'];
+  // Compute the style object from char using the attributes list
+  function getStyleObject(char) {
+    return supportedAttributes.reduce((style, key) => {
+      if (char[key]) {
+        style[key] = char[key];
+      }
+      return style;
+    }, {});
+  }
+  let parts = chars.reduce((acc, char, index) => {
+    if (char.ignorable) {
+      return acc;
+    }
+    let currentStyleObject = getStyleObject(char);
+    // Create a style key from the style object to group similar characters
+    let styleKey = JSON.stringify(currentStyleObject);
+    let lastPart = acc[acc.length - 1];
+    if (!lastPart || lastPart.styleKey !== styleKey) {
+      // Start a new group
+      acc.push({
+        text: char.c,
+        attributes: currentStyleObject,
+        styleKey,
+      });
+    } else {
+      // Same style group. Append the current character
+      lastPart.text += char.c;
+    }
+    // Add a space if needed
+    if (char.spaceAfter || (char.lineBreakAfter && index !== chars.length - 1)) {
+      acc[acc.length - 1].text += ' ';
+    }
+    return acc;
+  }, []);
+  // Remove the temporary styleKey property before returning
+  return parts.map(({ styleKey, ...rest }) => rest);
+}
+
 export function getReferencesFromGroup(group, useIndex) {
   let references = [];
   for (let { chars } of group) {

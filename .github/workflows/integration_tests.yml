@@ -1,0 +1,85 @@
+name: Integration tests
+on:
+  push:
+    paths:
+      - 'gulpfile.mjs'
+      - 'src/**'
+      - 'test/test.mjs'
+      - 'test/integration/**'
+      - 'web/**'
+      - '.github/workflows/integration_tests.yml'
+    branches:
+      - master
+  pull_request:
+    paths:
+      - 'gulpfile.mjs'
+      - 'src/**'
+      - 'test/test.mjs'
+      - 'test/integration/**'
+      - 'web/**'
+      - '.github/workflows/integration_tests.yml'
+    branches:
+      - master
+  workflow_dispatch:
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Test
+
+    strategy:
+      fail-fast: false
+      matrix:
+        node-version: [lts/*]
+        os: [windows-latest, ubuntu-latest]
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Use Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # v6.3.0
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Restore cached PDF files
+        uses: actions/cache/restore@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+        with:
+          path: test/pdfs/*.pdf
+          key: cached-pdf-files-${{ hashFiles('test/pdfs/*.pdf') }}
+          restore-keys: |
+            cached-pdf-files-
+          enableCrossOsArchive: true
+
+      # Note that the integration tests can't run in headless mode until bug
+      # 1878643 (tracked in #20918), and possibly others, have been fixed
+      # upstream, so we can't run with the `--headless` flag and thus have to
+      # configure a standard resolution for the headful browser windows.
+      - name: Update resolution (Windows)
+        if: ${{ matrix.os == 'windows-latest' }}
+        run: Set-DisplayResolution -Width 1920 -Height 1080 -Force
+
+      - name: Run integration tests (Windows)
+        if: ${{ matrix.os == 'windows-latest' }}
+        run: npx gulp integrationtest
+
+      - name: Run integration tests (Linux)
+        if: ${{ matrix.os == 'ubuntu-latest' }}
+        run: xvfb-run -a --server-args="-screen 0, 1920x1080x24" npx gulp integrationtest
+
+      - name: Save cached PDF files
+        uses: actions/cache/save@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+        with:
+          path: test/pdfs/*.pdf
+          key: cached-pdf-files-${{ hashFiles('test/pdfs/*.pdf') }}
+          enableCrossOsArchive: true

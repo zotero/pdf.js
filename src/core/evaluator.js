@@ -3075,11 +3075,14 @@ class PartialEvaluator {
           scaledDim = 0;
         }
 
-        let prevWidth = textChunk.width;
+        // Keep a signed copy of the advance we will apply for rect construction
+        let appliedAdvance;
+
         let m = Util.transform(textState.ctm, textState.textMatrix);
 
         if (!font.vertical) {
           scaledDim *= textState.textHScale;
+          appliedAdvance = scaledDim; // signed
           intersector?.addGlyph(
             getCurrentTextTransform(),
             scaledDim,
@@ -3089,6 +3092,8 @@ class PartialEvaluator {
           textState.translateTextMatrix(scaledDim, 0);
           textChunk.width += scaledDim;
         } else {
+          // Vertical: advance along Y, keep signed value for rect
+          appliedAdvance = scaledDim; // signed
           intersector?.addGlyph(
             getCurrentTextTransform(),
             0,
@@ -3096,8 +3101,8 @@ class PartialEvaluator {
             glyph.unicode
           );
           textState.translateTextMatrix(0, scaledDim);
-          scaledDim = Math.abs(scaledDim);
-          textChunk.height += scaledDim;
+          // Accumulate height with absolute value for total chunk size
+          textChunk.height += Math.abs(scaledDim);
         }
 
         if (scaledDim) {
@@ -3175,8 +3180,18 @@ class PartialEvaluator {
           ascent = font.capHeight;
         }
 
-        let charWidth = textChunk.width - prevWidth;
-        let rect = [0, textState.fontSize * descent, charWidth, textState.fontSize * ascent]
+        // Build the untransformed rect using signed advance on the proper axis
+        let rect;
+        if (!font.vertical) {
+          // Horizontal: X-advance is appliedAdvance
+          rect = [0, textState.fontSize * descent, appliedAdvance, textState.fontSize * ascent];
+        } else {
+          // Vertical: Y-advance is appliedAdvance (signed).
+          // Use min/max so rect covers correct direction
+          let y0 = Math.min(0, appliedAdvance);
+          let y1 = Math.max(0, appliedAdvance);
+          rect = [textState.fontSize * descent, y0, textState.fontSize * ascent, y1];
+        }
 
         if (
           font.isType3Font &&
@@ -3185,8 +3200,13 @@ class PartialEvaluator {
         ) {
           const glyphHeight = font.bbox[3] - font.bbox[1];
           if (glyphHeight > 0) {
-            rect[1] = font.bbox[1] * textState.fontMatrix[3];
-            rect[3] = font.bbox[3] * textState.fontMatrix[3];
+            if (!font.vertical) {
+              rect[1] = font.bbox[1] * textState.fontMatrix[3];
+              rect[3] = font.bbox[3] * textState.fontMatrix[3];
+            } else {
+              rect[0] = font.bbox[1] * textState.fontMatrix[3];
+              rect[2] = font.bbox[3] * textState.fontMatrix[3];
+            }
           }
         }
 
@@ -3216,6 +3236,10 @@ class PartialEvaluator {
         let fontSize = Math.hypot(x1 - x2, y1 - y2);
 
         let diagonal = rotation % 90 !== 0;
+        // This is a bit hacky but it fixes text selection for vertical text
+        if (rotation === 0 && font.vertical) {
+          rotation = 270;
+        }
 
         function normalizeChar(char) {
           // Normalize the character to NFKD form to decompose ligatures and combined characters

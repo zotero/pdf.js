@@ -1498,7 +1498,7 @@ const PDFViewerApplication = {
       () => {
         this._unblockDocumentLoadEvent();
 
-        this._initializeAutoPrint(pdfDocument, openActionPromise);
+        // this._initializeAutoPrint(pdfDocument, openActionPromise);
       },
       reason => {
         this._documentError("pdfjs-loading-error", { message: reason.message });

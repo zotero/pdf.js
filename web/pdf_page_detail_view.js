@@ -46,6 +46,10 @@ class PDFPageDetailView extends BasePDFPageView {
     this.pageView.setPdfPage(pdfPage);
   }
 
+  get detailArea() {
+    return this.#detailArea;
+  }
+
   get pdfPage() {
     return this.pageView.pdfPage;
   }

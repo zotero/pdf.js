@@ -350,7 +350,7 @@ class PDFPageView extends BasePDFPageView {
   }
 
   destroy() {
-    window.onDetachPage && window.onDetachPage(this);
+    window.onDestroyPage && window.onDestroyPage(this);
     this.reset();
     this.pdfPage?.cleanup();
   }
@@ -1067,8 +1067,6 @@ class PDFPageView extends BasePDFPageView {
       );
 
       const textLayerPromise = this.#renderTextLayer();
-      that.textLayerPromise = textLayerPromise;
-      textLayerPromise.then(() => window.onAttachPage && window.onAttachPage(that));
 
       if (this.annotationLayer) {
         await this.#renderAnnotationLayer();

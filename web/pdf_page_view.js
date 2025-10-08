@@ -384,7 +384,7 @@ class PDFPageView extends BasePDFPageView {
     try {
       await this.annotationLayer.render({
         viewport: this.viewport,
-        intent: "display",
+        intent: "print",
         structTreeLayer: this.structTreeLayer,
       });
     } catch (ex) {
@@ -918,7 +918,7 @@ class PDFPageView extends BasePDFPageView {
       viewport: this.viewport,
       annotationMode: this.#annotationMode,
       optionalContentConfigPromise: this._optionalContentConfigPromise,
-      annotationCanvasMap: this._annotationCanvasMap,
+      annotationCanvasMap: null,
       pageColors: this.pageColors,
       isEditing: this.#isEditing,
     };

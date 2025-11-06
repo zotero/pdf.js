@@ -718,7 +718,7 @@ class CanvasGraphics {
     //   foreground: '#D8DEE9',
     // };
 
-    if (window.theme && !this.ctx.skipBlender) {
+    if (typeof window !== 'undefined' && window.theme && !this.ctx.skipBlender) {
       this.blender = new Blender(this.ctx, window.theme);
     }
     // For pdfs that use blend modes we have to clear the canvas else certain

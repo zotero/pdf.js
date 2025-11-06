@@ -10,6 +10,7 @@
     "@fluent/dom": "^0.10.2",
     "@metalsmith/layouts": "^3.0.0",
     "@metalsmith/markdown": "^1.10.0",
+    "@napi-rs/canvas": "^0.1.74",
     "@types/node": "^24.0.15",
     "autoprefixer": "^10.4.21",
     "babel-loader": "^10.0.0",

@@ -9,6 +9,7 @@ class Blender {
     this.foreground = new Color(theme.foreground);
     this.gradient = this.background.range(this.foreground);
     this.dark = this.background.lightness < this.foreground.lightness;
+    this.forceInversion = !!theme.invertImages;
 
     this.fullPageImageDetected = false;
 

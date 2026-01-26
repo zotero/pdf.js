@@ -635,6 +635,65 @@ function median(values) {
   return (values[half - 1] + values[half]) / 2.0;
 }
 
+function medianFinite(values) {
+  const arr = values.filter(Number.isFinite).slice().sort((a, b) => a - b);
+  if (!arr.length) {
+    return NaN;
+  }
+  const half = Math.floor(arr.length / 2);
+  return arr.length % 2 ? arr[half] : (arr[half - 1] + arr[half]) / 2;
+}
+
+function charPerpCenter(char) {
+  // "Perpendicular to writing direction" center used to detect sup/sub shifts.
+  // For horizontal text (0/180) this is Y center; for vertical (90/270) this is X center.
+  return ([0, 180].includes(char.rotation) && (char.rect[1] + char.rect[3]) / 2
+    || [90, 270].includes(char.rotation) && (char.rect[0] + char.rect[2]) / 2);
+}
+
+function classifySupSubForLine(chars, from, to, {
+  normalHeightBand = 0.15,  // +/- 15% around median height for "normal candidates"
+  smallMaxRatio = 0.85,     // max height ratio to be considered small (sup/sub)
+  supMinOffset = 0.25,      // min (cPerp - cRef)/hMed for superscript (PDF coords: up/right is +)
+  subMinOffset = 0.20       // min (cRef - cPerp)/hMed for subscript
+} = {}) {
+  const items = [];
+  for (let i = from; i <= to; i++) {
+    const ch = chars[i];
+    const h = charHeight(ch);
+    const cPerp = charPerpCenter(ch);
+    items.push({ i, ch, h, cPerp });
+  }
+
+  const hMed = medianFinite(items.map(x => x.h));
+  if (!Number.isFinite(hMed) || hMed <= 0) {
+    for (let i = from; i <= to; i++) {
+      chars[i].sup = false;
+      chars[i].sub = false;
+    }
+    return;
+  }
+
+  const lo = (1 - normalHeightBand) * hMed;
+  const hi = (1 + normalHeightBand) * hMed;
+
+  const normalCandidates = items.filter(x => x.h >= lo && x.h <= hi);
+  const refPool = normalCandidates.length >= 3 ? normalCandidates : items;
+  const cRef = medianFinite(refPool.map(x => x.cPerp));
+
+  for (const it of items) {
+    const sizeRatio = it.h / hMed;
+    const offset = (it.cPerp - cRef) / hMed; // + => above (horizontal) / right (vertical)
+
+    const isSmall = sizeRatio <= smallMaxRatio;
+    const sup = isSmall && offset >= supMinOffset;
+    const sub = isSmall && offset <= -subMinOffset;
+
+    it.ch.sup = sup;
+    it.ch.sub = sub;
+  }
+}
+
 function getLineBottom(chars, from, to) {
   let values = [];
   for (let i = from; i <= to; i++) {
@@ -759,6 +818,13 @@ function split(chars, reflowRTL) {
     });
     bidi(lineChars, -1, false);
     chars.splice(from, to - from + 1, ...lineChars);
+  }
+
+  // Detect superscripts/subscripts per line (sets char.sup / char.sub).
+  for (let i = 0; i < lineBreaks.length - 1; i++) {
+    const from = lineBreaks[i];
+    const to = lineBreaks[i + 1] - 1;
+    classifySupSubForLine(chars, from, to);
   }
 
   let wordBreaks = [];

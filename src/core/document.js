@@ -687,6 +687,28 @@ class Page {
     });
   }
 
+  async getPageContent({ handler, task }) {
+    const contentStreamPromise = this.getContentStream();
+    const resourcesPromise = this.loadResources(RESOURCES_KEYS_TEXT_CONTENT);
+
+    const [contentStream] = await Promise.all([
+      contentStreamPromise,
+      resourcesPromise,
+    ]);
+    const resources = await this.#getMergedResources(
+      contentStream.dict,
+      RESOURCES_KEYS_TEXT_CONTENT
+    );
+
+    const partialEvaluator = this.#createPartialEvaluator(handler);
+
+    return partialEvaluator.getPageContent({
+      stream: contentStream,
+      task,
+      resources,
+    });
+  }
+
   async getStructTree() {
     const structTreeRoot =
       await this.pdfManager.ensureCatalog("structTreeRoot");

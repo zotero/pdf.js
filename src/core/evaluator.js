@@ -3035,7 +3035,7 @@ class PartialEvaluator {
         function matrixToDegrees(matrix) {
           let radians = Math.atan2(matrix[1], matrix[0]);
           if (radians < 0) {
-            radians += (2 * Math.PI);
+            radians += 2 * Math.PI;
           }
           let degrees = Math.round(radians * (180 / Math.PI));
           degrees = degrees % 360;
@@ -3060,8 +3060,7 @@ class PartialEvaluator {
           if (descent < -0.5) {
             descent = -0.25;
           }
-        }
-        else {
+        } else {
           ascent = 0.75;
           descent = -0.25;
         }
@@ -3074,13 +3073,23 @@ class PartialEvaluator {
         let rect;
         if (!font.vertical) {
           // Horizontal: X-advance is appliedAdvance
-          rect = [0, textState.fontSize * descent, appliedAdvance, textState.fontSize * ascent];
+          rect = [
+            0,
+            textState.fontSize * descent,
+            appliedAdvance,
+            textState.fontSize * ascent,
+          ];
         } else {
           // Vertical: Y-advance is appliedAdvance (signed).
           // Use min/max so rect covers correct direction
           let y0 = Math.min(0, appliedAdvance);
           let y1 = Math.max(0, appliedAdvance);
-          rect = [textState.fontSize * descent, y0, textState.fontSize * ascent, y1];
+          rect = [
+            textState.fontSize * descent,
+            y0,
+            textState.fontSize * ascent,
+            y1,
+          ];
         }
 
         if (
@@ -3109,8 +3118,7 @@ class PartialEvaluator {
         let baseline = 0;
         if (rotation === 0 || rotation === 180) {
           baseline = baselineRect[1];
-        }
-        else if (rotation === 90 || rotation === 270) {
+        } else if (rotation === 90 || rotation === 270) {
           baseline = baselineRect[0];
         }
 
@@ -3121,7 +3129,7 @@ class PartialEvaluator {
         Util.applyTransform(p2, getCurrentTextTransform());
 
         let [x1, y1] = p1;
-        let [x2, y2] = p2
+        let [x2, y2] = p2;
 
         let fontSize = Math.hypot(x1 - x2, y1 - y2);
 
@@ -3133,32 +3141,32 @@ class PartialEvaluator {
 
         function normalizeChar(char) {
           // Normalize the character to NFKD form to decompose ligatures and combined characters
-          let normalizedChar = char.normalize('NFKD');
+          let normalizedChar = char.normalize("NFKD");
 
           // Handling known special cases where combining characters may still be decomposed
           const specialCases = {
-            'e\u0301': 'é',  // e + ´ -> é
-            'a\u0301': 'á',  // a + ´ -> á
-            'i\u0301': 'í',  // i + ´ -> í
-            'o\u0301': 'ó',  // o + ´ -> ó
-            'u\u0301': 'ú',  // u + ´ -> ú
-            'e\u0300': 'è',  // e + ` -> è
-            'a\u0300': 'à',  // a + ` -> à
-            'i\u0300': 'ì',  // i + ` -> ì
-            'o\u0300': 'ò',  // o + ` -> ò
-            'u\u0300': 'ù',  // u + ` -> ù
-            'e\u0302': 'ê',  // e + ^ -> ê
-            'a\u0302': 'â',  // a + ^ -> â
-            'i\u0302': 'î',  // i + ^ -> î
-            'o\u0302': 'ô',  // o + ^ -> ô
-            'u\u0302': 'û',  // u + ^ -> û
-            'e\u0308': 'ë',  // e + ¨ -> ë
-            'a\u0308': 'ä',  // a + ¨ -> ä
-            'i\u0308': 'ï',  // i + ¨ -> ï
-            'o\u0308': 'ö',  // o + ¨ -> ö
-            'u\u0308': 'ü',  // u + ¨ -> ü
-            'c\u0327': 'ç',  // c + ¸ -> ç
-            'n\u0303': 'ñ',  // n + ˜ -> ñ
+            "e\u0301": "é", // e + ´ -> é
+            "a\u0301": "á", // a + ´ -> á
+            "i\u0301": "í", // i + ´ -> í
+            "o\u0301": "ó", // o + ´ -> ó
+            "u\u0301": "ú", // u + ´ -> ú
+            "e\u0300": "è", // e + ` -> è
+            "a\u0300": "à", // a + ` -> à
+            "i\u0300": "ì", // i + ` -> ì
+            "o\u0300": "ò", // o + ` -> ò
+            "u\u0300": "ù", // u + ` -> ù
+            "e\u0302": "ê", // e + ^ -> ê
+            "a\u0302": "â", // a + ^ -> â
+            "i\u0302": "î", // i + ^ -> î
+            "o\u0302": "ô", // o + ^ -> ô
+            "u\u0302": "û", // u + ^ -> û
+            "e\u0308": "ë", // e + ¨ -> ë
+            "a\u0308": "ä", // a + ¨ -> ä
+            "i\u0308": "ï", // i + ¨ -> ï
+            "o\u0308": "ö", // o + ¨ -> ö
+            "u\u0308": "ü", // u + ¨ -> ü
+            "c\u0327": "ç", // c + ¸ -> ç
+            "n\u0303": "ñ", // n + ˜ -> ñ
             // Add other special cases here
           };
 
@@ -3173,7 +3181,7 @@ class PartialEvaluator {
         let charCode = glyph.unicode.charCodeAt(0);
 
         if (
-          glyph.unicode !== ' ' &&
+          glyph.unicode !== " " &&
           fontSize !== 0 &&
           // Skip null and other control characters to avoid breaking strings, DOM, end even browsers…
           // TODO: Consider skipping other non-printable characters as well
@@ -3182,9 +3190,11 @@ class PartialEvaluator {
           //  Zotero reader text layer character offsets
           !(
             // ASCII control characters
-            (charCode >= 0x00 && charCode <= 0x1F) ||
-            // Extended control characters
-            (charCode >= 0x7F && charCode <= 0x9F)
+            (
+              (charCode >= 0x00 && charCode <= 0x1f) ||
+              // Extended control characters
+              (charCode >= 0x7f && charCode <= 0x9f)
+            )
           )
         ) {
           textChunk.chars.push({
@@ -3755,6 +3765,698 @@ class PartialEvaluator {
     });
   }
 
+  async getPageContent({
+                         stream,
+                         task,
+                         resources,
+                         stateManager = null,
+                         seenStyles = new Set(),
+                         prevRefs = null,
+                       }) {
+    const objId = stream.dict?.objId;
+    const seenRefs = new RefSet(prevRefs);
+    if (objId) {
+      if (prevRefs?.has(objId)) {
+        throw new Error(
+          `getTextContent - ignoring circular reference: ${objId}`,
+        );
+      }
+      seenRefs.put(objId);
+    }
+
+    // Ensure that `resources`/`stateManager` is correctly initialized.
+    resources ||= Dict.empty;
+    stateManager ||= new StateManager(new TextState());
+
+    const self = this;
+    const xref = this.xref;
+
+    const chars = [];
+    let objects = [];
+    let pathRect = null;
+
+    const expandPathRect = (r, x, y) => {
+      if (!r) {
+        return [x, y, x, y];
+      }
+      return [
+        Math.min(r[0], x),
+        Math.min(r[1], y),
+        Math.max(r[2], x),
+        Math.max(r[3], y),
+      ];
+    };
+
+    /**
+     * Computes the axis-aligned bounding box after applying transformation.
+     * @param {number[]} rect - [x0, y0, x1, y1]
+     * @param {number[]} tm - Transformation matrix [a, b, c, d, e, f]
+     * @returns {number[]} Transformed AABB [minX, minY, maxX, maxY]
+     */
+    const computeTransformedAABB = (rect, tm) => {
+      if (!rect) {
+        return null;
+      }
+
+      const [x0, y0, x1, y1] = rect;
+      const corners = [
+        [x0, y0],
+        [x1, y0],
+        [x1, y1],
+        [x0, y1],
+      ];
+
+      const transformed = [Infinity, Infinity, -Infinity, -Infinity];
+
+      for (const [x, y] of corners) {
+        const tx = tm[0] * x + tm[2] * y + tm[4];
+        const ty = tm[1] * x + tm[3] * y + tm[5];
+        transformed[0] = Math.min(transformed[0], tx);
+        transformed[1] = Math.min(transformed[1], ty);
+        transformed[2] = Math.max(transformed[2], tx);
+        transformed[3] = Math.max(transformed[3], ty);
+      }
+
+      return transformed;
+    };
+
+    const preprocessor = new EvaluatorPreprocessor(stream, xref, stateManager);
+    const timeSlotManager = new TimeSlotManager();
+    const showSpacedTextBuffer = [];
+
+    let textState;
+
+    async function handleSetFont(fontName, fontRef) {
+      const translated = await self.loadFont(
+        fontName,
+        fontRef,
+        resources,
+        task,
+      );
+      textState.font = translated.font;
+      textState.fontMatrix = translated.font.fontMatrix || FONT_IDENTITY_MATRIX;
+      textState.fontName = translated.loadedName;
+    }
+
+    function normalizeChar(char) {
+      return normalizeUnicode(char);
+    }
+
+    function buildCharItems(charsList, extraSpacing = 0) {
+      const font = textState.font;
+      if (!font) {
+        return;
+      }
+
+      const glyphs = font.charsToGlyphs(charsList);
+      const scale = textState.fontMatrix[0] * textState.fontSize;
+
+      for (let i = 0, ii = glyphs.length; i < ii; i++) {
+        const glyph = glyphs[i];
+        if (glyph.category?.isInvisibleFormatMark) {
+          continue;
+        }
+
+        let glyphWidth = font.vertical
+          ? glyph.vmetric
+            ? glyph.vmetric[0]
+            : -glyph.width
+          : glyph.width;
+
+        let scaledDim = glyphWidth * scale;
+        let charSpacing =
+          textState.charSpacing + (i + 1 === ii ? extraSpacing : 0);
+
+        const tsm = [
+          textState.fontSize * textState.textHScale,
+          0,
+          0,
+          textState.fontSize,
+          0,
+          textState.textRise,
+        ];
+        let trm = Util.transform(textState.textMatrix, tsm);
+        trm = Util.transform(textState.ctm, trm);
+
+        if (!font.vertical) {
+          scaledDim *= textState.textHScale;
+          textState.translateTextMatrix(scaledDim, 0);
+        }
+        else {
+          textState.translateTextMatrix(0, scaledDim);
+        }
+
+        const glyphUnicode = glyph.unicode;
+        if (glyphUnicode !== " ") {
+          const rect = (() => {
+            let ascent = font.ascent;
+            let descent = font.descent;
+            if (descent > 0) {
+              descent = -descent;
+            }
+            if (ascent && descent) {
+              if (ascent > 1) {
+                ascent = 0.75;
+              }
+              if (descent < -0.5) {
+                descent = -0.25;
+              }
+            }
+            else {
+              ascent = 0.75;
+              descent = -0.25;
+            }
+
+            let r;
+            if (!font.vertical) {
+              r = [
+                0,
+                textState.fontSize * descent,
+                scaledDim,
+                textState.fontSize * ascent,
+              ];
+            }
+            else {
+              const y0 = Math.min(0, scaledDim);
+              const y1 = Math.max(0, scaledDim);
+              r = [
+                textState.fontSize * descent,
+                y0,
+                textState.fontSize * ascent,
+                y1,
+              ];
+            }
+
+            if (
+              font.isType3Font &&
+              textState.fontSize <= 1 &&
+              !isArrayEqual(textState.fontMatrix, FONT_IDENTITY_MATRIX)
+            ) {
+              const glyphHeight = font.bbox[3] - font.bbox[1];
+              if (glyphHeight > 0) {
+                if (!font.vertical) {
+                  r[1] = font.bbox[1] * textState.fontMatrix[3];
+                  r[3] = font.bbox[3] * textState.fontMatrix[3];
+                }
+                else {
+                  r[0] = font.bbox[1] * textState.fontMatrix[3];
+                  r[2] = font.bbox[3] * textState.fontMatrix[3];
+                }
+              }
+            }
+
+            const transformed = [Infinity, Infinity, -Infinity, -Infinity];
+            Util.axialAlignedBoundingBox(r, trm, transformed);
+            return transformed;
+          })();
+
+          chars.push({
+            u: normalizeChar(glyphUnicode),
+            c: glyph.charcode,
+            rect,
+            font: textState.font,
+            state: {
+              ...textState.raw,
+              Tm: trm,
+              Tf: [`/${textState.fontName}`, 1],
+            },
+          });
+        }
+
+        if (charSpacing) {
+          if (!font.vertical) {
+            textState.translateTextMatrix(
+              charSpacing * textState.textHScale,
+              0,
+            );
+          }
+          else {
+            textState.translateTextMatrix(0, -charSpacing);
+          }
+        }
+      }
+    }
+
+    function clearStrokeSpace(state, except) {
+      for (const key of ["CS", "SC", "SCN", "G", "RG", "K"]) {
+        if (key !== except) {
+          delete state[key];
+        }
+      }
+    }
+
+    function clearFillSpace(state, except) {
+      for (const key of ["cs", "sc", "scn", "g", "rg", "k"]) {
+        if (key !== except) {
+          delete state[key];
+        }
+      }
+    }
+
+    return new Promise((resolve, reject) => {
+      const operation = {};
+      let stop;
+
+      const next = promise => {
+        Promise.resolve(promise).then(
+          () => {
+            try {
+              processLoop();
+            }
+            catch (ex) {
+              reject(ex);
+            }
+          },
+          err => reject(err),
+        );
+      };
+
+      const processLoop = () => {
+        task.ensureNotTerminated();
+        timeSlotManager.reset();
+
+        while (!(stop = timeSlotManager.check())) {
+          operation.args = null;
+          if (!preprocessor.read(operation)) {
+            break;
+          }
+
+          textState = stateManager.state;
+          const fn = operation.fn;
+          const args = operation.args;
+
+          switch (fn | 0) {
+            // Path construction
+            case OPS.rectangle: {
+              const x = args[0];
+              const y = args[1];
+              const w = args[2];
+              const h = args[3];
+              const xw = x + w;
+              const yh = y + h;
+              pathRect = expandPathRect(pathRect, x, y);
+              pathRect = expandPathRect(pathRect, xw, y);
+              pathRect = expandPathRect(pathRect, xw, yh);
+              pathRect = expandPathRect(pathRect, x, yh);
+              break;
+            }
+            case OPS.moveTo: {
+              const x = args[0];
+              const y = args[1];
+              pathRect = expandPathRect(pathRect, x, y);
+              break;
+            }
+            case OPS.lineTo: {
+              const x = args[0];
+              const y = args[1];
+              pathRect = expandPathRect(pathRect, x, y);
+              break;
+            }
+            case OPS.curveTo: {
+              pathRect = expandPathRect(pathRect, args[0], args[1]);
+              pathRect = expandPathRect(pathRect, args[2], args[3]);
+              pathRect = expandPathRect(pathRect, args[4], args[5]);
+              break;
+            }
+            case OPS.curveTo2: {
+              pathRect = expandPathRect(pathRect, args[0], args[1]);
+              pathRect = expandPathRect(pathRect, args[2], args[3]);
+              break;
+            }
+            case OPS.curveTo3: {
+              pathRect = expandPathRect(pathRect, args[0], args[1]);
+              pathRect = expandPathRect(pathRect, args[2], args[3]);
+              break;
+            }
+            case OPS.closePath:
+              break;
+
+            // Path painting -> collect path object
+            case OPS.stroke:
+            case OPS.closeStroke:
+            case OPS.fill:
+            case OPS.eoFill:
+            case OPS.fillStroke:
+            case OPS.eoFillStroke:
+            case OPS.closeFillStroke:
+            case OPS.closeEOFillStroke:
+            case OPS.endPath: {
+              if (pathRect) {
+                if (pathRect[2] - pathRect[0] < 1) {
+                  pathRect[2] = pathRect[0] + 1;
+                }
+                if (pathRect[3] - pathRect[1] < 1) {
+                  pathRect[3] = pathRect[1] + 1;
+                }
+                const tm = textState.ctm;
+                objects.push({
+                  type: "path",
+                  rect: computeTransformedAABB(pathRect, tm),
+                  strokeWidth: Array.isArray(textState.raw.w)
+                    ? textState.raw.w[0]
+                    : textState.raw.w,
+                });
+              }
+              pathRect = null;
+              break;
+            }
+
+            // Text state
+            case OPS.setFont: {
+              const fontName = args[0].name;
+              const fontSize = args[1];
+              if (
+                textState.font &&
+                fontName === textState.fontName &&
+                fontSize === textState.fontSize
+              ) {
+                break;
+              }
+              textState.fontSize = fontSize;
+              next(handleSetFont(fontName, null));
+              return;
+            }
+            case OPS.setCharSpacing:
+              textState.charSpacing = args[0];
+              break;
+            case OPS.setWordSpacing:
+              textState.wordSpacing = args[0];
+              break;
+            case OPS.setTextRise:
+              textState.textRise = args[0];
+              break;
+            case OPS.setHScale:
+              textState.textHScale = args[0] / 100;
+              break;
+            case OPS.setLeading:
+              textState.leading = args[0];
+              break;
+            case OPS.moveText:
+              textState.translateTextLineMatrix(args[0], args[1]);
+              textState.textMatrix = textState.textLineMatrix.slice();
+              break;
+            case OPS.setLeadingMoveText:
+              textState.leading = -args[1];
+              textState.translateTextLineMatrix(args[0], args[1]);
+              textState.textMatrix = textState.textLineMatrix.slice();
+              break;
+            case OPS.nextLine:
+              textState.carriageReturn();
+              break;
+            case OPS.setTextMatrix:
+              textState.setTextMatrix(
+                args[0],
+                args[1],
+                args[2],
+                args[3],
+                args[4],
+                args[5],
+              );
+              textState.setTextLineMatrix(
+                args[0],
+                args[1],
+                args[2],
+                args[3],
+                args[4],
+                args[5],
+              );
+              break;
+            case OPS.beginText:
+              textState.textMatrix = IDENTITY_MATRIX.slice();
+              textState.textLineMatrix = IDENTITY_MATRIX.slice();
+              break;
+
+            // Text showing
+            case OPS.showSpacedText: {
+              if (!stateManager.state.font) {
+                self.ensureStateFont(stateManager.state);
+                continue;
+              }
+              const spaceFactor =
+                ((textState.font.vertical ? 1 : -1) * textState.fontSize) /
+                1000;
+              const elements = args[0];
+              for (let i = 0, ii = elements.length; i < ii; i++) {
+                const item = elements[i];
+                if (typeof item === "string") {
+                  showSpacedTextBuffer.push(item);
+                }
+                else if (typeof item === "number" && item !== 0) {
+                  const str = showSpacedTextBuffer.join("");
+                  showSpacedTextBuffer.length = 0;
+                  buildCharItems(str, item * spaceFactor);
+                }
+              }
+              if (showSpacedTextBuffer.length > 0) {
+                const str = showSpacedTextBuffer.join("");
+                showSpacedTextBuffer.length = 0;
+                buildCharItems(str, 0);
+              }
+              break;
+            }
+            case OPS.showText:
+              if (!stateManager.state.font) {
+                self.ensureStateFont(stateManager.state);
+                continue;
+              }
+              buildCharItems(args[0], 0);
+              break;
+            case OPS.nextLineShowText:
+              if (!stateManager.state.font) {
+                self.ensureStateFont(stateManager.state);
+                continue;
+              }
+              textState.carriageReturn();
+              buildCharItems(args[0], 0);
+              break;
+            case OPS.nextLineSetSpacingShowText:
+              if (!stateManager.state.font) {
+                self.ensureStateFont(stateManager.state);
+                continue;
+              }
+              textState.wordSpacing = args[0];
+              textState.charSpacing = args[1];
+              textState.carriageReturn();
+              buildCharItems(args[2], 0);
+              break;
+
+            // General graphics state
+            case OPS.setLineWidth:
+              textState.raw.w = args;
+              break;
+            case OPS.setLineCap:
+              textState.raw.J = args;
+              break;
+            case OPS.setLineJoin:
+              textState.raw.j = args;
+              break;
+            case OPS.setMiterLimit:
+              textState.raw.M = args;
+              break;
+            case OPS.setDash:
+              textState.raw.d = args;
+              break;
+            case OPS.setRenderingIntent:
+              textState.raw.ri = args;
+              break;
+            case OPS.setFlatness:
+              textState.raw.i = args;
+              break;
+            case OPS.setGState:
+              textState.raw.gs = args;
+              break;
+
+            // Color
+            case OPS.setStrokeColorSpace:
+              clearStrokeSpace(textState.raw);
+              textState.raw.CS = args;
+              break;
+            case OPS.setFillColorSpace:
+              clearFillSpace(textState.raw);
+              textState.raw.cs = args;
+              break;
+            case OPS.setStrokeColor:
+              clearStrokeSpace(textState.raw, "CS");
+              textState.raw.SC = args;
+              break;
+            case OPS.setStrokeColorN:
+              clearStrokeSpace(textState.raw, "CS");
+              textState.raw.SCN = args;
+              break;
+            case OPS.setFillColor:
+              clearFillSpace(textState.raw, "cs");
+              textState.raw.sc = args;
+              break;
+            case OPS.setFillColorN:
+              clearFillSpace(textState.raw, "cs");
+              textState.raw.scn = args;
+              break;
+            case OPS.setStrokeGray:
+              clearStrokeSpace(textState.raw);
+              textState.raw.G = args;
+              break;
+            case OPS.setFillGray:
+              clearFillSpace(textState.raw);
+              textState.raw.g = args;
+              break;
+            case OPS.setStrokeRGBColor:
+              clearStrokeSpace(textState.raw);
+              textState.raw.RG = args;
+              break;
+            case OPS.setFillRGBColor:
+              clearFillSpace(textState.raw);
+              textState.raw.rg = args;
+              break;
+            case OPS.setStrokeCMYKColor:
+              clearStrokeSpace(textState.raw);
+              textState.raw.K = args;
+              break;
+            case OPS.setFillCMYKColor:
+              clearFillSpace(textState.raw);
+              textState.raw.k = args;
+              break;
+
+            // XObjects and images
+            case OPS.paintXObject: {
+              if (!resources) {
+                break;
+              }
+              const xobjs = resources.get("XObject") || Dict.empty;
+              const isValidName = args[0] instanceof Name;
+              const name = args[0].name;
+
+              if (!isValidName) {
+                throw new FormatError("XObject must be referred to by name.");
+              }
+
+              let xobj = xobjs.getRaw(name);
+              if (xobj instanceof Ref) {
+                xobj = xref.fetch(xobj);
+              }
+
+              if (!(xobj instanceof BaseStream)) {
+                throw new FormatError("XObject should be a stream");
+              }
+
+              const { dict } = xobj;
+              const type = dict.get("Subtype");
+              if (!(type instanceof Name)) {
+                throw new FormatError("XObject should have a Name subtype");
+              }
+
+              if (type.name === "Form") {
+                let bbox = dict.getArray("BBox");
+                if (Array.isArray(bbox) && bbox.length === 4) {
+                  bbox = Util.normalizeRect(bbox);
+                }
+                else {
+                  bbox = null;
+                }
+                const tm = textState.ctm;
+
+                // Push the wrapping xobject first
+                const xobjectEntry = {
+                  type: "xobject",
+                  rect: computeTransformedAABB(bbox, tm),
+                  refName: name
+                };
+                objects.push(xobjectEntry);
+
+                // Recursively process the Form XObject
+                const currentState = stateManager.state.clone();
+                const xObjStateManager = new StateManager(currentState);
+
+                const matrix = lookupMatrix(dict.getArray("Matrix"), null);
+                if (matrix) {
+                  xObjStateManager.transform(matrix);
+                }
+
+                const localResources = dict.get("Resources");
+
+                next(
+                  self.getPageContent({
+                    stream: xobj,
+                    task,
+                    resources:
+                      localResources instanceof Dict
+                        ? localResources
+                        : resources,
+                    stateManager: xObjStateManager,
+                    seenStyles,
+                    prevRefs: seenRefs,
+                  }).then(result => {
+                    // Attach recursive results to the xobject entry
+                    chars.push(...result.chars);
+                    // xobjectEntry.chars = result.chars;
+                    // xobjectEntry.objects = result.objects;
+                  }).catch(reason => {
+                    if (reason instanceof AbortException) {
+                      return;
+                    }
+                    if (self.options.ignoreErrors) {
+                      warn(`getPageContent - ignoring XObject: "${reason}".`);
+                      return;
+                    }
+                    throw reason;
+                  }),
+                );
+                return;
+              }
+              else {
+                const tm = textState.ctm;
+                objects.push({
+                  type: "image",
+                  rect: computeTransformedAABB([0, 0, 1, 1], tm),
+                  refName: name,
+                });
+              }
+              break;
+            }
+            case OPS.endInlineImage: {
+              const tm = textState.ctm;
+              objects.push({
+                type: "inline-image",
+                rect: computeTransformedAABB([0, 0, 1, 1], tm),
+              });
+              break;
+            }
+
+            // Graphics state stack and marked content — no extra handling needed here.
+            case OPS.save:
+            case OPS.restore:
+            case OPS.beginMarkedContent:
+            case OPS.beginMarkedContentProps:
+            case OPS.endMarkedContent:
+              break;
+          } // switch
+        } // while
+
+        if (stop) {
+          next(deferred);
+          return;
+        }
+
+        resolve({ chars, objects });
+      };
+
+      try {
+        processLoop();
+      }
+      catch (ex) {
+        if (ex instanceof AbortException) {
+          return;
+        }
+        if (this.options.ignoreErrors) {
+          warn(
+            `getTextContent - ignoring errors during "${task.name}" task: "${ex}".`,
+          );
+          resolve({ chars, objects });
+          return;
+        }
+        reject(ex);
+      }
+    });
+  }
   async extractDataStructures(dict, properties) {
     const xref = this.xref;
     let cidToGidBytes;
@@ -5129,6 +5831,8 @@ class TextState {
     this.leading = 0;
     this.textHScale = 1;
     this.textRise = 0;
+
+    this.raw = {};
   }
 
   setTextMatrix(a, b, c, d, e, f) {

@@ -1694,6 +1694,10 @@ class PDFPageProxy {
     });
   }
 
+  async getPageContent() {
+    return this._transport.messageHandler.sendWithPromise("GetPageContent", { pageIndex: this._pageIndex });
+  }
+
   /**
    * @returns {Promise<StructTreeNode>} A promise that is resolved with a
    *   {@link StructTreeNode} object that represents the page's structure tree,

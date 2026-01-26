@@ -14,12 +14,12 @@ export class Module {
 
   _structuredCharsProvider = async (pageIndex, priority) => {
     if (!priority) {
-      await new Promise((resolve) => setTimeout(resolve));
+      await new Promise(resolve => setTimeout(resolve));
     }
 
     let page = await this._pdfDocument.getPage(pageIndex);
     let task = {
-      name: 'dummy-task',
+      name: "dummy-task",
       ensureNotTerminated() {
         return true;
       },
@@ -63,7 +63,16 @@ export class Module {
     let page = await this._pdfDocument.getPage(pageIndex);
     let r = Math.random().toString();
     let chars = await this._structuredCharsProvider(pageIndex, true);
-    let overlays = await getRegularLinkOverlays(this._pdfDocument, chars, pageIndex);
+    let overlays = await getRegularLinkOverlays(
+      this._pdfDocument,
+      chars,
+      pageIndex
+    );
+
+    let a = await this.getPageCharsObjects(pageIndex);
+    console.log("chars objects", a);
+
+
     return {
       partial: true,
       chars,
@@ -75,11 +84,18 @@ export class Module {
   async getProcessedData({ metadataPagesField } = {}) {
     const MAX_PAGES = 100;
     await this._pdfDocument.pdfManager.ensureDoc("numPages");
-    let pageLabels = await getPageLabels(this._pdfDocument, this._structuredCharsProvider);
-    let contentRects = await getContentRects(this._pdfDocument, this._structuredCharsProvider, pageLabels);
+    let pageLabels = await getPageLabels(
+      this._pdfDocument,
+      this._structuredCharsProvider
+    );
+    let contentRects = await getContentRects(
+      this._pdfDocument,
+      this._structuredCharsProvider,
+      pageLabels
+    );
 
     let structuredCharsCache = new Map();
-    let customStructuredCharsProvider = async (pageIndex) => {
+    let customStructuredCharsProvider = async pageIndex => {
       let chars = structuredCharsCache.get(pageIndex);
       if (chars) {
         return chars;
@@ -94,7 +110,11 @@ export class Module {
       return chars;
     };
 
-    let citationAndReferenceOverlays = await getCitationAndReferenceOverlays(this._pdfDocument, customStructuredCharsProvider, 100);
+    let citationAndReferenceOverlays = await getCitationAndReferenceOverlays(
+      this._pdfDocument,
+      customStructuredCharsProvider,
+      100
+    );
 
     let pages = new Map();
 
@@ -111,7 +131,11 @@ export class Module {
       page.overlays.push(overlay);
     }
 
-    let linkOverlaysMap = await getLinkOverlays(this._pdfDocument, customStructuredCharsProvider, this._contentRect);
+    let linkOverlaysMap = await getLinkOverlays(
+      this._pdfDocument,
+      customStructuredCharsProvider,
+      this._contentRect
+    );
 
     for (let [pageIndex, linkOverlays] of linkOverlaysMap) {
       // Exclude link overlays that intersect reference overlays and aren't a bibliography record or external url link
@@ -124,9 +148,16 @@ export class Module {
         }
         // Push all external links, and all internal links that doesn't intersect with citations
         // pointing to the same page as the first reference.
-        if (linkOverlay.type === 'external-link' || !citationAndReferenceOverlays.some(x =>
-          x.references.some(y => y.position.pageIndex === linkOverlay.destinationPosition.pageIndex) &&
-          overlaysIntersect(x, linkOverlay))
+        if (
+          linkOverlay.type === "external-link" ||
+          !citationAndReferenceOverlays.some(
+            x =>
+              x.references.some(
+                y =>
+                  y.position.pageIndex ===
+                  linkOverlay.destinationPosition.pageIndex
+              ) && overlaysIntersect(x, linkOverlay)
+          )
         ) {
           page.overlays.push(linkOverlay);
         }
@@ -144,9 +175,15 @@ export class Module {
   }
 
   async getOutline() {
-    let data = await getExistingOutline(this._pdfDocument, this._structuredCharsProvider);
+    let data = await getExistingOutline(
+      this._pdfDocument,
+      this._structuredCharsProvider
+    );
     if (!data.length) {
-      data = await extractOutline(this._pdfDocument, this._structuredCharsProvider);
+      data = await extractOutline(
+        this._pdfDocument,
+        this._structuredCharsProvider
+      );
     }
     return data || [];
   }
@@ -155,18 +192,34 @@ export class Module {
     return this._structuredCharsProvider(pageIndex);
   }
 
+  async getPageCharsObjects(pageIndex) {
+    let chars = await this._structuredCharsProvider(pageIndex);
+    let page = await this._pdfDocument.getPage(pageIndex);
+
+    let task = {
+      name: "dummy-task",
+      ensureNotTerminated() {
+        return true;
+      },
+    };
+    let data = await page.getPageContent({
+      handler: this._pdfDocument.pdfManager._handler,
+      task,
+    });
+    return { chars, objects: data.objects };
+  }
+
   async getPageLabels() {
     if (this._pageLabelsPromise) {
       await this._pageLabelsPromise;
       return this._pageLabels;
     }
     let resolvePageLabelsPromise;
-    this._pageLabelsPromise = new Promise((resolve) => {
+    this._pageLabelsPromise = new Promise(resolve => {
       resolvePageLabelsPromise = resolve;
     });
-
     let structuredCharsCache = new Map();
-    let customStructuredCharsProvider = async (pageIndex) => {
+    let customStructuredCharsProvider = async pageIndex => {
       let chars = structuredCharsCache.get(pageIndex);
       if (chars) {
         return chars;
@@ -176,7 +229,10 @@ export class Module {
       return chars;
     };
 
-    this._pageLabels = await getPageLabels(this._pdfDocument, customStructuredCharsProvider);
+    this._pageLabels = await getPageLabels(
+      this._pdfDocument,
+      customStructuredCharsProvider
+    );
     resolvePageLabelsPromise();
     return this._pageLabels;
   }

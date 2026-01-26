@@ -802,6 +802,17 @@ class WorkerMessageHandler {
       });
     });
 
+    handler.on("GetPageContent", async function (data) {
+      const { pageIndex } = data;
+
+      let page = await pdfManager.getPage(pageIndex);
+      const task = new WorkerTask("GetPageContent: page " + pageIndex);
+      startWorkerTask(task);
+      let res = await page.getPageContent({ handler, task });
+      finishWorkerTask(task);
+      return res;
+    });
+
     handler.on("GetPageData", async function (data) {
       let pageIndex = data.pageIndex;
       let task = new WorkerTask('GetPageData: ' + pageIndex);

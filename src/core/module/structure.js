@@ -823,6 +823,7 @@ function split(chars, reflowRTL) {
   let MAX_LINE_SPACING = 5;
   let MIN_LINE_SPACING = -2;
   let MAX_LINE_SPACING_CHANGE = 2;
+  let INDENT_EPS = 10;
 
   let isGapValid = (gap) => gap >= MIN_LINE_SPACING && gap <= MAX_LINE_SPACING;
 
@@ -831,6 +832,7 @@ function split(chars, reflowRTL) {
 
 
   let paragraphBreaks = [];
+  let indentedBreaks = new Set();
   for (let i = 1; i < lineBreaks.length - 1; i++) {
     let currentLine = { start: lineBreaks[i - 1], end: lineBreaks[i] - 1 };
     let nextLine = { start: lineBreaks[i] || 0, end: lineBreaks[i + 1] - 1 };
@@ -861,17 +863,60 @@ function split(chars, reflowRTL) {
     let currentLineFontName = mostCommonFontName(chars.slice(currentLine.start, currentLine.end));
     let nextLineFontName = mostCommonFontName(chars.slice(nextLine.start, nextLine.end));
 
+    let rotation = chars[currentLine.start].rotation;
+    let isIndented = (
+      rotation === 0 && nextRect[0] > currentRect[0] + INDENT_EPS
+      || rotation === 90 && nextRect[1] > currentRect[1] + INDENT_EPS
+      || rotation === 180 && currentRect[2] > nextRect[2] + INDENT_EPS
+      || rotation === 270 && currentRect[3] > nextRect[3] + INDENT_EPS
+    );
+
     if (
       // The lines shouldn't be in the same row
       !allowGap
       || !(currentRect[1] > nextRect[3])
       || currentLineFontName !== nextLineFontName && currentRect[2] < nextRect[2] - 10
-      || Math.abs(currentLineHeight - nextLineHeight) > 2) {
+      || Math.abs(currentLineHeight - nextLineHeight) > 2
+      // Next line is indented relative to the current line
+      || isIndented) {
       paragraphBreaks.push(lineBreaks[i]);
+      if (isIndented) {
+        indentedBreaks.add(lineBreaks[i]);
+      }
     }
   }
 
   paragraphBreaks.push(chars.length);
+
+  // Merge single-line paragraphs back into the previous paragraph
+  // when they share the same font, to prevent over-splitting.
+  // Skip breaks triggered by indentation, as those are intentional.
+  let paragraphStarts = [0];
+  for (let pb of paragraphBreaks) {
+    if (pb < chars.length) {
+      paragraphStarts.push(pb);
+    }
+  }
+  let removedBreaks = new Set();
+  for (let p = 1; p < paragraphStarts.length; p++) {
+    let currentStart = paragraphStarts[p];
+    if (indentedBreaks.has(currentStart)) {
+      continue;
+    }
+    let currentEnd = (p + 1 < paragraphStarts.length) ? paragraphStarts[p + 1] : chars.length;
+    // Count lines in this paragraph
+    let lineCount = 0;
+    for (let lb of lineBreaks) {
+      if (lb >= currentStart && lb < currentEnd) {
+        lineCount++;
+      }
+    }
+    if (lineCount === 1
+      && chars[currentStart].fontName === chars[paragraphStarts[p - 1]].fontName) {
+      removedBreaks.add(currentStart);
+    }
+  }
+  paragraphBreaks = paragraphBreaks.filter(pb => !removedBreaks.has(pb));
 
   for (let paragraphBreak of paragraphBreaks) {
     chars[paragraphBreak - 1].paragraphBreakAfter = true;

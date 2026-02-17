@@ -616,25 +616,6 @@ function getBoundingRect(objs, from, to) {
   ];
 }
 
-function roundRect(rect) {
-  return rect.map(n => Math.round(n * 1000) / 1000);
-}
-
-function median(values) {
-  if(values.length ===0) throw new Error("No inputs");
-
-  values.sort(function(a,b){
-    return a-b;
-  });
-
-  var half = Math.floor(values.length / 2);
-
-  if (values.length % 2)
-    return values[half];
-
-  return (values[half - 1] + values[half]) / 2.0;
-}
-
 function medianFinite(values) {
   const arr = values.filter(Number.isFinite).slice().sort((a, b) => a - b);
   if (!arr.length) {
@@ -694,73 +675,10 @@ function classifySupSubForLine(chars, from, to, {
   }
 }
 
-function getLineBottom(chars, from, to) {
-  let values = [];
-  for (let i = from; i <= to; i++) {
-    let char = chars[i];
-    if (char.rotation === 0) {
-      values.push(char.rect[1]);
-    }
-    else if (char.rotation === 90) {
-      values.push(char.rect[2]);
-    }
-    else if (char.rotation === 180) {
-      values.push(char.rect[3]);
-    }
-    else if (char.rotation === 270) {
-      values.push(char.rect[0]);
-    }
-  }
-  return median(values);
-}
-
-function getLineTop(chars, from, to) {
-  let values = [];
-  for (let i = from; i <= to; i++) {
-    let char = chars[i];
-    if (char.rotation === 0) {
-      values.push(char.rect[3]);
-    }
-    else if (char.rotation === 90) {
-      values.push(char.rect[0]);
-    }
-    else if (char.rotation === 180) {
-      values.push(char.rect[1]);
-    }
-    else if (char.rotation === 270) {
-      values.push(char.rect[2]);
-    }
-  }
-  return median(values);
-}
-
-function mostCommonFontName(chars) {
-  const fontCount = {};
-
-  // Count each fontName in the array
-  for (let i = 0; i < chars.length; i++) {
-    const fontName = chars[i].fontName;
-    fontCount[fontName] = (fontCount[fontName] || 0) + 1;
-  }
-
-  // Find the fontName with the highest count
-  let mostCommonFont = null;
-  let maxCount = 0;
-  for (const fontName in fontCount) {
-    if (fontCount[fontName] > maxCount) {
-      maxCount = fontCount[fontName];
-      mostCommonFont = fontName;
-    }
-  }
-
-  return mostCommonFont;
-}
-
 function split(chars, reflowRTL) {
   if (!chars.length) {
     return [];
   }
-  let lines = [];
 
   let hasRTL = false;
   for (let char of chars) {
@@ -867,126 +785,6 @@ function split(chars, reflowRTL) {
     }
   }
 
-  let lineSpacings = [];
-  for (let i = 1; i < lineBreaks.length - 1; i++) {
-    let previousBreak = lineBreaks[i - 1];
-    let currentBreak = lineBreaks[i];
-    let nextBreak = lineBreaks[i + 1];
-    let currentLineBottom = getLineBottom(chars, previousBreak, currentBreak - 1);
-    let nextLineTop = getLineTop(chars, currentBreak, nextBreak - 1);
-    lineSpacings.push(currentLineBottom - nextLineTop);
-  }
-
-  let lineHeights = [];
-  for (let i = 1; i < lineBreaks.length; i++) {
-    let previousBreak = lineBreaks[i - 1];
-    let currentBreak = lineBreaks[i];
-    let lineTop = getLineTop(chars, previousBreak, currentBreak - 1);
-    let lineBottom = getLineBottom(chars, previousBreak, currentBreak - 1);
-    lineHeights.push(lineTop - lineBottom);
-  }
-
-  let MAX_LINE_SPACING = 5;
-  let MIN_LINE_SPACING = -2;
-  let MAX_LINE_SPACING_CHANGE = 2;
-  let INDENT_EPS = 10;
-
-  let isGapValid = (gap) => gap >= MIN_LINE_SPACING && gap <= MAX_LINE_SPACING;
-
-
-
-
-
-  let paragraphBreaks = [];
-  let indentedBreaks = new Set();
-  for (let i = 1; i < lineBreaks.length - 1; i++) {
-    let currentLine = { start: lineBreaks[i - 1], end: lineBreaks[i] - 1 };
-    let nextLine = { start: lineBreaks[i] || 0, end: lineBreaks[i + 1] - 1 };
-
-    let currentRect = getBoundingRect(chars, lineBreaks[i - 1], lineBreaks[i] - 1);
-    let nextRect = getBoundingRect(chars, lineBreaks[i], lineBreaks[i + 1] - 1);
-
-    let currentLineSpacing = lineSpacings[i - 1];
-    let nextLineSpacing = lineSpacings[i];
-
-    let currentLineHeight = lineHeights[i - 1];
-    let nextLineHeight = lineHeights[i];
-
-    let allowGap = false;
-
-    if (isGapValid(currentLineSpacing) && !isGapValid(nextLineSpacing)) {
-      allowGap = true;
-    }
-    else if (isGapValid(currentLineSpacing) && isGapValid(nextLineSpacing)) {
-      if (Math.abs(currentLineSpacing - nextLineSpacing) < MAX_LINE_SPACING_CHANGE) {
-        allowGap = true;
-      }
-      else if (currentLineSpacing < nextLineSpacing) {
-        allowGap = true;
-      }
-    }
-
-    let currentLineFontName = mostCommonFontName(chars.slice(currentLine.start, currentLine.end));
-    let nextLineFontName = mostCommonFontName(chars.slice(nextLine.start, nextLine.end));
-
-    let rotation = chars[currentLine.start].rotation;
-    let isIndented = (
-      rotation === 0 && nextRect[0] > currentRect[0] + INDENT_EPS
-      || rotation === 90 && nextRect[1] > currentRect[1] + INDENT_EPS
-      || rotation === 180 && currentRect[2] > nextRect[2] + INDENT_EPS
-      || rotation === 270 && currentRect[3] > nextRect[3] + INDENT_EPS
-    );
-
-    if (
-      // The lines shouldn't be in the same row
-      !allowGap
-      || !(currentRect[1] > nextRect[3])
-      || currentLineFontName !== nextLineFontName && currentRect[2] < nextRect[2] - 10
-      || Math.abs(currentLineHeight - nextLineHeight) > 2
-      // Next line is indented relative to the current line
-      || isIndented) {
-      paragraphBreaks.push(lineBreaks[i]);
-      if (isIndented) {
-        indentedBreaks.add(lineBreaks[i]);
-      }
-    }
-  }
-
-  paragraphBreaks.push(chars.length);
-
-  // Merge single-line paragraphs back into the previous paragraph
-  // when they share the same font, to prevent over-splitting.
-  // Skip breaks triggered by indentation, as those are intentional.
-  let paragraphStarts = [0];
-  for (let pb of paragraphBreaks) {
-    if (pb < chars.length) {
-      paragraphStarts.push(pb);
-    }
-  }
-  let removedBreaks = new Set();
-  for (let p = 1; p < paragraphStarts.length; p++) {
-    let currentStart = paragraphStarts[p];
-    if (indentedBreaks.has(currentStart)) {
-      continue;
-    }
-    let currentEnd = (p + 1 < paragraphStarts.length) ? paragraphStarts[p + 1] : chars.length;
-    // Count lines in this paragraph
-    let lineCount = 0;
-    for (let lb of lineBreaks) {
-      if (lb >= currentStart && lb < currentEnd) {
-        lineCount++;
-      }
-    }
-    if (lineCount === 1
-      && chars[currentStart].fontName === chars[paragraphStarts[p - 1]].fontName) {
-      removedBreaks.add(currentStart);
-    }
-  }
-  paragraphBreaks = paragraphBreaks.filter(pb => !removedBreaks.has(pb));
-
-  for (let paragraphBreak of paragraphBreaks) {
-    chars[paragraphBreak - 1].paragraphBreakAfter = true;
-  }
 
   for (let i = 1; i < lineBreaks.length; i++) {
     let lineStart = lineBreaks[i - 1];
@@ -1017,30 +815,12 @@ function split(chars, reflowRTL) {
   }
 
   for (let char of chars) {
-    // OCRed PDFs sometimes result in each line being a separate paragraph
-    // while, normal PDFs only need this when paragraph is wrapped to another column
-    if (char.lineBreakAfter /*&& !char.paragraphBreakAfter*/ && dashChars.has(char.c)) {
+    if (char.lineBreakAfter && dashChars.has(char.c)) {
       char.ignorable = true;
     }
   }
 
   return chars;
-}
-
-function getTextFromChars(chars) {
-  let text = [];
-  for (let char of chars) {
-    if (!char.ignorable) {
-      text.push(char.c);
-    }
-    if (char.spaceAfter || char.lineBreakAfter && !char.paragraphBreakAfter) {
-      text.push(' ');
-    }
-    if (char.paragraphBreakAfter) {
-      text.push('\n\n');
-    }
-  }
-  return text.join('').trim();
 }
 
 export function getStructuredChars(chars) {

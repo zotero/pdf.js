@@ -3858,8 +3858,93 @@ class PartialEvaluator {
       textState.fontName = translated.loadedName;
     }
 
+    function getCurrentTextTransform() {
+      const font = textState.font;
+      const tsm = [
+        textState.fontSize * textState.textHScale,
+        0,
+        0,
+        textState.fontSize,
+        0,
+        textState.textRise,
+      ];
+
+      if (
+        font.isType3Font &&
+        (textState.fontSize <= 1 || font.isCharBBox) &&
+        !isArrayEqual(textState.fontMatrix, FONT_IDENTITY_MATRIX)
+      ) {
+        const glyphHeight = font.bbox[3] - font.bbox[1];
+        if (glyphHeight > 0) {
+          tsm[3] *= glyphHeight * textState.fontMatrix[3];
+        }
+      }
+
+      return Util.transform(
+        textState.ctm,
+        Util.transform(textState.textMatrix, tsm),
+      );
+    }
+
+    function closestStandardAngle(degrees) {
+      const standardAngles = [0, 90, 180, 270];
+      let closestAngle = standardAngles[0];
+      let minDifference = Math.abs(degrees - closestAngle);
+
+      for (let i = 1; i < standardAngles.length; i++) {
+        const difference = Math.abs(degrees - standardAngles[i]);
+        if (difference < minDifference) {
+          minDifference = difference;
+          closestAngle = standardAngles[i];
+        }
+      }
+
+      return closestAngle;
+    }
+
+    function matrixToDegrees(matrix) {
+      let radians = Math.atan2(matrix[1], matrix[0]);
+      if (radians < 0) {
+        radians += 2 * Math.PI;
+      }
+      let degrees = Math.round(radians * (180 / Math.PI));
+      degrees %= 360;
+      if (degrees < 0) {
+        degrees += 360;
+      }
+      return closestStandardAngle(degrees);
+    }
+
     function normalizeChar(char) {
-      return normalizeUnicode(char);
+      let normalizedChar = char.normalize("NFKD");
+      const specialCases = {
+        "e\u0301": "é",
+        "a\u0301": "á",
+        "i\u0301": "í",
+        "o\u0301": "ó",
+        "u\u0301": "ú",
+        "e\u0300": "è",
+        "a\u0300": "à",
+        "i\u0300": "ì",
+        "o\u0300": "ò",
+        "u\u0300": "ù",
+        "e\u0302": "ê",
+        "a\u0302": "â",
+        "i\u0302": "î",
+        "o\u0302": "ô",
+        "u\u0302": "û",
+        "e\u0308": "ë",
+        "a\u0308": "ä",
+        "i\u0308": "ï",
+        "o\u0308": "ö",
+        "u\u0308": "ü",
+        "c\u0327": "ç",
+        "n\u0303": "ñ",
+      };
+      if (specialCases[normalizedChar]) {
+        return specialCases[normalizedChar];
+      }
+      return normalizedChar;
     }
 
     function buildCharItems(charsList, extraSpacing = 0) {
@@ -3873,30 +3958,37 @@ class PartialEvaluator {
 
       for (let i = 0, ii = glyphs.length; i < ii; i++) {
         const glyph = glyphs[i];
-        if (glyph.category?.isInvisibleFormatMark) {
+        const { category } = glyph;
+
+        if (category?.isInvisibleFormatMark) {
           continue;
         }
 
-        let glyphWidth = font.vertical
-          ? glyph.vmetric
-            ? glyph.vmetric[0]
-            : -glyph.width
-          : glyph.width;
+        let glyphWidth = glyph.width;
+        if (font.vertical) {
+          glyphWidth = glyph.vmetric ? glyph.vmetric[0] : -glyphWidth;
+        }
 
         let scaledDim = glyphWidth * scale;
         let charSpacing =
           textState.charSpacing + (i + 1 === ii ? extraSpacing : 0);
 
-        const tsm = [
-          textState.fontSize * textState.textHScale,
-          0,
-          0,
-          textState.fontSize,
-          0,
-          textState.textRise,
-        ];
-        let trm = Util.transform(textState.textMatrix, tsm);
-        trm = Util.transform(textState.ctm, trm);
+        if (category?.isWhitespace) {
+          if (!font.vertical) {
+            charSpacing += scaledDim + textState.wordSpacing;
+            textState.translateTextMatrix(
+              charSpacing * textState.textHScale,
+              0,
+            );
+          }
+          else {
+            charSpacing += -scaledDim + textState.wordSpacing;
+            textState.translateTextMatrix(0, -charSpacing);
+          }
+          continue;
+        }
+
+        const m = Util.transform(textState.ctm, textState.textMatrix);
 
         if (!font.vertical) {
           scaledDim *= textState.textHScale;
@@ -3907,7 +3999,14 @@ class PartialEvaluator {
         }
 
         const glyphUnicode = glyph.unicode;
-        if (glyphUnicode !== " ") {
+        const charCode = glyphUnicode.charCodeAt(0);
+        if (
+          glyphUnicode !== " " &&
+          !(
+            (charCode >= 0x00 && charCode <= 0x1f) ||
+            (charCode >= 0x7f && charCode <= 0x9f)
+          )
+        ) {
           const rect = (() => {
             let ascent = font.ascent;
             let descent = font.descent;
@@ -3925,6 +4024,10 @@ class PartialEvaluator {
             else {
               ascent = 0.75;
               descent = -0.25;
+            }
+
+            if (font.capHeight && font.capHeight < ascent && font.capHeight > 0) {
+              ascent = font.capHeight;
             }
 
             let r;
@@ -3966,21 +4069,48 @@ class PartialEvaluator {
             }
 
             const transformed = [Infinity, Infinity, -Infinity, -Infinity];
-            Util.axialAlignedBoundingBox(r, trm, transformed);
+            Util.axialAlignedBoundingBox(r, m, transformed);
             return transformed;
           })();
 
-          chars.push({
-            u: normalizeChar(glyphUnicode),
-            c: glyph.charcode,
-            rect,
-            font: textState.font,
-            state: {
-              ...textState.raw,
-              Tm: trm,
-              Tf: [`/${textState.fontName}`, 1],
-            },
-          });
+          let rotation = matrixToDegrees(m);
+          const diagonal = rotation % 90 !== 0;
+
+          if (rotation === 0 && font.vertical) {
+            rotation = 270;
+          }
+
+          const baselineRect = [Infinity, Infinity, -Infinity, -Infinity];
+          Util.axialAlignedBoundingBox([0, 0, 0, 0], m, baselineRect);
+          let baseline = 0;
+          if (rotation === 0 || rotation === 180) {
+            baseline = baselineRect[1];
+          }
+          else if (rotation === 90 || rotation === 270) {
+            baseline = baselineRect[0];
+          }
+
+          const p1 = [0, 0];
+          const p2 = [0, 1];
+          Util.applyTransform(p1, getCurrentTextTransform());
+          Util.applyTransform(p2, getCurrentTextTransform());
+          const fontSize = Math.hypot(p1[0] - p2[0], p1[1] - p2[1]);
+
+          if (fontSize !== 0) {
+            chars.push({
+              u: glyphUnicode.length === 1 ? glyphUnicode : glyph.unicode,
+              c: normalizeChar(glyphUnicode),
+              rect,
+              fontSize,
+              fontName: textState.font.name,
+              bold: font.bold,
+              italic: font.italic,
+              glyphWidth,
+              baseline,
+              rotation,
+              diagonal,
+            });
+          }
         }
 
         if (charSpacing) {

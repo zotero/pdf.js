@@ -48,9 +48,7 @@ export class Module {
   };
 
   async getPageCharsObjects(pageIndex) {
-    let chars = await this._structuredCharsProvider(pageIndex);
     let page = await this._pdfDocument.getPage(pageIndex);
-
     let task = {
       name: "dummy-task",
       ensureNotTerminated() {
@@ -61,6 +59,12 @@ export class Module {
       handler: this._pdfDocument.pdfManager._handler,
       task,
     });
+
+    let chars = getStructuredChars(data.chars);
+    for (let char of chars) {
+      char.pageIndex = pageIndex;
+    }
+
     return { chars, objects: data.objects };
   }
 

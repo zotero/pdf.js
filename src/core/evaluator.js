@@ -3874,6 +3874,7 @@ class PartialEvaluator {
                          stateManager = null,
                          seenStyles = new Set(),
                          prevRefs = null,
+                         seqCounter = null,
                        }) {
     const objId = stream.dict?.objId;
     const seenRefs = new RefSet(prevRefs);
@@ -3896,6 +3897,10 @@ class PartialEvaluator {
     const chars = [];
     let objects = [];
     let pathRect = null;
+    if (!seqCounter || !Number.isFinite(seqCounter.value)) {
+      seqCounter = { value: 0 };
+    }
+    const nextSeq = () => seqCounter.value++;
 
     const expandPathRect = (r, x, y) => {
       if (!r) {
@@ -4198,11 +4203,12 @@ class PartialEvaluator {
           Util.applyTransform(p2, getCurrentTextTransform());
           const fontSize = Math.hypot(p1[0] - p2[0], p1[1] - p2[1]);
 
-          if (fontSize !== 0) {
-            chars.push({
-              u: glyphUnicode.length === 1 ? glyphUnicode : glyph.unicode,
-              c: normalizeChar(glyphUnicode),
-              rect,
+            if (fontSize !== 0) {
+              chars.push({
+                seq: nextSeq(),
+                u: glyphUnicode.length === 1 ? glyphUnicode : glyph.unicode,
+                c: normalizeChar(glyphUnicode),
+                rect,
               fontSize,
               fontName: textState.font.name,
               bold: font.bold,
@@ -4342,6 +4348,7 @@ class PartialEvaluator {
                 }
                 const tm = textState.ctm;
                 objects.push({
+                  seq: nextSeq(),
                   type: "path",
                   rect: computeTransformedAABB(pathRect, tm),
                   strokeWidth: Array.isArray(textState.raw.w)
@@ -4588,6 +4595,7 @@ class PartialEvaluator {
 
                 // Push the wrapping xobject first
                 const xobjectEntry = {
+                  seq: nextSeq(),
                   type: "xobject",
                   rect: computeTransformedAABB(bbox, tm),
                   refName: name
@@ -4616,6 +4624,7 @@ class PartialEvaluator {
                     stateManager: xObjStateManager,
                     seenStyles,
                     prevRefs: seenRefs,
+                    seqCounter,
                   }).then(result => {
                     // Attach recursive results to the xobject entry
                     chars.push(...result.chars);
@@ -4637,6 +4646,7 @@ class PartialEvaluator {
               else {
                 const tm = textState.ctm;
                 objects.push({
+                  seq: nextSeq(),
                   type: "image",
                   rect: computeTransformedAABB([0, 0, 1, 1], tm),
                   refName: name,
@@ -4647,6 +4657,7 @@ class PartialEvaluator {
             case OPS.endInlineImage: {
               const tm = textState.ctm;
               objects.push({
+                seq: nextSeq(),
                 type: "inline-image",
                 rect: computeTransformedAABB([0, 0, 1, 1], tm),
               });

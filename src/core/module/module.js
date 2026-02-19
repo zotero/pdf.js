@@ -68,6 +68,28 @@ export class Module {
     return { chars, objects: data.objects };
   }
 
+  async getPageChars(pageIndex) {
+    let { chars } = await this.getPageCharsObjects(pageIndex);
+    return chars;
+  }
+
+  async getPageLabels() {
+    let catalogLabels = await this._pdfDocument.pdfManager.ensureCatalog("pageLabels");
+    if (Array.isArray(catalogLabels) && catalogLabels.length > 0) {
+      return catalogLabels;
+    }
+    let numPages = this._pdfDocument.numPages;
+    return Array.from({ length: numPages }, (_, i) => String(i + 1));
+  }
+
+  async getOutline() {
+    return await this._pdfDocument.pdfManager.ensureCatalog("documentOutline") || [];
+  }
+
+  async getProcessedData() {
+    return { pageLabels: await this.getPageLabels(), pages: {} };
+  }
+
   async getPageData({ pageIndex }) {
     let page = await this._pdfDocument.getPage(pageIndex);
     let chars = await this._structuredCharsProvider(pageIndex, true);

@@ -707,6 +707,9 @@ function split(chars, reflowRTL) {
       || char.rotation !== char2.rotation
       // Chars aren't in the same line
       || !overlaps(char.rect, char2.rect, char2.rotation)
+      // Large baseline jump always indicates a new line (handles code blocks
+      // where consecutive lines have similar x-positions)
+      || Math.abs(char.baseline - char2.baseline) > Math.max(char.fontSize, char2.fontSize || char.fontSize) * 0.8
       // Line's first char is more than 2x larger than the following char, to put drop cap into a separate line
       || lineBreaks.find(x => x === i - 1) && charHeight(char) > charHeight(char2) * 2
     ) {
@@ -835,8 +838,46 @@ export function getStructuredChars(chars) {
     }
   }
   let structuredChars = split(chars2);
+
+  // Validate isMonospace flags using actual rendered character widths.
+  // PDF.js's heuristic can false-positive when a font subset has uniform glyph widths.
+  let fontWidthStats = new Map();
+  for (let ch of structuredChars) {
+    if (!ch.isMonospace || !ch.rect || !ch.c || !ch.c.trim() || !ch.fontSize) continue;
+    let w = Math.round((ch.rect[2] - ch.rect[0]) / ch.fontSize * 1000) / 1000;
+    if (w <= 0) continue;
+    let stats = fontWidthStats.get(ch.fontName);
+    if (!stats) { stats = { widthCounts: new Map(), total: 0 }; fontWidthStats.set(ch.fontName, stats); }
+    stats.widthCounts.set(w, (stats.widthCounts.get(w) || 0) + 1);
+    stats.total++;
+  }
+
+  let nonMonoFonts = new Set();
+  for (let [fontName, stats] of fontWidthStats) {
+    if (stats.total < 10) continue;
+    let modeWidth = 0, modeCount = 0;
+    for (let [w, count] of stats.widthCounts) {
+      if (count > modeCount) { modeWidth = w; modeCount = count; }
+    }
+    let tolerance = modeWidth * 0.15;
+    let matchCount = 0;
+    for (let [w, count] of stats.widthCounts) {
+      if (Math.abs(w - modeWidth) <= tolerance) matchCount += count;
+    }
+    if (matchCount / stats.total < 0.7) {
+      nonMonoFonts.add(fontName);
+    }
+  }
+
+  if (nonMonoFonts.size) {
+    for (let ch of structuredChars) {
+      if (nonMonoFonts.has(ch.fontName)) ch.isMonospace = false;
+    }
+  }
+
   for (let i = 0; i < structuredChars.length; i++) {
     structuredChars[i].offset = i;
+    if (structuredChars[i].isMonospace) structuredChars[i].monospace = true;
   }
 
   return structuredChars;

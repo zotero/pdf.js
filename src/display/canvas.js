@@ -2451,6 +2451,9 @@ class CanvasGraphics {
     // except the blend mode, soft mask, and alpha constants.
     copyCtxState(currentCtx, groupCtx);
     this.ctx = groupCtx;
+    if (this.blender && !this.blender.forceInversion && !group.smask) {
+      this.blender.interceptGroupStyles(this.ctx);
+    }
     this.setGState([
       ["BM", "source-over"],
       ["ca", 1],
@@ -2466,6 +2469,9 @@ class CanvasGraphics {
     }
     this.groupLevel--;
     const groupCtx = this.ctx;
+    if (this.blender) {
+      this.blender.cleanupGroupStyles(this.ctx);
+    }
     const ctx = this.groupStack.pop();
     this.ctx = ctx;
     // Turn off image smoothing to avoid sub pixel interpolation which can

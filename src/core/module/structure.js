@@ -878,6 +878,7 @@ export function getStructuredChars(chars) {
 
   for (let i = 0; i < structuredChars.length; i++) {
     structuredChars[i].offset = i;
+    if (structuredChars[i].isMonospace) structuredChars[i].monospace = true;
   }
 
   return structuredChars;

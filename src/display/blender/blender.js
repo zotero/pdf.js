@@ -67,6 +67,47 @@ class Blender {
   }
 
   /**
+   * Sets up fillStyle/strokeStyle interceptors on an external (group) context
+   * so that calcStyle transforms text/shape colors within transparency groups.
+   */
+  interceptGroupStyles(ctx) {
+    const proto = Object.getPrototypeOf(ctx);
+    for (const prop of ["fillStyle", "strokeStyle"]) {
+      const descriptor = Object.getOwnPropertyDescriptor(proto, prop);
+      const { get: originalGet, set: originalSet } = descriptor;
+      Object.defineProperty(ctx, prop, {
+        get: () => originalGet.call(ctx),
+        set: v => {
+          originalSet.call(ctx, v);
+          const currentVal = originalGet.call(ctx);
+          const newVal = this.getCanvasStyle(currentVal);
+          if (newVal !== undefined) {
+            originalSet.call(ctx, newVal);
+          }
+        },
+        configurable: true,
+        enumerable: true,
+      });
+    }
+  }
+
+  /**
+   * Restores original fillStyle/strokeStyle on a group context.
+   */
+  cleanupGroupStyles(ctx) {
+    const proto = Object.getPrototypeOf(ctx);
+    for (const prop of ["fillStyle", "strokeStyle"]) {
+      const descriptor = Object.getOwnPropertyDescriptor(proto, prop);
+      Object.defineProperty(ctx, prop, {
+        get: descriptor.get ? descriptor.get.bind(ctx) : undefined,
+        set: descriptor.set ? descriptor.set.bind(ctx) : undefined,
+        configurable: true,
+        enumerable: true,
+      });
+    }
+  }
+
+  /**
    * Removes all our property definitions and method wraps on this.ctx.
    */
   unwrap() {

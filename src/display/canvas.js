@@ -2927,6 +2927,9 @@ class CanvasGraphics {
         "globalCompositeOperation",
       ])
       .pushBaseTransform(currentCtx);
+    if (this.blender && !this.blender.forceInversion && !group.smask) {
+      this.blender.interceptGroupStyles(this.ctx);
+    }
     this.setGState(opIdx, [
       ["BM", "source-over"],
       ["ca", 1],
@@ -2943,6 +2946,9 @@ class CanvasGraphics {
     }
     this.groupLevel--;
     const groupCtx = this.ctx;
+    if (this.blender) {
+      this.blender.cleanupGroupStyles(this.ctx);
+    }
     const ctx = this.groupStack.pop();
     if (ctx === null) {
       // Simple group: content was drawn directly on the parent canvas.

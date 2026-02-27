@@ -1136,6 +1136,9 @@ class Font {
     this.defaultWidth = properties.defaultWidth;
     this.toUnicode = properties.toUnicode;
     this.seacMap = properties.seacMap;
+
+    this.bold = /bold/gi.test(name) || !!(properties.flags & FontFlags.ForceBold);
+    this.italic = /oblique|italic/gi.test(name) || !!(properties.flags & FontFlags.Italic);
   }
 
   get renderer() {

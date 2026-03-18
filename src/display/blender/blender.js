@@ -417,9 +417,10 @@ class Blender {
         this.origDrawImage(offCanvas, 0, 0, sWidth, sHeight, dx, dy, dWidth, dHeight);
       }
     } else if (type === "overlay") {
-      // Set the blending mode and global alpha for controlled opacity
-      this.ctx.globalCompositeOperation = "source-over"; // Blending mode (e.g., "source-over", "multiply", etc.)
-      this.ctx.globalAlpha = 0.8; // Opacity of the image being blended (0 = fully transparent, 1 = fully opaque)
+      // Full-page scans often cover OCR text drawn earlier in the operator
+      // list, so they must remain opaque or the hidden text bleeds through.
+      this.ctx.globalCompositeOperation = "source-over";
+      this.ctx.globalAlpha = entirePage ? 1 : 0.8;
       this.origDrawImage(...args);
     }
   }

@@ -200,6 +200,25 @@ class Blender {
     return colorSet.size;
   }
 
+  neutralRatio(imageData, deviation = 12, step = 16) {
+    const { data } = imageData;
+    let neutral = 0;
+    let total = 0;
+
+    for (let i = 0; i < data.length; i += 4 * step) {
+      const alpha = data[i + 3];
+      if (alpha < 32) {
+        continue;
+      }
+      total++;
+      if (this.isColorNeutral(data[i], data[i + 1], data[i + 2], deviation)) {
+        neutral++;
+      }
+    }
+
+    return total ? neutral / total : 0;
+  }
+
   averageLightness(imageData) {
     const { data } = imageData;
     let luminanceSum = 0;
@@ -309,13 +328,16 @@ class Blender {
       type = "invert";
     } else {
       if (entirePage) {
+        const lightness = this.averageLightness(imageData);
         if (!this.fullPageImageDetected) {
           this.fullPageImageDetected = true;
-          const lightness = this.averageLightness(imageData);
           if (this.dark && lightness >= 150) {
             type = "invert";
             this.forceInversion = true;
           }
+        }
+        if (!this.dark && lightness >= 150 && this.neutralRatio(imageData) >= 0.9) {
+          type = "gradient";
         }
       }
       // This is mainly necessary for IEEE TRANSACTIONS papers because they
@@ -330,7 +352,39 @@ class Blender {
 
     const data = imageData.data;
 
-    if (type === "replace") {
+    if (type === "gradient") {
+      const colorDeviation = 12;
+      const lumaR = 0.299;
+      const lumaG = 0.587;
+      const lumaB = 0.114;
+
+      for (let i = 0; i < data.length; i += 4) {
+        const alpha = data[i + 3];
+        if (!alpha) {
+          continue;
+        }
+        const r = data[i];
+        const g = data[i + 1];
+        const b = data[i + 2];
+        if (!this.isColorNeutral(r, g, b, colorDeviation)) {
+          continue;
+        }
+
+        const brightness = (r * lumaR + g * lumaG + b * lumaB) / 255;
+        data[i] = Math.round(bgR + (fgR - bgR) * (1 - brightness));
+        data[i + 1] = Math.round(bgG + (fgG - bgG) * (1 - brightness));
+        data[i + 2] = Math.round(bgB + (fgB - bgB) * (1 - brightness));
+      }
+
+      offCtx.putImageData(imageData, 0, 0);
+      if (args.length === 3) {
+        this.origDrawImage(offCanvas, dx, dy);
+      } else if (args.length === 5) {
+        this.origDrawImage(offCanvas, dx, dy, dWidth, dHeight);
+      } else {
+        this.origDrawImage(offCanvas, 0, 0, sWidth, sHeight, dx, dy, dWidth, dHeight);
+      }
+    } else if (type === "replace") {
       const whiteThreshold = 200;
       const blackThreshold = 50;
       const colorDeviation = 1;
@@ -417,8 +471,9 @@ class Blender {
         this.origDrawImage(offCanvas, 0, 0, sWidth, sHeight, dx, dy, dWidth, dHeight);
       }
     } else if (type === "overlay") {
-      // Full-page scans often cover OCR text drawn earlier in the operator
-      // list, so they must remain opaque or the hidden text bleeds through.
+      // Full-page scans must remain opaque, otherwise OCR/underlying content
+      // can bleed through in themed modes. Keep partial opacity only for
+      // smaller overlays where the theme should still influence the page.
       this.ctx.globalCompositeOperation = "source-over";
       this.ctx.globalAlpha = entirePage ? 1 : 0.8;
       this.origDrawImage(...args);

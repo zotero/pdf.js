@@ -703,6 +703,10 @@ class CanvasGraphics {
 
     if (typeof window !== 'undefined' && window.theme && !this.ctx.skipBlender) {
       this.blender = new Blender(this.ctx, window.theme);
+      this.blender.pageWidth =
+        viewport.width * Math.abs(transform ? transform[0] : 1);
+      this.blender.pageHeight =
+        viewport.height * Math.abs(transform ? transform[3] : 1);
     }
     // For pdfs that use blend modes we have to clear the canvas else certain
     // blend modes can look wrong since we'd be blending with a white

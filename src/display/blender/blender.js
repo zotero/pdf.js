@@ -290,8 +290,8 @@ class Blender {
       return this.origDrawImage(...args);
     }
 
-    const pageWidth = this.ctx.canvas.width;
-    const pageHeight = this.ctx.canvas.height;
+    const pageWidth = this.pageWidth || this.ctx.canvas.width;
+    const pageHeight = this.pageHeight || this.ctx.canvas.height;
 
     const { width, height } = this.getTransformedBoundingBox(this.ctx, dx, dy, dWidth, dHeight);
     const entirePage = Math.abs(pageWidth * pageHeight - width * height) < pageWidth * pageHeight * 0.25;

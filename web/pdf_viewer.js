@@ -253,6 +253,8 @@ class PDFViewer {
 
   #enableAutoLinking = true;
 
+  #abortSignal = null;
+
   #eventAbortController = null;
 
   #minDurationToUpdateCanvas = 0;
@@ -385,6 +387,7 @@ class PDFViewer {
     }
 
     const { abortSignal } = options;
+    this.#abortSignal = abortSignal || null;
     abortSignal?.addEventListener(
       "abort",
       () => {
@@ -1068,6 +1071,7 @@ class PDFViewer {
             enableAutoLinking: this.#enableAutoLinking,
             minDurationToUpdateCanvas: this.#minDurationToUpdateCanvas,
             commentManager: this.#commentManager,
+            abortSignal: this.#abortSignal,
           });
           this._pages.push(pageView);
         }

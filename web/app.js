@@ -1334,6 +1334,10 @@ const PDFViewerApplication = {
     classList.add("wait");
 
     if (this.pdfThumbnailViewer?.hasStructuralChanges()) {
+      this.externalServices.reportTelemetry({
+        type: "pageOrganization",
+        data: { action: "save" },
+      });
       await this.onSavePages({
         data: this.pdfThumbnailViewer.getStructuralChanges(),
       });

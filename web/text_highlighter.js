@@ -195,11 +195,9 @@ class TextHighlighter {
         div.append(span);
 
         if (className.includes("selected")) {
-          const { left } = span.getClientRects()[0];
-          const parentLeft = div.getBoundingClientRect().left;
-          return left - parentLeft;
+          return span;
         }
-        return 0;
+        return null;
       }
 
       div.append(node);
@@ -233,7 +231,7 @@ class TextHighlighter {
       const end = match.end;
       const isSelected = isSelectedPage && i === selectedMatchIdx;
       const highlightSuffix = isSelected ? " selected" : "";
-      let selectedLeft = 0;
+      let selectedSpan = null;
 
       // Match inside new div.
       if (!prevEnd || begin.divIdx !== prevEnd.divIdx) {
@@ -248,14 +246,14 @@ class TextHighlighter {
       }
 
       if (begin.divIdx === end.divIdx) {
-        selectedLeft = appendTextToDiv(
+        selectedSpan = appendTextToDiv(
           begin.divIdx,
           begin.offset,
           end.offset,
           "highlight" + highlightSuffix
         );
       } else {
-        selectedLeft = appendTextToDiv(
+        selectedSpan = appendTextToDiv(
           begin.divIdx,
           begin.offset,
           infinity.offset,
@@ -271,8 +269,7 @@ class TextHighlighter {
       if (isSelected) {
         // Attempt to scroll the selected match into view.
         findController.scrollMatchIntoView({
-          element: textDivs[begin.divIdx],
-          selectedLeft,
+          element: selectedSpan,
           pageIndex: pageIdx,
           matchIndex: selectedMatchIdx,
         });

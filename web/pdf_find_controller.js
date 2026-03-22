@@ -17,8 +17,8 @@
 /** @typedef {import("./event_utils").EventBus} EventBus */
 /** @typedef {import("./pdf_link_service.js").PDFLinkService} PDFLinkService */
 
-import { binarySearchFirstItem, scrollIntoView } from "./ui_utils.js";
 import { getCharacterType, getNormalizeWithNFKC } from "./pdf_find_utils.js";
+import { binarySearchFirstItem } from "./ui_utils.js";
 
 const FindState = {
   FOUND: 0,
@@ -28,7 +28,6 @@ const FindState = {
 };
 
 const FIND_TIMEOUT = 250; // ms
-const MATCH_SCROLL_OFFSET_TOP = -50; // px
 
 const CHARACTERS_TO_NORMALIZE = {
   "\u2010": "-", // Hyphen
@@ -553,7 +552,6 @@ class PDFFindController {
   /**
    * @typedef {Object} PDFFindControllerScrollMatchIntoViewParams
    * @property {HTMLElement} element
-   * @property {number} selectedLeft
    * @property {number} pageIndex
    * @property {number} matchIndex
    */
@@ -562,12 +560,7 @@ class PDFFindController {
    * Scroll the current match into view.
    * @param {PDFFindControllerScrollMatchIntoViewParams}
    */
-  scrollMatchIntoView({
-    element = null,
-    selectedLeft = 0,
-    pageIndex = -1,
-    matchIndex = -1,
-  }) {
+  scrollMatchIntoView({ element = null, pageIndex = -1, matchIndex = -1 }) {
     if (!this._scrollMatches || !element) {
       return;
     } else if (matchIndex === -1 || matchIndex !== this._selected.matchIdx) {
@@ -576,11 +569,7 @@ class PDFFindController {
       return;
     }
     this._scrollMatches = false; // Ensure that scrolling only happens once.
-    const spot = {
-      top: MATCH_SCROLL_OFFSET_TOP,
-      left: selectedLeft,
-    };
-    scrollIntoView(element, spot, /* scrollMatches = */ true);
+    element.scrollIntoView({ block: "start", inline: "center" });
   }
 
   #reset() {

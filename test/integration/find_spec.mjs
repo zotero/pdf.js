@@ -177,4 +177,56 @@ describe("find bar", () => {
       );
     });
   });
+
+  describe("Check that the search results are correctly visible in rotated PDFs (bug 2021392)", () => {
+    let pages;
+
+    beforeEach(async () => {
+      pages = await loadAndWait(
+        "hello_world_rotated.pdf",
+        ".textLayer",
+        "page-fit"
+      );
+    });
+
+    afterEach(async () => {
+      await closePages(pages);
+    });
+
+    it("must scroll each match into the viewport when navigating search results", async () => {
+      await Promise.all(
+        pages.map(async ([browserName, page]) => {
+          await page.click("#viewFindButton");
+          await page.waitForSelector("#findInput", { visible: true });
+          await page.type("#findInput", "hello");
+          await page.waitForSelector("#findInput[data-status='']");
+
+          for (let i = 0; i < 5; i++) {
+            if (i > 0) {
+              await page.click("#findNextButton");
+              await page.waitForSelector("#findInput[data-status='']");
+            }
+
+            // Verify we are on the expected match number.
+            const resultElement =
+              await page.waitForSelector("#findResultsCount");
+            const resultText = await resultElement.evaluate(
+              el => el.textContent
+            );
+            expect(resultText)
+              .withContext(`In ${browserName}, match ${i + 1}`)
+              .toEqual(`${FSI}${i + 1}${PDI} of ${FSI}5${PDI} matches`);
+
+            // The selected highlight must be visible in the viewport.
+            const selected = await page.waitForSelector(
+              ".textLayer .highlight.selected"
+            );
+            expect(await selected.isIntersectingViewport())
+              .withContext(`In ${browserName}, match ${i + 1}`)
+              .toBeTrue();
+          }
+        })
+      );
+    });
+  });
 });

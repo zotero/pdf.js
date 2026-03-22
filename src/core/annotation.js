@@ -1104,14 +1104,18 @@ class Annotation {
       }
     } else if (borderStyle.has("Border")) {
       const array = borderStyle.getArray("Border");
-      if (Array.isArray(array) && array.length >= 3) {
-        this.borderStyle.setHorizontalCornerRadius(array[0]);
-        this.borderStyle.setVerticalCornerRadius(array[1]);
-        this.borderStyle.setWidth(array[2], this.rectangle);
+      if (Array.isArray(array)) {
+        if (array.length >= 3) {
+          this.borderStyle.setHorizontalCornerRadius(array[0]);
+          this.borderStyle.setVerticalCornerRadius(array[1]);
+          this.borderStyle.setWidth(array[2], this.rectangle);
 
-        if (array.length === 4) {
-          // Dash array available
-          this.borderStyle.setDashArray(array[3], /* forceStyle = */ true);
+          if (array.length === 4) {
+            // Dash array available
+            this.borderStyle.setDashArray(array[3], /* forceStyle = */ true);
+          }
+        } else if (array.length === 0) {
+          this.borderStyle.setWidth(0);
         }
       }
     } else {

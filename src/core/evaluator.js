@@ -416,7 +416,7 @@ class PartialEvaluator {
       // Get the data on the main-thread instead.
       data = {
         cMapData: await this.handler.sendWithPromise("FetchBinaryData", {
-          type: "cMapReaderFactory",
+          kind: "cMapUrl",
           filename: `${name}${this.options.cMapPacked ? ".bcmap" : ""}`,
         }),
         isCompressed: this.options.cMapPacked,
@@ -459,7 +459,7 @@ class PartialEvaluator {
         }
         // Get the data on the main-thread instead.
         data = await this.handler.sendWithPromise("FetchBinaryData", {
-          type: "standardFontDataFactory",
+          kind: "standardFontDataUrl",
           filename,
         });
       }

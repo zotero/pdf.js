@@ -35,8 +35,7 @@ import {
 import {
   CMAP_URL,
   createIdFactory,
-  DefaultCMapReaderFactory,
-  DefaultStandardFontDataFactory,
+  DefaultBinaryDataFactory,
   fetchBuiltInCMapHelper,
   STANDARD_FONT_DATA_URL,
   XRefMock,
@@ -83,9 +82,13 @@ describe("annotation", function () {
     }
   }
 
-  const fontDataReader = new DefaultStandardFontDataFactory({
-    baseUrl: STANDARD_FONT_DATA_URL,
+  const binaryDataFactory = new DefaultBinaryDataFactory({
+    cMapUrl: CMAP_URL,
+    standardFontDataUrl: STANDARD_FONT_DATA_URL,
   });
+
+  const fetchBuiltInCMap = name =>
+    fetchBuiltInCMapHelper(binaryDataFactory, /* cMapPacked = */ true, name);
 
   class HandlerMock {
     constructor() {
@@ -96,11 +99,11 @@ describe("annotation", function () {
       this.inputs.push({ name, data });
     }
 
-    sendWithPromise(name, data) {
-      if (name !== "FetchStandardFontData") {
-        return Promise.reject(new Error(`Unsupported mock ${name}.`));
+    async sendWithPromise(name, data) {
+      if (name === "FetchBinaryData") {
+        return binaryDataFactory.fetch(data);
       }
-      return fontDataReader.fetch(data);
+      throw new Error(`Unsupported mock ${name}.`);
     }
   }
 
@@ -113,12 +116,6 @@ describe("annotation", function () {
 
     annotationGlobalsMock =
       await AnnotationFactory.createGlobals(pdfManagerMock);
-
-    const CMapReaderFactory = new DefaultCMapReaderFactory({
-      baseUrl: CMAP_URL,
-    });
-    const fetchBuiltInCMap = name =>
-      fetchBuiltInCMapHelper(CMapReaderFactory, /* cMapPacked = */ true, name);
 
     const builtInCMapCache = new Map();
     for (const name of ["UniJIS-UTF16-H", "Adobe-Japan1-UCS2"]) {

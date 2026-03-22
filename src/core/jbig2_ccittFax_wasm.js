@@ -53,7 +53,7 @@ class JBig2CCITTFaxWasmImage {
           }
           this.#buffer = await this.#handler.sendWithPromise(
             "FetchBinaryData",
-            { type: "wasmFactory", filename }
+            { kind: "wasmUrl", filename }
           );
         }
       }

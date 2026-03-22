@@ -56,9 +56,10 @@ jobs:
         with:
           python-version: '3.14'
           cache: 'pip'
+          cache-dependency-path: '.github/font_tests_requirements.txt'
 
-      - name: Install Fonttools
-        run: pip install fonttools
+      - name: Install requirements
+        run: pip install -r .github/font_tests_requirements.txt
 
       - name: Run font tests
         run: npx gulp fonttest --headless

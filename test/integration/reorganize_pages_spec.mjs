@@ -1890,6 +1890,9 @@ describe("Reorganize Pages View", () => {
       await Promise.all(
         pages.map(async ([browserName, page]) => {
           await waitForThumbnailVisible(page, 1);
+          const labelSelector = "#viewsManagerStatusActionLabel";
+          await waitForTextToBe(page, labelSelector, "Select pages");
+
           await waitAndClick(
             page,
             `.thumbnail:has(${getThumbnailSelector(1)}) input`
@@ -1898,6 +1901,8 @@ describe("Reorganize Pages View", () => {
             page,
             `.thumbnail:has(${getThumbnailSelector(3)}) input`
           );
+
+          await waitForTextToBe(page, labelSelector, `${FSI}2${PDI} selected`);
 
           const handleExport = await createPromise(page, resolve => {
             window.PDFViewerApplication.eventBus.on(
@@ -1919,6 +1924,13 @@ describe("Reorganize Pages View", () => {
             .toEqual([
               { document: null, pageIndices: [0, 1], includePages: [0, 2] },
             ]);
+
+          await waitForTextToBe(page, labelSelector, "Select pages");
+          // All checkboxes should be unchecked.
+          await page.waitForSelector(
+            "#thumbnailsView:not(:has(input:checked))",
+            { visible: true }
+          );
         })
       );
     });

@@ -844,6 +844,7 @@ class PDFThumbnailViewer {
     });
     this.#clearSelection();
     this.#toggleMenuEntries(false);
+    this.#updateStatus("select");
   }
 
   #copyPages(clearSelection = true) {

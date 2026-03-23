@@ -2099,16 +2099,6 @@ class PDFWorker {
           new Blob([wrapper], { type: "text/javascript" })
         );
       };
-
-      this.fromPort = params => {
-        deprecated(
-          "`PDFWorker.fromPort` - please use `PDFWorker.create` instead."
-        );
-        if (!params?.port) {
-          throw new Error("PDFWorker.fromPort - invalid method signature.");
-        }
-        return this.create(params);
-      };
     }
 
     if (typeof PDFJSDev === "undefined" || PDFJSDev.test("TESTING")) {

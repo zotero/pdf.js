@@ -4027,34 +4027,19 @@ Caron Broadcasting, Inc., an Ohio corporation (“Lessee”).`)
       const { items } = await pdfPage.getTextContent({
         disableNormalization: true,
       });
+      // The pdf has 3 different fonts but with the same underlying font data
+      // so we have finally one chunk.
       expect(items).toEqual([
         jasmine.objectContaining({
-          str: "ABC",
+          str: "ABCDEFGHI",
           dir: "ltr",
-          width: 20.56,
+          width: 57.779999999999994,
           height: 10,
           transform: [10, 0, 0, 10, 100, 100],
           hasEOL: false,
         }),
-        jasmine.objectContaining({
-          str: "DEF",
-          dir: "ltr",
-          width: 20,
-          height: 10,
-          transform: [10, 0, 0, 10, 120, 100],
-          hasEOL: false,
-        }),
-        jasmine.objectContaining({
-          str: "GHI",
-          dir: "ltr",
-          width: 17.78,
-          height: 10,
-          transform: [10, 0, 0, 10, 140, 100],
-          hasEOL: false,
-        }),
       ]);
-      expect(items[0].fontName).toEqual(items[2].fontName);
-      expect(items[1].fontName).not.toEqual(items[0].fontName);
+      await loadingTask.destroy();
     });
 
     it("gets text content with word spacing (issue 20319)", async function () {

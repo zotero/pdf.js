@@ -217,11 +217,7 @@ class RadialAxialShadingPattern extends BaseShadingPattern {
       const width = Math.ceil(ownerBBox[2] - ownerBBox[0]) || 1;
       const height = Math.ceil(ownerBBox[3] - ownerBBox[1]) || 1;
 
-      const tmpCanvas = owner.cachedCanvases.getCanvas(
-        "pattern",
-        width,
-        height
-      );
+      const tmpCanvas = owner.canvasFactory.create(width, height);
 
       const tmpCtx = tmpCanvas.context;
       tmpCtx.clearRect(0, 0, tmpCtx.canvas.width, tmpCtx.canvas.height);
@@ -254,6 +250,7 @@ class RadialAxialShadingPattern extends BaseShadingPattern {
       tmpCtx.fill();
 
       pattern = ctx.createPattern(tmpCanvas.canvas, "no-repeat");
+      owner.canvasFactory.destroy(tmpCanvas);
       const domMatrix = new DOMMatrix(inverse);
       pattern.setTransform(domMatrix);
     } else {
@@ -448,7 +445,7 @@ class MeshShadingPattern extends BaseShadingPattern {
     this.matrix = null;
   }
 
-  _createMeshCanvas(combinedScale, backgroundColor, cachedCanvases) {
+  _createMeshCanvas(combinedScale, backgroundColor, canvasFactory) {
     // we will increase scale on some weird factor to let antialiasing take
     // care of "rough" edges
     const EXPECTED_SCALE = 1.1;
@@ -489,12 +486,7 @@ class MeshShadingPattern extends BaseShadingPattern {
 
     const paddedWidth = width + BORDER_SIZE * 2;
     const paddedHeight = height + BORDER_SIZE * 2;
-
-    const tmpCanvas = cachedCanvases.getCanvas(
-      "mesh",
-      paddedWidth,
-      paddedHeight
-    );
+    const tmpCanvas = canvasFactory.create(paddedWidth, paddedHeight);
 
     if (isWebGPUMeshReady()) {
       tmpCanvas.context.drawImage(
@@ -560,7 +552,7 @@ class MeshShadingPattern extends BaseShadingPattern {
     const temporaryPatternCanvas = this._createMeshCanvas(
       scale,
       pathType === PathType.SHADING ? null : this._background,
-      owner.cachedCanvases
+      owner.canvasFactory
     );
 
     if (pathType !== PathType.SHADING) {
@@ -576,7 +568,12 @@ class MeshShadingPattern extends BaseShadingPattern {
     );
     ctx.scale(temporaryPatternCanvas.scaleX, temporaryPatternCanvas.scaleY);
 
-    return ctx.createPattern(temporaryPatternCanvas.canvas, "no-repeat");
+    const pattern = ctx.createPattern(
+      temporaryPatternCanvas.canvas,
+      "no-repeat"
+    );
+    owner.canvasFactory.destroy(temporaryPatternCanvas);
+    return pattern;
   }
 }
 
@@ -704,11 +701,7 @@ class TilingPattern {
       combinedScaleY
     );
 
-    const tmpCanvas = owner.cachedCanvases.getCanvas(
-      "pattern",
-      dimx.size,
-      dimy.size
-    );
+    const tmpCanvas = owner.canvasFactory.create(dimx.size, dimy.size);
     const tmpCtx = tmpCanvas.context;
     const graphics = canvasGraphicsFactory.createCanvasGraphics(tmpCtx, opIdx);
     graphics.groupLevel = owner.groupLevel;
@@ -775,11 +768,7 @@ class TilingPattern {
 
       const xSize = dimx2.size;
       const ySize = dimy2.size;
-      const tmpCanvas2 = owner.cachedCanvases.getCanvas(
-        "pattern-workaround",
-        xSize,
-        ySize
-      );
+      const tmpCanvas2 = owner.canvasFactory.create(xSize, ySize);
       const tmpCtx2 = tmpCanvas2.context;
       const ii = redrawHorizontally ? Math.floor(width / xstep) : 0;
       const jj = redrawVertically ? Math.floor(height / ystep) : 0;
@@ -800,8 +789,10 @@ class TilingPattern {
           );
         }
       }
+      owner.canvasFactory.destroy(tmpCanvas);
       return {
         canvas: tmpCanvas2.canvas,
+        canvasEntry: tmpCanvas2,
         scaleX: dimx2.scale,
         scaleY: dimy2.scale,
         offsetX: x0,
@@ -811,6 +802,7 @@ class TilingPattern {
 
     return {
       canvas: tmpCanvas.canvas,
+      canvasEntry: tmpCanvas,
       scaleX: dimx.scale,
       scaleY: dimy.scale,
       offsetX: x0,
@@ -894,6 +886,7 @@ class TilingPattern {
     );
 
     const pattern = ctx.createPattern(temporaryPatternCanvas.canvas, "repeat");
+    owner.canvasFactory.destroy(temporaryPatternCanvas.canvasEntry);
     pattern.setTransform(domMatrix);
 
     return pattern;

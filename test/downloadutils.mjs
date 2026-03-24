@@ -40,14 +40,27 @@ async function downloadFile(file, url) {
 }
 
 async function downloadManifestFiles(manifest) {
-  const links = manifest
-    .filter(item => item.link && !fs.existsSync(item.file))
-    .map(item => {
-      const url = fs.readFileSync(`${item.file}.link`).toString().trimEnd();
-      return { file: item.file, url };
-    });
+  // Keep track of file identifiers to remove any duplicates,
+  // since multiple test-cases may use the same PDF.
+  const seenFiles = new Set();
 
-  for (const { file, url } of links) {
+  const links = new Map(
+    manifest
+      .filter(({ link, file }) => {
+        if (!link || seenFiles.has(file)) {
+          return false;
+        }
+        seenFiles.add(file);
+        return !fs.existsSync(file);
+      })
+      .map(({ file }) => {
+        const url = fs.readFileSync(`${file}.link`).toString().trimEnd();
+        return [file, url];
+      })
+  );
+  seenFiles.clear();
+
+  for (const [file, url] of links) {
     console.log(`Downloading ${url} to ${file}...`);
     try {
       await downloadFile(file, url);

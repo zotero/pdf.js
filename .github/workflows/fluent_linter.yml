@@ -34,11 +34,10 @@ jobs:
         with:
           python-version: '3.14'
           cache: 'pip'
+          cache-dependency-path: '.github/fluent_linter_requirements.txt'
 
-      - name: Install Fluent dependencies
-        run: |
-          pip install -r .github/requirements.txt
+      - name: Install requirements
+        run: pip install -r .github/fluent_linter_requirements.txt
 
       - name: Lint Fluent reference files
-        run: |
-          moz-fluent-lint ./l10n/en-US --config .github/fluent_linter_config.yml
+        run: moz-fluent-lint ./l10n/en-US --config .github/fluent_linter_config.yml

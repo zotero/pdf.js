@@ -33,6 +33,38 @@ import { WebServer } from "./webserver.mjs";
 
 const __dirname = import.meta.dirname;
 
+// Strip private ancillary PNG chunks before comparing snapshots. Firefox adds
+// a `deBG` chunk with a per-session unique ID to canvas.toDataURL("image/png")
+// output, causing false failures when ref and test were captured in different
+// browser sessions.
+// For reference:
+//  https://searchfox.org/firefox-main/rev/1427c88632d1474d2653928745d78feca1a64ee0/image/encoders/png/nsPNGEncoder.cpp#367
+function stripPrivatePngChunks(buf) {
+  const PNG_SIGNATURE = 8;
+  let pos = PNG_SIGNATURE;
+  const chunks = [];
+  const pre_chunk_data = 8; // len (4) + type (4)
+  const post_chunk_data = 4; // CRC
+  while (pos < buf.length) {
+    const len = buf.readUInt32BE(pos);
+    const type = buf.slice(pos + 4, pos + 8).toString("latin1");
+    const to_skip = pre_chunk_data + len + post_chunk_data;
+    // Keep critical chunks (uppercase first letter) and public ancillary
+    // chunks (uppercase second letter). Drop private ancillary chunks
+    // (lowercase second letter), e.g. "deBG" added by Firefox.
+    // See PNG specification for details on chunk types:
+    //  https://www.libpng.org/pub/png/spec/1.2/PNG-Chunks.html#:~:text=4%2E3%2E,-Summary
+    if (
+      type[0] === type[0].toUpperCase() ||
+      type[1] === type[1].toUpperCase()
+    ) {
+      chunks.push(buf.slice(pos, pos + to_skip));
+    }
+    pos += to_skip;
+  }
+  return Buffer.concat([buf.slice(0, PNG_SIGNATURE), ...chunks]);
+}
+
 function parseOptions() {
   const { values } = parseArgs({
     args: process.argv.slice(2),
@@ -395,7 +427,9 @@ function checkEq(task, results, browser, masterMode) {
       }
     } else {
       refSnapshot = fs.readFileSync(refPath);
-      eq = refSnapshot.toString("hex") === testSnapshot.toString("hex");
+      eq =
+        stripPrivatePngChunks(refSnapshot).toString("hex") ===
+        stripPrivatePngChunks(testSnapshot).toString("hex");
       if (!eq) {
         console.log(
           "TEST-UNEXPECTED-FAIL | " +
@@ -899,6 +933,7 @@ async function startBrowser({
       "browser.ml.linkPreview.enabled": false,
       "browser.tabs.groups.smart.enabled": false,
       "browser.tabs.groups.smart.userEnabled": false,
+      "privacy.baselineFingerprintingProtection": false,
       ...extraPrefsFirefox,
     };
   }

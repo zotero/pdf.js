@@ -74,15 +74,13 @@ import { CanvasGraphics } from "./canvas.js";
 import { DOMBinaryDataFactory } from "display-binary_data_factory";
 import { DOMCanvasFactory } from "./canvas_factory.js";
 import { DOMFilterFactory } from "./filter_factory.js";
+import { getNetworkStream } from "display-network_stream";
 import { GlobalWorkerOptions } from "./worker_options.js";
 import { initWebGPUMesh } from "./webgpu_mesh.js";
 import { Metadata } from "./metadata.js";
 import { OptionalContentConfig } from "./optional_content_config.js";
 import { PagesMapper } from "./pages_mapper.js";
 import { PDFDataTransportStream } from "./transport_stream.js";
-import { PDFFetchStream } from "display-fetch_stream";
-import { PDFNetworkStream } from "display-network";
-import { PDFNodeStream } from "display-node_stream";
 import { PDFObjects } from "./pdf_objects.js";
 import { TextLayer } from "./text_layer.js";
 import { XfaText } from "./xfa_text.js";
@@ -454,14 +452,7 @@ function getDocument(src = {}) {
         if (typeof PDFJSDev !== "undefined" && PDFJSDev.test("MOZCENTRAL")) {
           throw new Error("Not implemented: NetworkStream");
         }
-        // eslint-disable-next-line no-nested-ternary
-        const NetworkStream = isValidFetchUrl(url)
-          ? PDFFetchStream
-          : typeof PDFJSDev !== "undefined" &&
-              PDFJSDev.test("GENERIC") &&
-              isNodeJS
-            ? PDFNodeStream
-            : PDFNetworkStream;
+        const NetworkStream = getNetworkStream(url);
 
         networkStream = new NetworkStream({
           url,

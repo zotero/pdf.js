@@ -457,7 +457,7 @@ const defaultOptions = {
   },
   enableHWA: {
     /** @type {boolean} */
-    value: typeof PDFJSDev !== "undefined" && !PDFJSDev.test("MOZCENTRAL"),
+    value: true,
     kind: OptionKind.API + OptionKind.PREFERENCE,
   },
   enableWebGPU: {

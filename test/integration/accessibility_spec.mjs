@@ -320,37 +320,22 @@ describe("accessibility", () => {
     it("must check that the MathML is correctly inserted", async () => {
       await Promise.all(
         pages.map(async ([browserName, page]) => {
-          const isSanitizerSupported = await page.evaluate(() => {
-            try {
-              // eslint-disable-next-line no-undef
-              return typeof Sanitizer !== "undefined";
-            } catch {
-              return false;
-            }
-          });
-          if (isSanitizerSupported) {
-            const mathML = await page.$eval(
-              "span.structTree span[aria-owns='p58R_mc13'] > math",
-              el => el?.innerHTML ?? ""
+          const mathML = await page.$eval(
+            "span.structTree span[aria-owns='p58R_mc13'] > math",
+            el => el?.innerHTML ?? ""
+          );
+          expect(mathML)
+            .withContext(`In ${browserName}`)
+            .toEqual(
+              ` <msqrt><msup><mi>x</mi><mn>2</mn></msup></msqrt> <mo>=</mo> <mrow intent="absolute-value($x)"><mo>|</mo><mi arg="x">x</mi><mo>|</mo></mrow> `
             );
-            expect(mathML)
-              .withContext(`In ${browserName}`)
-              .toEqual(
-                ` <msqrt><msup><mi>x</mi><mn>2</mn></msup></msqrt> <mo>=</mo> <mrow intent="absolute-value($x)"><mo>|</mo><mi arg="x">x</mi><mo>|</mo></mrow> `
-              );
 
-            // Check that the math corresponding element is hidden in the text
-            // layer.
-            const ariaHidden = await page.$eval("span#p58R_mc13", el =>
-              el.getAttribute("aria-hidden")
-            );
-            expect(ariaHidden).withContext(`In ${browserName}`).toEqual("true");
-          } else {
-            // eslint-disable-next-line no-console
-            console.log(
-              `Pending in Chrome: Sanitizer API (in ${browserName}) is not supported`
-            );
-          }
+          // Check that the math corresponding element is hidden in the text
+          // layer.
+          const ariaHidden = await page.$eval("span#p58R_mc13", el =>
+            el.getAttribute("aria-hidden")
+          );
+          expect(ariaHidden).withContext(`In ${browserName}`).toEqual("true");
         })
       );
     });
@@ -370,30 +355,15 @@ describe("accessibility", () => {
     it("must check that the MathML is correctly inserted", async () => {
       await Promise.all(
         pages.map(async ([browserName, page]) => {
-          const isSanitizerSupported = await page.evaluate(() => {
-            try {
-              // eslint-disable-next-line no-undef
-              return typeof Sanitizer !== "undefined";
-            } catch {
-              return false;
-            }
-          });
-          if (isSanitizerSupported) {
-            const mathML = await page.$eval(
-              "span.structTree span[aria-owns='p21R_mc64']",
-              el => el?.innerHTML ?? ""
+          const mathML = await page.$eval(
+            "span.structTree span[aria-owns='p21R_mc64']",
+            el => el?.innerHTML ?? ""
+          );
+          expect(mathML)
+            .withContext(`In ${browserName}`)
+            .toEqual(
+              '<math display="block"> <msup> <mi>𝑛</mi> <mi>𝑝</mi> </msup> <mo lspace="0.278em" rspace="0.278em">=</mo> <mi>𝑛</mi> <mspace width="1.000em"></mspace> <mi> mod </mi> <mspace width="0.167em"></mspace> <mspace width="0.167em"></mspace> <mi>𝑝</mi> </math>'
             );
-            expect(mathML)
-              .withContext(`In ${browserName}`)
-              .toEqual(
-                '<math display="block"> <msup> <mi>𝑛</mi> <mi>𝑝</mi> </msup> <mo lspace="0.278em" rspace="0.278em">=</mo> <mi>𝑛</mi> <mspace width="1.000em"></mspace> <mi> mod </mi> <mspace width="0.167em"></mspace> <mspace width="0.167em"></mspace> <mi>𝑝</mi> </math>'
-              );
-          } else {
-            // eslint-disable-next-line no-console
-            console.log(
-              `Pending in Chrome: Sanitizer API (in ${browserName}) is not supported`
-            );
-          }
         })
       );
     });
@@ -475,25 +445,11 @@ describe("accessibility", () => {
     it("must check that there's no alt-text on the MathML node", async () => {
       await Promise.all(
         pages.map(async ([browserName, page]) => {
-          const isSanitizerSupported = await page.evaluate(() => {
-            try {
-              // eslint-disable-next-line no-undef
-              return typeof Sanitizer !== "undefined";
-            } catch {
-              return false;
-            }
-          });
           const ariaLabel = await page.$eval(
             "span[aria-owns='p3R_mc2']",
             el => el.getAttribute("aria-label") || ""
           );
-          if (isSanitizerSupported) {
-            expect(ariaLabel).withContext(`In ${browserName}`).toEqual("");
-          } else {
-            expect(ariaLabel)
-              .withContext(`In ${browserName}`)
-              .toEqual("cube root of , x plus y end cube root ");
-          }
+          expect(ariaLabel).withContext(`In ${browserName}`).toEqual("");
         })
       );
     });
@@ -513,14 +469,6 @@ describe("accessibility", () => {
     it("must check that the text in text layer is aria-hidden", async () => {
       await Promise.all(
         pages.map(async ([browserName, page]) => {
-          const isSanitizerSupported = await page.evaluate(() => {
-            try {
-              // eslint-disable-next-line no-undef
-              return typeof Sanitizer !== "undefined";
-            } catch {
-              return false;
-            }
-          });
           const ariaHidden = await page.evaluate(() =>
             Array.from(
               document.querySelectorAll(".structTree :has(> math)")
@@ -530,16 +478,64 @@ describe("accessibility", () => {
                 .getAttribute("aria-hidden")
             )
           );
-          if (isSanitizerSupported) {
-            expect(ariaHidden)
-              .withContext(`In ${browserName}`)
-              .toEqual(["true", "true", "true"]);
-          } else {
-            // eslint-disable-next-line no-console
-            console.log(
-              `Pending in Chrome: Sanitizer API (in ${browserName}) is not supported`
+          expect(ariaHidden)
+            .withContext(`In ${browserName}`)
+            .toEqual(["true", "true", "true"]);
+        })
+      );
+    });
+  });
+
+  describe("MathML in AF entry with struct tree children must not be duplicated", () => {
+    let pages;
+
+    beforeEach(async () => {
+      pages = await loadAndWait("bug2025674.pdf", ".textLayer");
+    });
+
+    afterEach(async () => {
+      await closePages(pages);
+    });
+
+    it("must check that the MathML is not duplicated in the struct tree", async () => {
+      await Promise.all(
+        pages.map(async ([browserName, page]) => {
+          // The Formula node has both AF MathML and struct tree children.
+          // When AF MathML is present, children must not be walked to avoid
+          // rendering the math content twice in the accessibility tree.
+          const mathCount = await page.evaluate(
+            () => document.querySelectorAll(".structTree math").length
+          );
+          expect(mathCount).withContext(`In ${browserName}`).toBe(1);
+
+          // All text layer elements referenced by the formula subtree must
+          // be aria-hidden so screen readers don't read both the MathML and
+          // the underlying text content.
+          const allHidden = await page.evaluate(() => {
+            const ids = [];
+            for (const el of document.querySelectorAll(
+              ".structTree [aria-owns]"
+            )) {
+              if (el.closest("math")) {
+                ids.push(el.getAttribute("aria-owns"));
+              }
+            }
+            // Also collect ids from the formula span itself.
+            for (const el of document.querySelectorAll(
+              ".structTree span:has(> math)"
+            )) {
+              const owned = el.getAttribute("aria-owns");
+              if (owned) {
+                ids.push(owned);
+              }
+            }
+            return ids.every(
+              id =>
+                document.getElementById(id)?.getAttribute("aria-hidden") ===
+                "true"
             );
-          }
+          });
+          expect(allHidden).withContext(`In ${browserName}`).toBeTrue();
         })
       );
     });

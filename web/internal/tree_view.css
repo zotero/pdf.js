@@ -69,6 +69,7 @@
 
   .str-value {
     color: var(--string-color);
+    white-space: preserve;
   }
 
   .num-value {

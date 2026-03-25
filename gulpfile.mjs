@@ -196,9 +196,7 @@ function createWebpackAlias(defines) {
   };
   const libraryAlias = {
     "display-binary_data_factory": "src/display/stubs.js",
-    "display-fetch_stream": "src/display/stubs.js",
-    "display-network": "src/display/stubs.js",
-    "display-node_stream": "src/display/stubs.js",
+    "display-network_stream": "src/display/stubs.js",
     "display-node_utils": "src/display/stubs.js",
   };
   const viewerAlias = {
@@ -227,8 +225,7 @@ function createWebpackAlias(defines) {
   if (defines.CHROME) {
     libraryAlias["display-binary_data_factory"] =
       "src/display/binary_data_factory.js";
-    libraryAlias["display-fetch_stream"] = "src/display/fetch_stream.js";
-    libraryAlias["display-network"] = "src/display/network.js";
+    libraryAlias["display-network_stream"] = "src/display/network_stream.js";
 
     viewerAlias["web-download_manager"] = "web/chromecom.js";
     viewerAlias["web-external_services"] = "web/chromecom.js";
@@ -241,9 +238,7 @@ function createWebpackAlias(defines) {
     // In the tsconfig.json files, the .js extension must be omitted.
     libraryAlias["display-binary_data_factory"] =
       "src/display/binary_data_factory.js";
-    libraryAlias["display-fetch_stream"] = "src/display/fetch_stream.js";
-    libraryAlias["display-network"] = "src/display/network.js";
-    libraryAlias["display-node_stream"] = "src/display/node_stream.js";
+    libraryAlias["display-network_stream"] = "src/display/network_stream.js";
     libraryAlias["display-node_utils"] = "src/display/node_utils.js";
 
     viewerAlias["web-download_manager"] = "web/download_manager.js";
@@ -1540,9 +1535,7 @@ function buildLibHelper(bundleDefines, inputStream, outputDir) {
     map: {
       "pdfjs-lib": "../pdf.js",
       "display-binary_data_factory": "./binary_data_factory.js",
-      "display-fetch_stream": "./fetch_stream.js",
-      "display-network": "./network.js",
-      "display-node_stream": "./node_stream.js",
+      "display-network_stream": "./network_stream.js",
       "display-node_utils": "./node_utils.js",
       "fluent-bundle": "../../../node_modules/@fluent/bundle/esm/index.js",
       "fluent-dom": "../../../node_modules/@fluent/dom/esm/index.js",

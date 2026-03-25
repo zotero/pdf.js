@@ -14,19 +14,15 @@
  */
 
 const DOMBinaryDataFactory = null;
+const getNetworkStream = null;
 const NodeBinaryDataFactory = null;
 const NodeCanvasFactory = null;
 const NodeFilterFactory = null;
-const PDFFetchStream = null;
-const PDFNetworkStream = null;
-const PDFNodeStream = null;
 
 export {
   DOMBinaryDataFactory,
+  getNetworkStream,
   NodeBinaryDataFactory,
   NodeCanvasFactory,
   NodeFilterFactory,
-  PDFFetchStream,
-  PDFNetworkStream,
-  PDFNodeStream,
 };

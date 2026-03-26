@@ -2082,10 +2082,13 @@ class PDFDocument {
       const obj = Object.create(null);
       obj.dict = await this.toJSObject(dict, false);
 
-      if (
-        isName(dict.get("Type"), "XObject") &&
-        isName(dict.get("Subtype"), "Image")
-      ) {
+      if (isName(dict.get("Subtype"), "Image")) {
+        const isImageMask = dict.get("ImageMask") === true;
+        if (isImageMask) {
+          dict.set("ImageMask", false);
+          dict.set("IM", false);
+          value.numComps = value.bitsPerComponent = 1;
+        }
         try {
           const pdfFunctionFactory = new PDFFunctionFactory({
             xref: this.xref,
@@ -2112,6 +2115,11 @@ class PDFDocument {
           return obj;
         } catch {
           // Fall through to regular byte stream if image decoding fails.
+        }
+        if (isImageMask) {
+          dict.set("ImageMask", true);
+          delete value.numComps;
+          delete value.bitsPerComponent;
         }
       }
 

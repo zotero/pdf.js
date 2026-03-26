@@ -920,4 +920,50 @@ a dynamic compiler for JavaScript based on our`);
       );
     });
   });
+
+  describe("bug 2026037", () => {
+    let pages;
+
+    beforeEach(async () => {
+      pages = await loadAndWait("bug2026037.pdf", getAnnotationSelector("22R"));
+    });
+
+    afterEach(async () => {
+      await closePages(pages);
+    });
+
+    it("must check that spaces in a choice option display value are preserved", async () => {
+      await Promise.all(
+        pages.map(async ([browserName, page]) => {
+          // The option's displayValue contains multiple consecutive spaces
+          // ("A        B"). Browsers collapse spaces in textContent, so the
+          // fix stores the original in a "display-value" attribute and uses
+          // non-breaking spaces (\u00A0) in textContent.
+          const displayAttr = await page.$eval(
+            `${getSelector("22R")} option`,
+            el => el.getAttribute("display-value")
+          );
+          expect(displayAttr)
+            .withContext(`In ${browserName}`)
+            .toEqual("A        B");
+
+          const textContent = await page.$eval(
+            `${getSelector("22R")} option`,
+            el => el.textContent
+          );
+          expect(textContent)
+            .withContext(`In ${browserName}`)
+            .toEqual("A\u00A0\u00A0\u00A0\u00A0\u00A0\u00A0\u00A0\u00A0B");
+
+          const exportValue = await page.$eval(
+            `${getSelector("22R")} option`,
+            el => el.value
+          );
+          expect(exportValue)
+            .withContext(`In ${browserName}`)
+            .toEqual("a        b");
+        })
+      );
+    });
+  });
 });

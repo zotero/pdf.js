@@ -110,10 +110,12 @@ class CanvasContextDetailsView {
     this.#ctxStates.set(label, state);
     this.#ctxStateStacks.set(label, []);
     this.#ctxStackViewIdx.set(label, null);
-    // If the panel is already visible (stepping in progress), rebuild it so
-    // the new context section is added and its live-update entries are
-    // registered.
-    if (this.#gfxStateValueElements.size > 0) {
+    // If the panel is already visible and we're at a pause point, rebuild it
+    // so the new context section is added and its live-update entries are
+    // registered. Skip the rebuild while frozen (execution is in progress
+    // between pauses) — the next build() call from #onStepped() will pick it
+    // up.
+    if (!this.#frozen && this.#gfxStateValueElements.size > 0) {
       this.build();
     }
 
@@ -303,9 +305,29 @@ class CanvasContextDetailsView {
     }
   }
 
-  /** Hide the panel. */
+  /**
+   * Remove the section for a single context from the panel and all internal
+   * state maps. Called when a temporary canvas is destroyed.
+   */
+  removeContext(label) {
+    this.#ctxStates.delete(label);
+    this.#ctxStateStacks.delete(label);
+    this.#ctxStackViewIdx.delete(label);
+    this.#gfxStateValueElements.delete(label);
+    this.#gfxStateNavElements.delete(label);
+    this.#panel
+      .querySelector(
+        `.gfx-state-section[data-ctx-label="${CSS.escape(label)}"]`
+      )
+      ?.remove();
+  }
+
+  /** Hide the panel and discard all DOM state so no live updates occur. */
   hide() {
     this.#panel.hidden = true;
+    this.#gfxStateValueElements.clear();
+    this.#gfxStateNavElements.clear();
+    this.#panel.replaceChildren();
   }
 
   /**

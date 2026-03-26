@@ -333,11 +333,10 @@ class CanvasExtraState {
 
   transferMaps = "none";
 
-  constructor(width, height, preInit) {
-    preInit?.(this);
+  minMax = MIN_MAX_INIT.slice();
 
+  constructor(width, height) {
     this.clipBox = new Float32Array([0, 0, width, height]);
-    this.minMax = MIN_MAX_INIT.slice();
   }
 
   clone() {

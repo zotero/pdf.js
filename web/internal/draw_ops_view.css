@@ -141,6 +141,8 @@
 }
 .op-arg {
   color: var(--number-color);
+  direction: ltr;
+  unicode-bidi: bidi-override;
 }
 .changed-value {
   font-weight: bold;

@@ -2962,8 +2962,10 @@ class PartialEvaluator {
     function buildTextContentItem({ chars, extraSpacing }) {
       if (
         currentTextState !== textState &&
-        (currentTextState.fontName !== textState.fontName ||
-          currentTextState.fontSize !== textState.fontSize)
+        (currentTextState.fontSize !== textState.fontSize ||
+          (currentTextState.fontName !== textState.fontName &&
+            (currentTextState.font.name !== textState.font.name ||
+              currentTextState.font.vertical !== textState.font.vertical)))
       ) {
         flushTextContentItem();
         currentTextState = textState.clone();

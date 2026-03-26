@@ -1168,7 +1168,14 @@ class PDFFindController {
       return;
     }
 
-    this.#onFindBarClose();
+    // Cancel any pending find timeout and clear a pending resume page index
+    // synchronously. Calling #onFindBarClose() here would schedule its cleanup
+    // asynchronously.
+    if (this._findTimeout) {
+      clearTimeout(this._findTimeout);
+      this._findTimeout = null;
+    }
+    this._resumePageIdx = null;
     this._dirtyMatch = true;
     const prevPromises = this._extractTextPromises;
     const prevContents = this._pageContents;
@@ -1198,11 +1205,7 @@ class PDFFindController {
       hasDiacritics.push(prevDiacritics[prevPageNumber - 1] ?? false);
     }
     if (this.#state) {
-      this._eventBus.dispatch("find", {
-        source: this,
-        type: "",
-        ...this.#state,
-      });
+      this.#nextMatch();
     }
   }
 

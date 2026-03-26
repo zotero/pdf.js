@@ -373,6 +373,7 @@ const PDFViewerApplication = {
         enableComment: x => x === "true",
         enableFakeMLManager: x => x === "true",
         enableGuessAltText: x => x === "true",
+        enableNewBadge: x => x === "true",
         enablePermissions: x => x === "true",
         enableSplitMerge: x => x === "true",
         enableUpdatedAddImage: x => x === "true",

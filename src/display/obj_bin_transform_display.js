@@ -247,9 +247,9 @@ class FontInfo {
       offset += this.#view.getUint32(offset) + 4;
     }
     const length = this.#view.getUint32(offset);
-    const stringData = new Uint8Array(length);
-    stringData.set(new Uint8Array(this.#buffer, offset + 4, length));
-    return this.#decoder.decode(stringData);
+    return this.#decoder.decode(
+      new Uint8Array(this.#buffer, offset + 4, length)
+    );
   }
 
   get fallbackName() {

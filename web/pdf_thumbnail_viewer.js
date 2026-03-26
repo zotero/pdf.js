@@ -766,6 +766,13 @@ class PDFThumbnailViewer {
 
     this.#isCut = false;
     if (this.#savedThumbnails) {
+      // The thumbnail objects are shared between the post-operation list and
+      // the saved (pre-operation) list. The object marked current in the
+      // post-operation list may reappear at a different index in the restored
+      // list.
+      const currentThumb = this._thumbnails[this._currentPageNumber - 1];
+      currentThumb?.toggleCurrent(false);
+
       const fragment = document.createDocumentFragment();
       for (let i = 1, ii = this.#savedThumbnails.length; i <= ii; i++) {
         const thumbnail = this.#savedThumbnails[i - 1];
@@ -776,6 +783,13 @@ class PDFThumbnailViewer {
       this.container.replaceChildren(fragment);
       this._thumbnails = this.#savedThumbnails;
       this.#savedThumbnails = null;
+
+      // Re-establish the current-page indicator at the position the current
+      // thumbnail now occupies in the restored list.
+      const newIdx = currentThumb ? this._thumbnails.indexOf(currentThumb) : -1;
+      this._currentPageNumber = newIdx + 1;
+      currentThumb?.toggleCurrent(newIdx !== -1);
+
       this.#pagesMapper.cancelDelete();
 
       this.eventBus.dispatch("pagesedited", {

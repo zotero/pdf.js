@@ -2908,4 +2908,83 @@ describe("Reorganize Pages View", () => {
       );
     });
   });
+
+  describe("Current page indicator (bug 2026639)", () => {
+    let pages;
+
+    beforeEach(async () => {
+      pages = await loadAndWait(
+        "page_with_number.pdf",
+        "#viewsManagerToggleButton",
+        "page-fit",
+        null,
+        { enableSplitMerge: true }
+      );
+    });
+
+    afterEach(async () => {
+      await closePages(pages);
+    });
+
+    it("should have only one current page after repeated cut/undo operations", async () => {
+      await Promise.all(
+        pages.map(async ([browserName, page]) => {
+          await waitForThumbnailVisible(page, 1);
+          await page.waitForSelector("#viewsManagerStatusActionButton", {
+            visible: true,
+          });
+
+          const countCurrentThumbnails = () =>
+            page.evaluate(
+              () =>
+                document.querySelectorAll(
+                  '.thumbnailImageContainer[aria-current="page"]'
+                ).length
+            );
+
+          // Copy page 1 and paste it after page 3.
+          await waitAndClick(
+            page,
+            `.thumbnail:has(${getThumbnailSelector(1)}) input`
+          );
+          let handlePagesEdited = await waitForPagesEdited(page, "copy");
+          await waitAndClick(page, "#viewsManagerStatusActionButton");
+          await waitAndClick(page, "#viewsManagerStatusActionCopy");
+          await awaitPromise(handlePagesEdited);
+
+          handlePagesEdited = await waitForPagesEdited(page);
+          await waitAndClick(page, `${getThumbnailSelector(3)}+button`);
+          await awaitPromise(handlePagesEdited);
+
+          // Repeat cut/undo three times and check the current indicator each
+          // time.
+          for (let i = 0; i < 3; i++) {
+            await waitAndClick(
+              page,
+              `.thumbnail:has(${getThumbnailSelector(1)}) input`
+            );
+            handlePagesEdited = await waitForPagesEdited(page, "cut");
+            await waitAndClick(page, "#viewsManagerStatusActionButton");
+            await waitAndClick(page, "#viewsManagerStatusActionCut");
+            await awaitPromise(handlePagesEdited);
+
+            expect(await countCurrentThumbnails())
+              .withContext(`In ${browserName}, after cut #${i + 1}`)
+              .toBe(1);
+
+            await page.waitForSelector("#viewsManagerStatusUndo", {
+              visible: true,
+            });
+            handlePagesEdited = await waitForPagesEdited(page, "cancelDelete");
+            await waitAndClick(page, "#viewsManagerStatusUndoButton");
+            await awaitPromise(handlePagesEdited);
+
+            expect(await countCurrentThumbnails())
+              .withContext(`In ${browserName}, after undo #${i + 1}`)
+              .toBe(1);
+          }
+        })
+      );
+    });
+  });
 });

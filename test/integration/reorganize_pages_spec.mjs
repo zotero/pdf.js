@@ -2819,4 +2819,93 @@ describe("Reorganize Pages View", () => {
       );
     });
   });
+
+  describe("New badge (bug 2026564)", () => {
+    let pages;
+
+    beforeEach(async () => {
+      pages = await loadAndWait(
+        "page_with_number.pdf",
+        "#viewsManagerToggleButton",
+        "page-fit",
+        null,
+        { enableSplitMerge: true, enableNewBadge: true }
+      );
+    });
+
+    afterEach(async () => {
+      await closePages(pages);
+    });
+
+    it("should hide the new badge when a page is selected and show it again when deselected", async () => {
+      await Promise.all(
+        pages.map(async ([browserName, page]) => {
+          await waitForThumbnailVisible(page, 1);
+
+          // The badge must be visible initially.
+          await page.waitForSelector(".newBadge", { visible: true });
+
+          // Select page 1 via its checkbox.
+          await waitAndClick(
+            page,
+            `.thumbnail:has(${getThumbnailSelector(1)}) input`
+          );
+
+          // The badge must be hidden after selection.
+          await page.waitForSelector(".newBadge", { hidden: true });
+
+          // Deselect page 1.
+          await waitAndClick(
+            page,
+            `.thumbnail:has(${getThumbnailSelector(1)}) input`
+          );
+
+          // The badge must be visible again after deselection.
+          await page.waitForSelector(".newBadge", { visible: true });
+        })
+      );
+    });
+
+    it("should hide the new badge when dragging an unselected page and restore it after", async () => {
+      await Promise.all(
+        pages.map(async ([browserName, page]) => {
+          await waitForThumbnailVisible(page, 1);
+
+          // The badge must be visible initially.
+          await page.waitForSelector(".newBadge", { visible: true });
+
+          // Watch for the badge being hidden during the drag.
+          const handleBadgeHidden = await createPromise(page, resolve => {
+            const observer = new MutationObserver(() => {
+              const badge = document.querySelector(".newBadge");
+              if (badge?.classList.contains("hidden")) {
+                observer.disconnect();
+                resolve();
+              }
+            });
+            observer.observe(document.querySelector(".newBadge"), {
+              attributes: true,
+              attributeFilter: ["class"],
+            });
+          });
+
+          const rect1 = await getRect(page, getThumbnailSelector(1));
+          const rect2 = await getRect(page, getThumbnailSelector(2));
+
+          await dragAndDrop(
+            page,
+            getThumbnailSelector(1),
+            [[0, rect2.y - rect1.y + rect2.height / 2]],
+            10
+          );
+
+          // The badge must have been hidden at some point during the drag.
+          await awaitPromise(handleBadgeHidden);
+
+          // The badge must be visible again after the drag ends.
+          await page.waitForSelector(".newBadge", { visible: true });
+        })
+      );
+    });
+  });
 });

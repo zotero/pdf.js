@@ -161,6 +161,8 @@ class PDFThumbnailViewer {
 
   #hasUndoBarVisible = false;
 
+  #newBadge = null;
+
   /**
    * @param {PDFThumbnailViewerOptions} options
    */
@@ -216,6 +218,7 @@ class PDFThumbnailViewer {
         newSpan.setAttribute("data-l10n-id", "pdfjs-new-badge-content");
         newSpan.classList.add("newBadge");
         button.parentElement.before(newSpan);
+        this.#newBadge = newSpan;
       }
 
       this.eventBus.on(
@@ -601,6 +604,7 @@ class PDFThumbnailViewer {
       this.#currentScrollTop + this.scrollableContainer.clientHeight;
     this.#dragAC = new AbortController();
     this.container.classList.add("isDragging");
+    this.#newBadge?.classList.add("hidden");
     const startPageNumber = parseInt(
       draggedThumbnail.getAttribute("page-number"),
       10
@@ -658,6 +662,7 @@ class PDFThumbnailViewer {
     this.#dragMarker = null;
     this.#dragAC.abort();
     this.#dragAC = null;
+    this.#newBadge?.classList.remove("hidden");
 
     this.container.classList.remove("isDragging");
     for (const selected of this.#selectedPages) {
@@ -976,12 +981,14 @@ class PDFThumbnailViewer {
           : "pdfjs-views-manager-pages-status-none-action-label"
       );
       if (count) {
+        this.#newBadge?.classList.add("hidden");
         this.#statusLabel.setAttribute(
           "data-l10n-args",
           JSON.stringify({ count })
         );
         this.#deselectButton.classList.toggle("hidden", false);
       } else {
+        this.#newBadge?.classList.remove("hidden");
         this.#statusLabel.removeAttribute("data-l10n-args");
         this.#deselectButton.classList.toggle("hidden", true);
       }

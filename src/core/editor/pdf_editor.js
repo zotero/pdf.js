@@ -1979,7 +1979,7 @@ class PDFEditor {
     }
 
     const newAnnotations =
-      this.#newAnnotationsParams?.newAnnotationsByPage.get(pageIndex);
+      this.#newAnnotationsParams?.newAnnotationsByPage?.get(pageIndex);
     if (newAnnotations) {
       const { handler, task, imagesPromises } = this.#newAnnotationsParams;
       const changes = new RefSetCache();

@@ -246,6 +246,8 @@ function createDefaultAppearance({ fontSize, fontName, fontColor }) {
 }
 
 class FakeUnicodeFont {
+  static #fontNameId = 1;
+
   constructor(xref, fontFamily) {
     this.xref = xref;
     this.widths = null;
@@ -256,11 +258,8 @@ class FakeUnicodeFont {
     const canvas = new OffscreenCanvas(1, 1);
     this.ctxMeasure = canvas.getContext("2d", { willReadFrequently: true });
 
-    if (!FakeUnicodeFont._fontNameId) {
-      FakeUnicodeFont._fontNameId = 1;
-    }
     this.fontName = Name.get(
-      `InvalidPDFjsFont_${fontFamily}_${FakeUnicodeFont._fontNameId++}`
+      `InvalidPDFjsFont_${fontFamily}_${FakeUnicodeFont.#fontNameId++}`
     );
   }
 

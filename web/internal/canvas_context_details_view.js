@@ -199,9 +199,7 @@ class CanvasContextDetailsView {
       if (type !== "2d") {
         return ctx;
       }
-      if (!wrappedCtx) {
-        wrappedCtx = this.wrapContext(ctx, label);
-      }
+      wrappedCtx ??= this.wrapContext(ctx, label);
       return wrappedCtx;
     };
     return canvas.getContext("2d");

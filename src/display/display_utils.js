@@ -417,28 +417,28 @@ function getPdfFilenameFromUrl(url, defaultFilename = "document.pdf") {
 }
 
 class StatTimer {
-  started = Object.create(null);
+  #started = new Map();
 
   times = [];
 
   time(name) {
-    if (name in this.started) {
+    if (this.#started.has(name)) {
       warn(`Timer is already running for ${name}`);
     }
-    this.started[name] = Date.now();
+    this.#started.set(name, Date.now());
   }
 
   timeEnd(name) {
-    if (!(name in this.started)) {
+    if (!this.#started.has(name)) {
       warn(`Timer has not been started for ${name}`);
     }
     this.times.push({
       name,
-      start: this.started[name],
+      start: this.#started.get(name),
       end: Date.now(),
     });
     // Remove timer from started so it can be called again.
-    delete this.started[name];
+    this.#started.delete(name);
   }
 
   toString() {

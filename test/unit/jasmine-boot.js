@@ -87,6 +87,7 @@ async function initializePDFJS(callback) {
       "pdfjs-test/unit/pdf_spec.js",
       "pdfjs-test/unit/pdf_viewer.component_spec.js",
       "pdfjs-test/unit/pdf_viewer_spec.js",
+      "pdfjs-test/unit/postscript_spec.js",
       "pdfjs-test/unit/primitives_spec.js",
       "pdfjs-test/unit/scripting_spec.js",
       "pdfjs-test/unit/stream_spec.js",

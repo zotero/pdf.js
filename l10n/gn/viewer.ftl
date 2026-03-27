@@ -667,8 +667,12 @@ pdfjs-views-manager-view-selector-button =
     .title = Hechaha
 pdfjs-views-manager-view-selector-button-label = Hechaha
 pdfjs-views-manager-pages-title = Kuatiarogue
+pdfjs-views-manager-outlines-title1 = Kuatiaite jejapopy
+    .title = Kuatiaite jejapopy (eikutu jo’a emyasãi hag̃ua/emomichĩmbaite mba’eporuita)
 pdfjs-views-manager-outlines-title = Kuatiaite jejapopy
 pdfjs-views-manager-attachments-title = Moirũha
+pdfjs-views-manager-layers-title1 = Ñuãhaita
+    .title = Ñuãhaita (eikutu jo’a erupaite jey hag̃ua ñuãhaita oĩ haguepevoi)
 pdfjs-views-manager-layers-title = Ñuãha
 pdfjs-views-manager-pages-option-label = Kuatiarogueita
 pdfjs-views-manager-outlines-option-label = Kuatiaite jejapopy
@@ -689,6 +693,7 @@ pdfjs-views-manager-pages-status-action-button-label = Ñangareko
 pdfjs-views-manager-pages-status-copy-button-label = Monguatia
 pdfjs-views-manager-pages-status-cut-button-label = Kytĩ
 pdfjs-views-manager-pages-status-delete-button-label = Mboguete
+pdfjs-views-manager-pages-status-export-selected-button-label = Eguerahauka poravopyre…
 pdfjs-views-manager-pages-status-save-as-button-label = Ñongatu pyahu…
 # Variables:
 #   $count (Number) - the number of selected pages to be cut.
@@ -729,6 +734,9 @@ pdfjs-views-manager-paste-button-before =
 #   $page (Number) - the page number after which the paste button is.
 pdfjs-views-manager-paste-button-after =
     .title = Emboja kuatiarogue { $page } rire
+# Badge used to promote a new feature in the UI, keep it as short as possible.
+# It's spelled uppercase for English, but it can be translated as usual.
+pdfjs-new-badge-content = PYAHU
 pdfjs-toggle-views-manager-button1 =
     .title = Eñangareko kuotiarogue
 

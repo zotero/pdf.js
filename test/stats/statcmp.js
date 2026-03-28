@@ -1,11 +1,6 @@
-/* eslint-disable import/no-commonjs */
-
-import { createRequire } from "module";
 import fs from "fs";
 import { parseArgs } from "node:util";
-
-const require = createRequire(import.meta.url);
-const ttest = require("ttest");
+import ttest from "ttest";
 
 const VALID_GROUP_BYS = ["browser", "pdf", "page", "round", "stat"];
 
@@ -70,12 +65,6 @@ function flatten(stats) {
     rows = rows.filter(s => s.stat === "Overall");
   }
   return rows;
-}
-
-function pad(s, length, dir /* default: 'right' */) {
-  s = "" + s;
-  const spaces = new Array(Math.max(0, length - s.length + 1)).join(" ");
-  return dir === "left" ? spaces + s : s + spaces;
 }
 
 function mean(array) {
@@ -158,7 +147,7 @@ function stat(baseline, current) {
   }
 
   // add horizontal line
-  const hline = width.map(w => new Array(w + 1).join("-"));
+  const hline = width.map(w => "-".repeat(w));
   rows.splice(1, 0, hline);
 
   // print output
@@ -166,7 +155,8 @@ function stat(baseline, current) {
   const groupCount = options.groupBy.length;
   for (const row of rows) {
     for (let i = 0; i < row.length; i++) {
-      row[i] = pad(row[i], width[i], i < groupCount ? "right" : "left");
+      row[i] =
+        i < groupCount ? row[i].padEnd(width[i]) : row[i].padStart(width[i]);
     }
     console.log(row.join(" | "));
   }

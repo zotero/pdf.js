@@ -29,6 +29,7 @@ import {
 import {
   collectActions,
   isNumberArray,
+  lookupRect,
   MissingDataException,
   PDF_VERSION_REGEXP,
   recoverJsURL,
@@ -1597,7 +1598,7 @@ class Catalog {
         } else if (kids) {
           kidsArr = [kids];
         } else {
-          kidsArr = [];
+          continue;
         }
         for (const kid of kidsArr) {
           const kidObj = xref.fetchIfRef(kid);
@@ -1623,7 +1624,7 @@ class Catalog {
         if (!(parentRaw instanceof Ref)) {
           break;
         }
-        const parentDict = xref.fetchIfRef(parentRaw);
+        const parentDict = xref.fetch(parentRaw);
         if (!(parentDict instanceof Dict)) {
           break;
         }
@@ -1648,10 +1649,10 @@ class Catalog {
       y = null;
     const attrs = seDict.get("A");
     if (attrs instanceof Dict) {
-      const bboxArr = attrs.getArray("BBox");
-      if (isNumberArray(bboxArr, 4)) {
-        x = bboxArr[0];
-        y = bboxArr[3]; // top of the bbox in PDF page coordinates
+      const bbox = lookupRect(attrs.getArray("BBox"), null);
+      if (bbox) {
+        x = bbox[0];
+        y = bbox[3]; // top of the bbox in PDF page coordinates
       }
     }
 

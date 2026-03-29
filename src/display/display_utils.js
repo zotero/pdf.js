@@ -790,13 +790,10 @@ class CSSConstants {
   }
 }
 
-function applyOpacity(r, g, b, opacity) {
+function applyOpacity(color, opacity) {
   opacity = MathClamp(opacity ?? 1, 0, 1);
   const white = 255 * (1 - opacity);
-  r = Math.round(r * opacity + white);
-  g = Math.round(g * opacity + white);
-  b = Math.round(b * opacity + white);
-  return [r, g, b];
+  return color.map(c => Math.round(c * opacity + white));
 }
 
 function RGBToHSL(rgb, output) {

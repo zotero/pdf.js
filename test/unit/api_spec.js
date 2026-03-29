@@ -2167,6 +2167,65 @@ describe("api", function () {
       await loadingTask.destroy();
     });
 
+    it("gets outline, with SE (Structure Element) entries", async function () {
+      const loadingTask = getDocument(
+        buildGetDocumentParams("outlines_se.pdf")
+      );
+      const pdfDoc = await loadingTask.promise;
+      const outline = await pdfDoc.getOutline();
+
+      expect(outline).toEqual([
+        {
+          action: null,
+          attachment: undefined,
+          dest: null,
+          url: null,
+          unsafeUrl: undefined,
+          newWindow: undefined,
+          setOCGState: undefined,
+          title: "P tags",
+          color: new Uint8ClampedArray([0, 0, 0]),
+          count: 2,
+          bold: false,
+          italic: false,
+          items: [
+            {
+              action: null,
+              attachment: undefined,
+              dest: [{ num: 37, gen: 0 }, { name: "XYZ" }, null, null, null],
+              url: null,
+              unsafeUrl: undefined,
+              newWindow: undefined,
+              setOCGState: undefined,
+              title: "Hello ",
+              color: new Uint8ClampedArray([0, 0, 0]),
+              count: undefined,
+              bold: false,
+              italic: false,
+              items: [],
+            },
+            {
+              action: null,
+              attachment: undefined,
+              dest: [{ num: 36, gen: 0 }, { name: "XYZ" }, null, null, null],
+              url: null,
+              unsafeUrl: undefined,
+              newWindow: undefined,
+              setOCGState: undefined,
+              title: "World ",
+              color: new Uint8ClampedArray([0, 0, 0]),
+              count: undefined,
+              bold: false,
+              italic: false,
+              items: [],
+            },
+          ],
+        },
+      ]);
+
+      await loadingTask.destroy();
+    });
+
     it("gets non-existent permissions", async function () {
       const permissions = await pdfDocument.getPermissions();
       expect(permissions).toEqual(null);

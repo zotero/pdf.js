@@ -604,9 +604,8 @@ function getRGB(color) {
   if (color.startsWith("rgba(")) {
     return color
       .slice(/* "rgba(".length */ 5, -1) // Strip out "rgba(" and ")".
-      .split(",")
-      .map(x => parseInt(x))
-      .slice(0, 3);
+      .split(",", 3)
+      .map(x => parseInt(x));
   }
 
   warn(`Not a valid color format: "${color}"`);

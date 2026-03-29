@@ -668,8 +668,12 @@ pdfjs-views-manager-view-selector-button =
     .title = Vis
 pdfjs-views-manager-view-selector-button-label = Visningar
 pdfjs-views-manager-pages-title = Sider
+pdfjs-views-manager-outlines-title1 = Dokumentoversikt
+    .title = Dokumentoversikt (dobbelklikk for å utvide/skjule alle element)
 pdfjs-views-manager-outlines-title = Dokumentdisposisjon
 pdfjs-views-manager-attachments-title = Vedlegg
+pdfjs-views-manager-layers-title1 = Lag
+    .title = Lag (dobbelklikk for å tilbakestille alle lag til standardtilstand)
 pdfjs-views-manager-layers-title = Lag
 pdfjs-views-manager-pages-option-label = Sider
 pdfjs-views-manager-outlines-option-label = Dokumentdisposisjon
@@ -690,6 +694,7 @@ pdfjs-views-manager-pages-status-action-button-label = Handsam
 pdfjs-views-manager-pages-status-copy-button-label = Kopier
 pdfjs-views-manager-pages-status-cut-button-label = Klipp ut
 pdfjs-views-manager-pages-status-delete-button-label = Slett
+pdfjs-views-manager-pages-status-export-selected-button-label = Eksporter valde…
 pdfjs-views-manager-pages-status-save-as-button-label = Lagre som…
 # Variables:
 #   $count (Number) - the number of selected pages to be cut.

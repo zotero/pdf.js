@@ -323,7 +323,7 @@ describe("display_utils", function () {
       ctx.globalAlpha = 0.8;
       ctx.fillRect(0, 0, 1, 1);
       const [r, g, b] = ctx.getImageData(0, 0, 1, 1).data;
-      expect(applyOpacity(123, 45, 67, ctx.globalAlpha)).toEqual([r, g, b]);
+      expect(applyOpacity([123, 45, 67], ctx.globalAlpha)).toEqual([r, g, b]);
     });
   });
 

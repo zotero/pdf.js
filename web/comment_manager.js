@@ -132,7 +132,7 @@ class CommentManager {
     return this.#hasForcedColors
       ? null
       : findContrastColor(
-          applyOpacity(...color, opacity ?? 1),
+          applyOpacity(color, opacity ?? 1),
           CSSConstants.commentForegroundColor
         );
   }

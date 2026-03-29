@@ -1677,11 +1677,7 @@ class SimpleSegmentVisitor {
     }
 
     // Combines exported symbols from all referred segments
-    let symbols = this.symbols;
-    if (!symbols) {
-      this.symbols = symbols = {};
-    }
-
+    const symbols = (this.symbols ||= {});
     const inputSymbols = [];
     for (const referredSegment of referredSegments) {
       const referredSymbols = symbols[referredSegment];
@@ -1766,10 +1762,7 @@ class SimpleSegmentVisitor {
   }
 
   onPatternDictionary(dictionary, currentSegment, data, start, end) {
-    let patterns = this.patterns;
-    if (!patterns) {
-      this.patterns = patterns = {};
-    }
+    const patterns = (this.patterns ||= {});
     const decodingContext = new DecodingContext(data, start, end);
     patterns[currentSegment] = decodePatternDictionary(
       dictionary.mmr,
@@ -1811,10 +1804,7 @@ class SimpleSegmentVisitor {
   }
 
   onTables(currentSegment, data, start, end) {
-    let customTables = this.customTables;
-    if (!customTables) {
-      this.customTables = customTables = {};
-    }
+    const customTables = (this.customTables ||= {});
     customTables[currentSegment] = decodeTablesSegment(data, start, end);
   }
 }
@@ -1865,10 +1855,7 @@ class HuffmanTreeNode {
       this.children[bit] = new HuffmanTreeNode(line);
     } else {
       // Create an intermediate node and continue recursively.
-      let node = this.children[bit];
-      if (!node) {
-        this.children[bit] = node = new HuffmanTreeNode(null);
-      }
+      const node = (this.children[bit] ||= new HuffmanTreeNode(null));
       node.buildTree(line, shift - 1);
     }
   }

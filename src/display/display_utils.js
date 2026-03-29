@@ -417,41 +417,37 @@ function getPdfFilenameFromUrl(url, defaultFilename = "document.pdf") {
 }
 
 class StatTimer {
-  started = Object.create(null);
+  #started = new Map();
 
   times = [];
 
   time(name) {
-    if (name in this.started) {
+    if (this.#started.has(name)) {
       warn(`Timer is already running for ${name}`);
     }
-    this.started[name] = Date.now();
+    this.#started.set(name, Date.now());
   }
 
   timeEnd(name) {
-    if (!(name in this.started)) {
+    if (!this.#started.has(name)) {
       warn(`Timer has not been started for ${name}`);
     }
     this.times.push({
       name,
-      start: this.started[name],
+      start: this.#started.get(name),
       end: Date.now(),
     });
     // Remove timer from started so it can be called again.
-    delete this.started[name];
+    this.#started.delete(name);
   }
 
   toString() {
     // Find the longest name for padding purposes.
-    const outBuf = [];
-    let longest = 0;
-    for (const { name } of this.times) {
-      longest = Math.max(name.length, longest);
-    }
-    for (const { name, start, end } of this.times) {
-      outBuf.push(`${name.padEnd(longest)} ${end - start}ms\n`);
-    }
-    return outBuf.join("");
+    const longest = Math.max(...this.times.map(t => t.name.length));
+
+    return this.times
+      .map(t => `${t.name.padEnd(longest)} ${t.end - t.start}ms\n`)
+      .join("");
   }
 }
 

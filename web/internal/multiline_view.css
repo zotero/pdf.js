@@ -157,6 +157,7 @@
     font-size: 0.8em;
     color: var(--muted-color);
     user-select: none;
+    height: 22px;
   }
 
   .mlc-num-item.mlc-match {

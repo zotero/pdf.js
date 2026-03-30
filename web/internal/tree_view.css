@@ -179,6 +179,7 @@
   display: block;
   white-space: nowrap;
   padding-inline-start: 0.5em;
+  height: 22px;
 }
 
 .raw-bytes-stream {

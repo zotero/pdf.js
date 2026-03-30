@@ -35,6 +35,7 @@ import {
   PsTernaryNode,
   PsUnaryNode,
 } from "../../src/core/postscript/ast.js";
+import { buildPostScriptJsFunction } from "../../src/core/postscript/js_evaluator.js";
 
 // Precision argument for toBeCloseTo() in trigonometric tests.
 const TRIGONOMETRY_EPS = 1e-10;
@@ -195,15 +196,23 @@ describe("PostScript Type 4 lexer, parser, and Wasm compiler", function () {
      * For single-output functions returns a scalar; for multi-output an Array.
      */
     function compileAndRun(src, domain, range, args) {
-      const fn = buildPostScriptWasmFunction(src, domain, range);
-      if (!fn) {
+      const wasmFn = buildPostScriptWasmFunction(src, domain, range);
+      const jsFn = buildPostScriptJsFunction(src, domain, range);
+      if (!wasmFn) {
+        expect(jsFn).toBeNull();
         return null;
       }
+      expect(jsFn).not.toBeNull();
       const nOut = range.length >> 1;
       const srcBuf = new Float64Array(args);
-      const dest = new Float64Array(nOut);
-      fn(srcBuf, 0, dest, 0);
-      return nOut === 1 ? dest[0] : Array.from(dest);
+      const wasmDest = new Float64Array(nOut);
+      const jsDest = new Float64Array(nOut);
+      wasmFn(srcBuf, 0, wasmDest, 0);
+      jsFn(srcBuf, 0, jsDest, 0);
+      for (let i = 0; i < nOut; i++) {
+        expect(jsDest[i]).toBeCloseTo(wasmDest[i], 10);
+      }
+      return nOut === 1 ? wasmDest[0] : Array.from(wasmDest);
     }
 
     function readULEB128(bytes, offset) {
@@ -257,186 +266,161 @@ describe("PostScript Type 4 lexer, parser, and Wasm compiler", function () {
     // Arithmetic.
 
     it("compiles add", async function () {
-      const r = await compileAndRun(
-        "{ add }",
-        [0, 1, 0, 1],
-        [0, 2],
-        [0.3, 0.7]
-      );
+      const r = compileAndRun("{ add }", [0, 1, 0, 1], [0, 2], [0.3, 0.7]);
       expect(r).toBeCloseTo(1.0, 9);
     });
 
     it("compiles sub", async function () {
-      const r = await compileAndRun(
-        "{ sub }",
-        [0, 1, 0, 1],
-        [0, 1],
-        [0.8, 0.3]
-      );
+      const r = compileAndRun("{ sub }", [0, 1, 0, 1], [0, 1], [0.8, 0.3]);
       expect(r).toBeCloseTo(0.5, 9);
     });
 
     it("compiles mul", async function () {
-      const r = await compileAndRun("{ 0.5 mul }", [0, 1], [0, 1], [0.4]);
+      const r = compileAndRun("{ 0.5 mul }", [0, 1], [0, 1], [0.4]);
       expect(r).toBeCloseTo(0.2, 9);
     });
 
     it("compiles div", async function () {
-      const r = await compileAndRun("{ div }", [0, 10, 0, 10], [0, 10], [6, 3]);
+      const r = compileAndRun("{ div }", [0, 10, 0, 10], [0, 10], [6, 3]);
       expect(r).toBeCloseTo(2, 9);
     });
 
     it("div by zero returns 0", async function () {
-      const r = await compileAndRun("{ div }", [0, 10, 0, 10], [0, 10], [5, 0]);
+      const r = compileAndRun("{ div }", [0, 10, 0, 10], [0, 10], [5, 0]);
       expect(r).toBe(0);
     });
 
     it("compiles idiv", async function () {
-      const r = await compileAndRun(
-        "{ idiv }",
-        [0, 10, 1, 10],
-        [0, 10],
-        [7, 2]
-      );
+      const r = compileAndRun("{ idiv }", [0, 10, 1, 10], [0, 10], [7, 2]);
       expect(r).toBeCloseTo(3, 9);
     });
 
     it("idiv by zero returns 0", async function () {
-      const r = await compileAndRun(
-        "{ idiv }",
-        [0, 10, 0, 10],
-        [0, 10],
-        [5, 0]
-      );
+      const r = compileAndRun("{ idiv }", [0, 10, 0, 10], [0, 10], [5, 0]);
       expect(r).toBe(0);
     });
 
     it("compiles mod", async function () {
-      const r = await compileAndRun("{ mod }", [0, 10, 1, 10], [0, 10], [7, 3]);
+      const r = compileAndRun("{ mod }", [0, 10, 1, 10], [0, 10], [7, 3]);
       expect(r).toBeCloseTo(1, 9);
     });
 
     it("mod by zero returns 0", async function () {
-      const r = await compileAndRun("{ mod }", [0, 10, 0, 10], [0, 10], [5, 0]);
+      const r = compileAndRun("{ mod }", [0, 10, 0, 10], [0, 10], [5, 0]);
       expect(r).toBe(0);
     });
 
     it("compiles mod with constant divisor", async function () {
       // { 3 mod } — divisor is a compile-time constant, exercises the
       // constant-divisor branch in _compileModNode.
-      const r = await compileAndRun("{ 3 mod }", [0, 10], [0, 3], [7]);
+      const r = compileAndRun("{ 3 mod }", [0, 10], [0, 3], [7]);
       expect(r).toBeCloseTo(1, 9); // 7 mod 3 = 1
     });
 
     it("compiles integer xor (bitwise)", async function () {
       // { 5 xor } with an integer-typed arg — exercises the non-boolean path in
       // _compileBitwiseOperandI32 and the xor case in _compileBitwiseNode.
-      const r = await compileAndRun("{ 5 xor }", [-128, 127], [-128, 127], [3]);
+      const r = compileAndRun("{ 5 xor }", [-128, 127], [-128, 127], [3]);
       expect(r).toBeCloseTo(6, 9); // 3 XOR 5 = 6
     });
 
     it("compiles neg", async function () {
       // neg applied to a variable — the optimizer cannot fold this.
       // abs(neg(x)) is optimized to abs(x), so test neg alone.
-      const r = await compileAndRun("{ neg }", [-1, 1], [-1, 1], [-0.5]);
+      const r = compileAndRun("{ neg }", [-1, 1], [-1, 1], [-0.5]);
       expect(r).toBeCloseTo(0.5, 9);
     });
 
     it("compiles neg and abs", async function () {
-      const r = await compileAndRun("{ neg abs }", [-1, 1], [0, 1], [-0.8]);
+      const r = compileAndRun("{ neg abs }", [-1, 1], [0, 1], [-0.8]);
       expect(r).toBeCloseTo(0.8, 9);
     });
 
     it("compiles cvi (truncate to integer)", async function () {
-      const r = await compileAndRun("{ 1.7 add cvi }", [0, 2], [0, 4], [0.5]);
+      const r = compileAndRun("{ 1.7 add cvi }", [0, 2], [0, 4], [0.5]);
       expect(r).toBeCloseTo(2, 9); // trunc(0.5 + 1.7) = trunc(2.2) = 2
     });
 
     it("compiles cvr (identity on reals)", async function () {
-      const r = await compileAndRun("{ cvr }", [0, 1], [0, 1], [0.7]);
+      const r = compileAndRun("{ cvr }", [0, 1], [0, 1], [0.7]);
       expect(r).toBeCloseTo(0.7, 9);
     });
 
     // Math.
 
     it("compiles sqrt", async function () {
-      const r = await compileAndRun("{ sqrt }", [0, 100], [0, 10], [9]);
+      const r = compileAndRun("{ sqrt }", [0, 100], [0, 10], [9]);
       expect(r).toBeCloseTo(3, 9);
     });
 
     it("compiles floor", async function () {
-      const r = await compileAndRun("{ floor }", [-2, 2], [-2, 2], [1.7]);
+      const r = compileAndRun("{ floor }", [-2, 2], [-2, 2], [1.7]);
       expect(r).toBeCloseTo(1, 9);
     });
 
     it("compiles ceiling", async function () {
-      const r = await compileAndRun("{ ceiling }", [-2, 2], [-2, 2], [1.2]);
+      const r = compileAndRun("{ ceiling }", [-2, 2], [-2, 2], [1.2]);
       expect(r).toBeCloseTo(2, 9);
     });
 
     it("compiles round", async function () {
-      const r = await compileAndRun("{ round }", [-2, 2], [-2, 2], [1.5]);
+      const r = compileAndRun("{ round }", [-2, 2], [-2, 2], [1.5]);
       expect(r).toBeCloseTo(2, 9);
     });
 
     it("round uses round-half-up (0.5 rounds to 1, -0.5 rounds to 0)", async function () {
-      const r1 = await compileAndRun("{ round }", [-2, 2], [-2, 2], [0.5]);
+      const r1 = compileAndRun("{ round }", [-2, 2], [-2, 2], [0.5]);
       expect(r1).toBe(1);
-      const r2 = await compileAndRun("{ round }", [-2, 2], [-2, 2], [-0.5]);
+      const r2 = compileAndRun("{ round }", [-2, 2], [-2, 2], [-0.5]);
       expect(r2).toBe(0);
     });
 
     it("compiles truncate", async function () {
-      const r = await compileAndRun("{ truncate }", [-2, 2], [-2, 2], [-1.9]);
+      const r = compileAndRun("{ truncate }", [-2, 2], [-2, 2], [-1.9]);
       expect(r).toBeCloseTo(-1, 9);
     });
 
     it("compiles ln", async function () {
-      const r = await compileAndRun("{ ln }", [0.001, 10], [-10, 10], [Math.E]);
+      const r = compileAndRun("{ ln }", [0.001, 10], [-10, 10], [Math.E]);
       expect(r).toBeCloseTo(1, 9);
     });
 
     it("compiles log (base 10)", async function () {
-      const r = await compileAndRun("{ log }", [0.001, 1000], [-3, 3], [100]);
+      const r = compileAndRun("{ log }", [0.001, 1000], [-3, 3], [100]);
       expect(r).toBeCloseTo(2, 9);
     });
 
     it("compiles exp (base ^ exponent)", async function () {
-      const r = await compileAndRun(
-        "{ exp }",
-        [0, 10, 0, 10],
-        [0, 2000],
-        [2, 10]
-      );
+      const r = compileAndRun("{ exp }", [0, 10, 0, 10], [0, 2000], [2, 10]);
       expect(r).toBeCloseTo(1024, 6);
     });
 
     it("compiles x ^ -1 → 1/x (strength reduction)", async function () {
-      const r = await compileAndRun("{ -1 exp }", [0.1, 10], [0.1, 10], [2]);
+      const r = compileAndRun("{ -1 exp }", [0.1, 10], [0.1, 10], [2]);
       expect(r).toBeCloseTo(0.5, 9); // 1/2 = 0.5
     });
 
     it("compiles x ^ 3 → (x*x)*x (strength reduction)", async function () {
-      const r = await compileAndRun("{ 3 exp }", [0, 10], [0, 1000], [2]);
+      const r = compileAndRun("{ 3 exp }", [0, 10], [0, 1000], [2]);
       expect(r).toBeCloseTo(8, 9); // 2^3 = 8
     });
 
     it("compiles x ^ 4 → (x*x)*(x*x) (strength reduction)", async function () {
       // x^4 uses CSE: x*x is computed once and squared — exercises the
       // local_tee/local_get path in _compileStandardBinaryNode.
-      const r = await compileAndRun("{ 4 exp }", [0, 10], [0, 10000], [2]);
+      const r = compileAndRun("{ 4 exp }", [0, 10], [0, 10000], [2]);
       expect(r).toBeCloseTo(16, 9); // 2^4 = 16
     });
 
     // Trigonometry (degrees).
 
     it("compiles sin (degrees)", async function () {
-      const r = await compileAndRun("{ sin }", [-360, 360], [-1, 1], [90]);
+      const r = compileAndRun("{ sin }", [-360, 360], [-1, 1], [90]);
       expect(r).toBeCloseTo(1, TRIGONOMETRY_EPS);
     });
 
     it("compiles cos (degrees)", async function () {
-      const r = await compileAndRun("{ cos }", [-360, 360], [-1, 1], [0]);
+      const r = compileAndRun("{ cos }", [-360, 360], [-1, 1], [0]);
       expect(r).toBeCloseTo(1, TRIGONOMETRY_EPS);
     });
 
@@ -452,18 +436,13 @@ describe("PostScript Type 4 lexer, parser, and Wasm compiler", function () {
 
     it("compiles atan (degrees, result in [0,360))", async function () {
       // atan(1, 1) = 45°
-      const r = await compileAndRun(
-        "{ atan }",
-        [-10, 10, -10, 10],
-        [0, 360],
-        [1, 1]
-      );
+      const r = compileAndRun("{ atan }", [-10, 10, -10, 10], [0, 360], [1, 1]);
       expect(r).toBeCloseTo(45, 6);
     });
 
     it("atan normalizes negative angles to [0,360)", async function () {
       // atan(-1, 1) would be -45°, should become 315°
-      const r = await compileAndRun(
+      const r = compileAndRun(
         "{ atan }",
         [-10, 10, -10, 10],
         [0, 360],
@@ -475,33 +454,23 @@ describe("PostScript Type 4 lexer, parser, and Wasm compiler", function () {
     // Stack operators.
 
     it("compiles dup", async function () {
-      const r = await compileAndRun("{ dup mul }", [0, 1], [0, 1], [0.5]);
+      const r = compileAndRun("{ dup mul }", [0, 1], [0, 1], [0.5]);
       expect(r).toBeCloseTo(0.25, 9);
     });
 
     it("compiles exch", async function () {
-      const r = await compileAndRun(
-        "{ exch div }",
-        [0, 10, 0, 10],
-        [0, 10],
-        [1, 2]
-      );
+      const r = compileAndRun("{ exch div }", [0, 10, 0, 10], [0, 10], [1, 2]);
       expect(r).toBeCloseTo(2, 9); // 2 / 1
     });
 
     it("compiles pop", async function () {
-      const r = await compileAndRun(
-        "{ pop }",
-        [0, 1, 0, 1],
-        [0, 1],
-        [0.3, 0.7]
-      );
+      const r = compileAndRun("{ pop }", [0, 1, 0, 1], [0, 1], [0.3, 0.7]);
       expect(r).toBeCloseTo(0.3, 9); // 0.7 popped, 0.3 remains
     });
 
     it("compiles copy", async function () {
       // { 1 copy add }: one input a → stack [a, a] → add → [2a]
-      const r = await compileAndRun("{ 1 copy add }", [0, 1], [0, 2], [0.4]);
+      const r = compileAndRun("{ 1 copy add }", [0, 1], [0, 2], [0.4]);
       expect(r).toBeCloseTo(0.8, 9);
     });
 
@@ -592,7 +561,7 @@ describe("PostScript Type 4 lexer, parser, and Wasm compiler", function () {
     });
 
     it("compiles 3-input function", async function () {
-      const r = await compileAndRun(
+      const r = compileAndRun(
         "{ add add }",
         [0, 1, 0, 1, 0, 1],
         [0, 3],
@@ -602,7 +571,7 @@ describe("PostScript Type 4 lexer, parser, and Wasm compiler", function () {
     });
 
     it("compiles 4-input function", async function () {
-      const r = await compileAndRun(
+      const r = compileAndRun(
         "{ add add add }",
         [0, 1, 0, 1, 0, 1, 0, 1],
         [0, 4],
@@ -612,7 +581,7 @@ describe("PostScript Type 4 lexer, parser, and Wasm compiler", function () {
     });
 
     it("compiles 5-input function (default caller path)", async function () {
-      const r = await compileAndRun(
+      const r = compileAndRun(
         "{ add add add add }",
         [0, 1, 0, 1, 0, 1, 0, 1, 0, 1],
         [0, 5],
@@ -624,38 +593,38 @@ describe("PostScript Type 4 lexer, parser, and Wasm compiler", function () {
     // Comparison / boolean.
 
     it("compiles eq", async function () {
-      const r = await compileAndRun("{ eq }", [0, 1, 0, 1], [0, 1], [0.5, 0.5]);
+      const r = compileAndRun("{ eq }", [0, 1, 0, 1], [0, 1], [0.5, 0.5]);
       expect(r).toBeCloseTo(1, 9);
     });
 
     it("compiles ne (not-equal)", async function () {
-      const r = await compileAndRun("{ 0.5 ne }", [0, 1], [0, 1], [0.3]);
+      const r = compileAndRun("{ 0.5 ne }", [0, 1], [0, 1], [0.3]);
       expect(r).toBeCloseTo(1, 9); // 0.3 ≠ 0.5 → true → 1
     });
 
     it("compiles lt (less-than)", async function () {
-      const r = await compileAndRun("{ 0.5 lt }", [0, 1], [0, 1], [0.3]);
+      const r = compileAndRun("{ 0.5 lt }", [0, 1], [0, 1], [0.3]);
       expect(r).toBeCloseTo(1, 9); // 0.3 < 0.5 → true → 1
     });
 
     it("compiles ge (greater-or-equal)", async function () {
-      const r = await compileAndRun("{ 0.5 ge }", [0, 1], [0, 1], [0.7]);
+      const r = compileAndRun("{ 0.5 ge }", [0, 1], [0, 1], [0.7]);
       expect(r).toBeCloseTo(1, 9); // 0.7 ≥ 0.5 → true → 1
     });
 
     it("compiles gt", async function () {
-      const r = await compileAndRun("{ gt }", [0, 1, 0, 1], [0, 1], [0.8, 0.3]);
+      const r = compileAndRun("{ gt }", [0, 1, 0, 1], [0, 1], [0.8, 0.3]);
       expect(r).toBeCloseTo(1, 9);
     });
 
     it("compiles le", async function () {
-      const r = await compileAndRun("{ le }", [0, 1, 0, 1], [0, 1], [0.3, 0.8]);
+      const r = compileAndRun("{ le }", [0, 1, 0, 1], [0, 1], [0.3, 0.8]);
       expect(r).toBeCloseTo(1, 9);
     });
 
     it("compiles true and false literals", async function () {
-      const t = await compileAndRun("{ true }", [], [0, 1], []);
-      const f = await compileAndRun("{ false }", [], [0, 1], []);
+      const t = compileAndRun("{ true }", [], [0, 1], []);
+      const f = compileAndRun("{ false }", [], [0, 1], []);
       expect(t).toBeCloseTo(1, 9);
       expect(f).toBeCloseTo(0, 9);
     });
@@ -663,7 +632,7 @@ describe("PostScript Type 4 lexer, parser, and Wasm compiler", function () {
     // Conditionals.
 
     it("compiles ifelse — true branch taken", async function () {
-      const r = await compileAndRun(
+      const r = compileAndRun(
         "{ dup 0.5 gt { 2 mul } { 0.5 mul } ifelse }",
         [0, 1],
         [0, 2],
@@ -673,7 +642,7 @@ describe("PostScript Type 4 lexer, parser, and Wasm compiler", function () {
     });
 
     it("compiles ifelse — false branch taken", async function () {
-      const r = await compileAndRun(
+      const r = compileAndRun(
         "{ dup 0.5 gt { 2 mul } { 0.5 mul } ifelse }",
         [0, 1],
         [0, 2],
@@ -684,7 +653,7 @@ describe("PostScript Type 4 lexer, parser, and Wasm compiler", function () {
 
     it("compiles if — condition true", async function () {
       // { dup 1 gt { pop 1 } if } — clamp x to 1 from above
-      const r = await compileAndRun(
+      const r = compileAndRun(
         "{ dup 1 gt { pop 1 } if }",
         [0, 2],
         [0, 2],
@@ -694,7 +663,7 @@ describe("PostScript Type 4 lexer, parser, and Wasm compiler", function () {
     });
 
     it("compiles if — condition false", async function () {
-      const r = await compileAndRun(
+      const r = compileAndRun(
         "{ dup 1 gt { pop 1 } if }",
         [0, 2],
         [0, 2],
@@ -733,29 +702,19 @@ describe("PostScript Type 4 lexer, parser, and Wasm compiler", function () {
 
     it("clamps output to declared range", async function () {
       // mul exceeds range [0, 0.5] → result clamped
-      const r = await compileAndRun(
-        "{ add }",
-        [0, 1, 0, 1],
-        [0, 0.5],
-        [0.4, 0.4]
-      );
+      const r = compileAndRun("{ add }", [0, 1, 0, 1], [0, 0.5], [0.4, 0.4]);
       expect(r).toBeCloseTo(0.5, 9);
     });
 
     // Bitwise.
 
     it("compiles bitshift left (literal shift)", async function () {
-      const r = await compileAndRun("{ 3 bitshift }", [0, 256], [0, 256], [1]);
+      const r = compileAndRun("{ 3 bitshift }", [0, 256], [0, 256], [1]);
       expect(r).toBeCloseTo(8, 9); // 1 << 3
     });
 
     it("compiles bitshift right (negative literal shift)", async function () {
-      const r = await compileAndRun(
-        "{ -2 bitshift }",
-        [-256, 256],
-        [-256, 256],
-        [8]
-      );
+      const r = compileAndRun("{ -2 bitshift }", [-256, 256], [-256, 256], [8]);
       expect(r).toBeCloseTo(2, 9); // 8 >> 2
     });
 
@@ -764,7 +723,7 @@ describe("PostScript Type 4 lexer, parser, and Wasm compiler", function () {
       // b |= 0x80 branch in _emitULEB128.
       // Wasm i32.shl uses shift % 32, so 128 % 32 = 0 →
       // left-shift by 0 = identity.
-      const r = await compileAndRun(
+      const r = compileAndRun(
         "{ 128 bitshift }",
         [-1000, 1000],
         [-1000, 1000],
@@ -779,7 +738,7 @@ describe("PostScript Type 4 lexer, parser, and Wasm compiler", function () {
       // exercising the byte |= 0x80 branch in unsignedLEB128.
       const src =
         "{ 1 add 1 add 1 add 1 add 1 add 1 add 1 add 1 add 1 add 1 add 1 add 1 add 1 add }";
-      const r = await compileAndRun(src, [0, 1], [0, 14], [0]);
+      const r = compileAndRun(src, [0, 1], [0, 14], [0]);
       expect(r).toBeCloseTo(13, 9);
     });
 
@@ -807,13 +766,13 @@ describe("PostScript Type 4 lexer, parser, and Wasm compiler", function () {
 
     it("compiles boolean not (logical NOT)", async function () {
       // 0.5 0.5 eq → true (1.0); not → false (0.0)
-      const r = await compileAndRun("{ dup eq not }", [0, 1], [0, 1], [0.5]);
+      const r = compileAndRun("{ dup eq not }", [0, 1], [0, 1], [0.5]);
       expect(r).toBeCloseTo(0, 9);
     });
 
     it("compiles integer not (bitwise NOT)", async function () {
       // ~5 = -6
-      const r = await compileAndRun("{ not }", [-256, 256], [-256, 256], [5]);
+      const r = compileAndRun("{ not }", [-256, 256], [-256, 256], [5]);
       expect(r).toBeCloseTo(-6, 9);
     });
 
@@ -821,7 +780,7 @@ describe("PostScript Type 4 lexer, parser, and Wasm compiler", function () {
 
     it("ifelse with comparison condition (true branch)", async function () {
       // x > 0.5: comparison emitted directly as i32, no f64 round-trip.
-      const r = await compileAndRun(
+      const r = compileAndRun(
         "{ 0.5 gt { 1 } { 0 } ifelse }",
         [0, 1],
         [0, 1],
@@ -831,7 +790,7 @@ describe("PostScript Type 4 lexer, parser, and Wasm compiler", function () {
     });
 
     it("ifelse with comparison condition (false branch)", async function () {
-      const r = await compileAndRun(
+      const r = compileAndRun(
         "{ 0.5 gt { 1 } { 0 } ifelse }",
         [0, 1],
         [0, 1],
@@ -846,9 +805,9 @@ describe("PostScript Type 4 lexer, parser, and Wasm compiler", function () {
       // node is a PsBinaryNode(and) — exercises the i32_trunc_f64_s fallback
       // in _compileNodeAsBoolI32.
       const src = "{ dup 0.3 gt exch 0.7 lt and { 1 } { 0 } ifelse }";
-      const r0 = await compileAndRun(src, [0, 1], [0, 1], [0.5]);
+      const r0 = compileAndRun(src, [0, 1], [0, 1], [0.5]);
       expect(r0).toBeCloseTo(1, 9); // 0.5 in (0.3, 0.7)
-      const r1 = await compileAndRun(src, [0, 1], [0, 1], [0.2]);
+      const r1 = compileAndRun(src, [0, 1], [0, 1], [0.2]);
       expect(r1).toBeCloseTo(0, 9); // 0.2 outside range
     });
 
@@ -856,9 +815,9 @@ describe("PostScript Type 4 lexer, parser, and Wasm compiler", function () {
       // not(and(two comparisons)) — exercises the boolean `not` path in
       // _compileNodeAsBoolI32 (recursive call + i32.eqz).
       const src = "{ dup 0.3 gt exch 0.7 lt and not { 1 } { 0 } ifelse }";
-      const r0 = await compileAndRun(src, [0, 1], [0, 1], [0.5]);
+      const r0 = compileAndRun(src, [0, 1], [0, 1], [0.5]);
       expect(r0).toBeCloseTo(0, 9); // 0.5 in (0.3, 0.7) → not → false
-      const r1 = await compileAndRun(src, [0, 1], [0, 1], [0.2]);
+      const r1 = compileAndRun(src, [0, 1], [0, 1], [0.2]);
       expect(r1).toBeCloseTo(1, 9); // 0.2 outside range → not → true
     });
 
@@ -868,18 +827,18 @@ describe("PostScript Type 4 lexer, parser, and Wasm compiler", function () {
       // and(x>0.3, x<0.7) used as the direct output (not as ternary condition)
       // — exercises _compileBitwiseOperandI32 with boolean operands.
       const src = "{ dup 0.3 gt exch 0.7 lt and }";
-      const r0 = await compileAndRun(src, [0, 1], [0, 1], [0.5]);
+      const r0 = compileAndRun(src, [0, 1], [0, 1], [0.5]);
       expect(r0).toBeCloseTo(1, 9);
-      const r1 = await compileAndRun(src, [0, 1], [0, 1], [0.2]);
+      const r1 = compileAndRun(src, [0, 1], [0, 1], [0.2]);
       expect(r1).toBeCloseTo(0, 9);
     });
 
     it("boolean-or of two comparisons as standalone output", async function () {
       // or(x<0.3, x>0.7): true when x is outside [0.3, 0.7].
       const src = "{ dup 0.3 lt exch 0.7 gt or }";
-      const r0 = await compileAndRun(src, [0, 1], [0, 1], [0.2]);
+      const r0 = compileAndRun(src, [0, 1], [0, 1], [0.2]);
       expect(r0).toBeCloseTo(1, 9);
-      const r1 = await compileAndRun(src, [0, 1], [0, 1], [0.5]);
+      const r1 = compileAndRun(src, [0, 1], [0, 1], [0.5]);
       expect(r1).toBeCloseTo(0, 9);
     });
 
@@ -888,9 +847,9 @@ describe("PostScript Type 4 lexer, parser, and Wasm compiler", function () {
       // _compileNodeAsBoolI32 for the operand, eliminating all f64/i32
       // round-trips.
       const src = "{ dup 0.3 gt exch 0.7 lt and not }";
-      const r0 = await compileAndRun(src, [0, 1], [0, 1], [0.5]);
+      const r0 = compileAndRun(src, [0, 1], [0, 1], [0.5]);
       expect(r0).toBeCloseTo(0, 9); // inside → and=true → not=false
-      const r1 = await compileAndRun(src, [0, 1], [0, 1], [0.2]);
+      const r1 = compileAndRun(src, [0, 1], [0, 1], [0.2]);
       expect(r1).toBeCloseTo(1, 9); // outside → and=false → not=true
     });
 
@@ -899,11 +858,11 @@ describe("PostScript Type 4 lexer, parser, and Wasm compiler", function () {
       // Each ternary condition goes through _compileNodeAsBoolI32.
       const src =
         "{ dup 0.3 lt { pop 0 } { dup 0.7 gt { pop 1 } { pop 0.5 } ifelse } ifelse }";
-      const r0 = await compileAndRun(src, [0, 1], [0, 1], [0.1]);
+      const r0 = compileAndRun(src, [0, 1], [0, 1], [0.1]);
       expect(r0).toBeCloseTo(0, 9);
-      const r1 = await compileAndRun(src, [0, 1], [0, 1], [0.9]);
+      const r1 = compileAndRun(src, [0, 1], [0, 1], [0.9]);
       expect(r1).toBeCloseTo(1, 9);
-      const r2 = await compileAndRun(src, [0, 1], [0, 1], [0.5]);
+      const r2 = compileAndRun(src, [0, 1], [0, 1], [0.5]);
       expect(r2).toBeCloseTo(0.5, 9);
     });
 
@@ -911,9 +870,9 @@ describe("PostScript Type 4 lexer, parser, and Wasm compiler", function () {
       // or(x<0.3, x>0.7) as ternary condition — exercises the TOKEN.or case
       // in the boolean and/or/xor branch of _compileNodeAsBoolI32.
       const src = "{ dup 0.3 lt exch 0.7 gt or { 1 } { 0 } ifelse }";
-      const r0 = await compileAndRun(src, [0, 1], [0, 1], [0.2]);
+      const r0 = compileAndRun(src, [0, 1], [0, 1], [0.2]);
       expect(r0).toBeCloseTo(1, 9); // 0.2 < 0.3 → true
-      const r1 = await compileAndRun(src, [0, 1], [0, 1], [0.5]);
+      const r1 = compileAndRun(src, [0, 1], [0, 1], [0.5]);
       expect(r1).toBeCloseTo(0, 9); // 0.5 inside → false
     });
 
@@ -922,10 +881,10 @@ describe("PostScript Type 4 lexer, parser, and Wasm compiler", function () {
       // _compileNodeAsBoolI32; true when exactly one condition holds.
       const src = "{ dup 0.5 lt exch 0.3 gt xor { 1 } { 0 } ifelse }";
       // x=0.4: 0.4<0.5=true, 0.4>0.3=true → xor=false → 0
-      const r0 = await compileAndRun(src, [0, 1], [0, 1], [0.4]);
+      const r0 = compileAndRun(src, [0, 1], [0, 1], [0.4]);
       expect(r0).toBeCloseTo(0, 9);
       // x=0.2: 0.2<0.5=true, 0.2>0.3=false → xor=true → 1
-      const r1 = await compileAndRun(src, [0, 1], [0, 1], [0.2]);
+      const r1 = compileAndRun(src, [0, 1], [0, 1], [0.2]);
       expect(r1).toBeCloseTo(1, 9);
     });
 
@@ -933,19 +892,9 @@ describe("PostScript Type 4 lexer, parser, and Wasm compiler", function () {
       // The condition is the raw input arg (numeric, not boolean), so
       // _compileNodeAsBoolI32 falls through to the general path and emits
       // f64.const 0 / f64.ne to convert to i32.
-      const r0 = await compileAndRun(
-        "{ { 1 } { 0 } ifelse }",
-        [0, 1],
-        [0, 1],
-        [0.7]
-      );
+      const r0 = compileAndRun("{ { 1 } { 0 } ifelse }", [0, 1], [0, 1], [0.7]);
       expect(r0).toBeCloseTo(1, 9); // 0.7 ≠ 0 → truthy → 1
-      const r1 = await compileAndRun(
-        "{ { 1 } { 0 } ifelse }",
-        [0, 1],
-        [0, 1],
-        [0]
-      );
+      const r1 = compileAndRun("{ { 1 } { 0 } ifelse }", [0, 1], [0, 1], [0]);
       expect(r1).toBeCloseTo(0, 9); // 0 → falsy → 0
     });
 
@@ -955,34 +904,29 @@ describe("PostScript Type 4 lexer, parser, and Wasm compiler", function () {
       // (x+1)^2: the x^2→x*x strength reduction creates PsBinaryNode(mul,
       // add_node, add_node) where add_node is non-trivial — exercises the
       // local_tee/local_get path in _compileStandardBinaryNode.
-      const r = await compileAndRun("{ 1 add 2 exp }", [0, 10], [0, 100], [3]);
+      const r = compileAndRun("{ 1 add 2 exp }", [0, 10], [0, 100], [3]);
       expect(r).toBeCloseTo(16, 9); // (3+1)^2 = 16
     });
 
     it("shared non-trivial operand uses local_tee (x+2)^2 via dup", async function () {
       // `2 add dup mul`: dup of the add node gives PsBinaryNode(mul, add, add)
       // with the same reference twice — exercises the local_tee/local_get path.
-      const r = await compileAndRun(
-        "{ 2 add dup mul }",
-        [0, 10],
-        [0, 100],
-        [3]
-      );
+      const r = compileAndRun("{ 2 add dup mul }", [0, 10], [0, 100], [3]);
       expect(r).toBeCloseTo(25, 9); // (3+2)^2 = 25
     });
 
     it("compiles x^3 without changing behavior", async function () {
-      const r = await compileAndRun("{ 3 exp }", [0, 10], [0, 1000], [2]);
+      const r = compileAndRun("{ 3 exp }", [0, 10], [0, 1000], [2]);
       expect(r).toBeCloseTo(8, 9);
     });
 
     it("compiles x^4 without changing behavior", async function () {
-      const r = await compileAndRun("{ 4 exp }", [0, 10], [0, 10000], [2]);
+      const r = compileAndRun("{ 4 exp }", [0, 10], [0, 10000], [2]);
       expect(r).toBeCloseTo(16, 9);
     });
 
     it("compiles x^-1 without changing behavior", async function () {
-      const r = await compileAndRun("{ -1 exp }", [1, 10], [0, 1], [4]);
+      const r = compileAndRun("{ -1 exp }", [1, 10], [0, 1], [4]);
       expect(r).toBeCloseTo(0.25, 9);
     });
 
@@ -1031,19 +975,19 @@ describe("PostScript Type 4 lexer, parser, and Wasm compiler", function () {
     // min/max fold and related runtime tests.
 
     it("compiles x^0.25 → sqrt(sqrt(x))", async function () {
-      const r = await compileAndRun("{ 0.25 exp }", [0, 16], [0, 2], [16]);
+      const r = compileAndRun("{ 0.25 exp }", [0, 16], [0, 2], [16]);
       expect(r).toBeCloseTo(2, 9); // 16^0.25 = 2
     });
 
     it("compiles neg(a − b) → b − a", async function () {
       // neg(x - 3) = 3 - x; at x=1 → 2
-      const r = await compileAndRun("{ 3 sub neg }", [0, 10], [0, 10], [1]);
+      const r = compileAndRun("{ 3 sub neg }", [0, 10], [0, 10], [1]);
       expect(r).toBeCloseTo(2, 9);
     });
 
     it("compiles min(max(x, 0.8), 0.5) → constant 0.5", async function () {
       // Absorption: max result always >= 0.8 > 0.5, so min is always 0.5.
-      const r = await compileAndRun(
+      const r = compileAndRun(
         "{ dup 0.8 lt { pop 0.8 } { } ifelse " +
           "dup 0.5 gt { pop 0.5 } { } ifelse }",
         [0, 1],
@@ -1055,14 +999,14 @@ describe("PostScript Type 4 lexer, parser, and Wasm compiler", function () {
 
     it("min/max fold: upper clamp emits f64.min", async function () {
       // x > 1 → clamp to 1; x ≤ 1 → pass through.
-      const r1 = await compileAndRun(
+      const r1 = compileAndRun(
         "{ dup 1 gt { pop 1 } { } ifelse }",
         [0, 2],
         [0, 2],
         [2]
       );
       expect(r1).toBeCloseTo(1, 9);
-      const r2 = await compileAndRun(
+      const r2 = compileAndRun(
         "{ dup 1 gt { pop 1 } { } ifelse }",
         [0, 2],
         [0, 2],
@@ -1073,14 +1017,14 @@ describe("PostScript Type 4 lexer, parser, and Wasm compiler", function () {
 
     it("min/max fold: lower clamp emits f64.max", async function () {
       // x < 0 → clamp to 0; x ≥ 0 → pass through.
-      const r1 = await compileAndRun(
+      const r1 = compileAndRun(
         "{ dup 0 lt { pop 0 } { } ifelse }",
         [-1, 1],
         [0, 1],
         [-0.5]
       );
       expect(r1).toBeCloseTo(0, 9);
-      const r2 = await compileAndRun(
+      const r2 = compileAndRun(
         "{ dup 0 lt { pop 0 } { } ifelse }",
         [-1, 1],
         [0, 1],

@@ -235,6 +235,32 @@ class TreeView {
    * into the ref's children container, avoiding an extra toggle level).
    */
   #buildChildren(value, doc, container) {
+    if (this.#isPSFunction(value)) {
+      for (const [k, v] of Object.entries(value.dict)) {
+        container.append(this.#renderNode(k, v, doc));
+      }
+      const srcNode = this.#makeNodeEl("source");
+      const srcLabel = `[PostScript, ${value.psLines.length} lines]`;
+      const srcLabelEl = this.#makeSpan("stream-label", srcLabel);
+      srcNode.append(
+        this.#makeExpandable(srcLabelEl, srcLabel, c =>
+          this.#buildPSFunctionPanel(value, c, srcLabelEl)
+        )
+      );
+      container.append(srcNode);
+      if (value.jsCode !== null) {
+        const jsNode = this.#makeNodeEl("js");
+        const jsLabel = "[JS equivalent]";
+        const jsLabelEl = this.#makeSpan("stream-label", jsLabel);
+        jsNode.append(
+          this.#makeExpandable(jsLabelEl, jsLabel, c =>
+            this.#buildJSCodePanel(value.jsCode, c)
+          )
+        );
+        container.append(jsNode);
+      }
+      return;
+    }
     if (this.#isStream(value)) {
       for (const [k, v] of Object.entries(value.dict)) {
         container.append(this.#renderNode(k, v, doc));
@@ -310,6 +336,8 @@ class TreeView {
         span.append(this.#makeSpan("bracket", "]"));
         return span;
       }
+      case "brace":
+        return this.#makeSpan("bracket", token.value);
       case "dict": {
         const span = document.createElement("span");
         span.className = "token-dict";
@@ -355,6 +383,8 @@ class TreeView {
         return String(token.value);
       case "null":
         return "null";
+      case "brace":
+        return token.value;
       case "array":
         return `[ ${token.value.map(t => this.#tokenToText(t)).join(" ")} ]`;
       case "dict": {
@@ -470,6 +500,96 @@ class TreeView {
     return btn;
   }
 
+  // Fills container with a PostScript source panel (indented, token-coloured).
+  #buildPSSourcePanel(psLines, container, actions = null) {
+    const mc = new MultilineView({
+      total: psLines.length,
+      lineClass: "content-stream ps-source-stream",
+      getText: i => {
+        const { tokens } = psLines[i];
+        return tokens.map(t => this.#tokenToText(t)).join(" ");
+      },
+      actions,
+      makeLineEl: (i, isHighlighted) => {
+        const line = document.createElement("div");
+        line.className = "content-stm-instruction";
+        if (isHighlighted) {
+          line.classList.add("mlc-match");
+        }
+        const content = document.createElement("span");
+        const { indent, tokens } = psLines[i];
+        if (indent > 0) {
+          content.style.paddingInlineStart = `${indent * 1.5}em`;
+        }
+        for (let j = 0; j < tokens.length; j++) {
+          if (j > 0) {
+            content.append(document.createTextNode(" "));
+          }
+          content.append(this.#renderToken(tokens[j]));
+        }
+        line.append(content);
+        return line;
+      },
+    });
+    container.append(mc.element);
+    return mc;
+  }
+
+  // Fills container with a JS code panel (plain monospace lines).
+  #buildJSCodePanel(jsCode, container, actions = null) {
+    const lines = jsCode.split("\n");
+    while (lines.at(-1) === "") {
+      lines.pop();
+    }
+    const mc = new MultilineView({
+      total: lines.length,
+      lineClass: "content-stream js-code-stream",
+      getText: i => lines[i],
+      actions,
+      makeLineEl: (i, isHighlighted) => {
+        const el = document.createElement("div");
+        el.className = "content-stm-instruction";
+        if (isHighlighted) {
+          el.classList.add("mlc-match");
+        }
+        el.append(document.createTextNode(lines[i]));
+        return el;
+      },
+    });
+    container.append(mc.element);
+    return mc;
+  }
+
+  // PS source panel with parsed/raw toggle and an expandable JS equivalent.
+  #buildPSFunctionPanel(val, container, labelEl = null) {
+    let isParsed = true;
+    let currentPanel = null;
+    const rawLines = val.source.split(/\r?\n|\r/);
+    if (rawLines.at(-1) === "") {
+      rawLines.pop();
+    }
+    const parsedLabel = `[PostScript, ${val.psLines.length} lines]`;
+    const rawLabel = `[PostScript, ${rawLines.length} raw lines]`;
+
+    const rebuild = () => {
+      currentPanel?.destroy();
+      currentPanel = null;
+      container.replaceChildren();
+      if (labelEl) {
+        labelEl.textContent = isParsed ? parsedLabel : rawLabel;
+      }
+      const btn = this.#makeParseToggleBtn(isParsed, () => {
+        isParsed = !isParsed;
+        rebuild();
+      });
+      currentPanel = isParsed
+        ? this.#buildPSSourcePanel(val.psLines, container, btn)
+        : this.#buildRawBytesPanel(val.source, container, btn);
+    };
+
+    rebuild();
+  }
+
   // Fills container with the content stream panel (parsed or raw), with a
   // toggle button in the toolbar that swaps the view in-place.
   #buildContentStreamPanel(val, container, labelEl = null) {
@@ -536,6 +656,15 @@ class TreeView {
     // Content stream (Page Contents) → expandable with Parsed/Raw toggle
     if (this.#isContentStream(value)) {
       return this.#renderContentStream(value);
+    }
+
+    // PostScript Type 4 function stream
+    if (this.#isPSFunction(value)) {
+      return this.#renderExpandable(
+        "[PostScript Function]",
+        "stream-label",
+        container => this.#buildChildren(value, doc, container)
+      );
     }
 
     // Stream → expandable showing dict entries + byte count or image preview
@@ -840,6 +969,17 @@ class TreeView {
 
   #isFormXObjectStream(val) {
     return this.#isStream(val) && val.contentStream === true;
+  }
+
+  // PostScript Type 4 function: { dict, psFunction: true, psLines, jsCode }.
+  #isPSFunction(val) {
+    return (
+      val !== null &&
+      typeof val === "object" &&
+      !Array.isArray(val) &&
+      Object.prototype.hasOwnProperty.call(val, "dict") &&
+      val.psFunction === true
+    );
   }
 }
 

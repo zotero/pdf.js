@@ -2136,6 +2136,22 @@ class PDFDocument {
         return obj;
       }
 
+      if (dict.get("FunctionType") === 4) {
+        const source = value.getString();
+        value.reset();
+        const domain = dict.get("Domain") ?? [];
+        const range = dict.get("Range") ?? [];
+        obj.psFunction = true;
+        obj.source = source;
+        obj.psLines = InternalViewerUtils.tokenizePSSource(source);
+        obj.jsCode = InternalViewerUtils.postScriptToJSCode(
+          source,
+          domain,
+          range
+        );
+        return obj;
+      }
+
       obj.bytes = value.getString();
       return obj;
     }

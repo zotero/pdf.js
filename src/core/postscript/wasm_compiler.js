@@ -138,13 +138,8 @@ const _mathImportObject = {
   Math: Object.fromEntries(MATH_IMPORTS.map(([name]) => [name, Math[name]])),
 };
 
-// The compiler.
-//
-// After PSStackToTree converts the parser AST into a stack-free expression
-// tree, the compiler walks each output tree node recursively and emits Wasm
-// instructions that leave exactly one f64 value on the Wasm operand stack.
-// PsTernaryNode compiles to a value-returning `if/else/end` block — no
-// branch-buffer swapping or local-merging is needed.
+// Walks each PSStackToTree output node and emits Wasm, leaving one f64 per
+// output on the Wasm operand stack.  Ternary nodes compile to if/else/end.
 class PsWasmCompiler {
   static #initialized = false;
 
@@ -257,11 +252,12 @@ class PsWasmCompiler {
     this._nOut = range.length >> 1;
     this._range = range;
     this._code = [];
-    // Params 0..nIn-1 are automatically locals; extras start at _nextLocal.
+
+    // Params 0..nIn-1 are locals; extra locals start at _nextLocal.
     this._nextLocal = this._nIn;
+
     this._freeLocals = [];
-    // node → {local, remaining} for shared sub-expression caching (CSE).
-    this._sharedLocals = new Map();
+    this._sharedLocals = new Map(); // node → {local, remaining} for CSE
   }
 
   // Wasm emit helpers

@@ -260,6 +260,8 @@ class PsWasmCompiler {
     // Params 0..nIn-1 are automatically locals; extras start at _nextLocal.
     this._nextLocal = this._nIn;
     this._freeLocals = [];
+    // node → {local, remaining} for shared sub-expression caching (CSE).
+    this._sharedLocals = new Map();
   }
 
   // Wasm emit helpers
@@ -310,9 +312,30 @@ class PsWasmCompiler {
 
   /**
    * Emit Wasm instructions for `node`, leaving exactly one f64 on the Wasm
-   * operand stack.  Returns false if the node cannot be compiled.
+   * operand stack. Returns false if the node cannot be compiled.
    */
   _compileNode(node) {
+    if (node.shared) {
+      const entry = this._sharedLocals.get(node);
+      if (entry !== undefined) {
+        this._emitLocalGet(entry.local);
+        if (--entry.remaining === 0) {
+          this._releaseLocal(entry.local);
+        }
+        return true;
+      }
+      if (!this._compileNodeImpl(node)) {
+        return false;
+      }
+      const local = this._allocLocal();
+      this._sharedLocals.set(node, { local, remaining: node.sharedCount - 1 });
+      this._emitLocalTee(local);
+      return true;
+    }
+    return this._compileNodeImpl(node);
+  }
+
+  _compileNodeImpl(node) {
     switch (node.type) {
       case PS_NODE.arg:
         this._emitLocalGet(node.index);
@@ -642,11 +665,13 @@ class PsWasmCompiler {
   }
 
   _compileStandardBinaryNode(op, first, second) {
-    // Identical compound operands: compile once, reuse via local_tee/local_get.
+    // Identical non-atomic operands: compile once, tee/get.
+    // Skip when shared — _compileNode already handles that case.
     if (
       first === second &&
       first.type !== PS_NODE.arg &&
-      first.type !== PS_NODE.const
+      first.type !== PS_NODE.const &&
+      !first.shared
     ) {
       const tmp = this._allocLocal();
       try {

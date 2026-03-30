@@ -57,19 +57,14 @@ describe("Default appearance", function () {
   });
 
   describe("parseAppearanceStream", () => {
-    let evaluatorOptions, xref, globalColorSpaceCache;
+    let xref, globalColorSpaceCache;
 
     beforeAll(function () {
-      evaluatorOptions = {
-        isEvalSupported: true,
-        isOffscreenCanvasSupported: false,
-      };
       xref = new XRefMock();
       globalColorSpaceCache = new GlobalColorSpaceCache();
     });
 
     afterAll(function () {
-      evaluatorOptions = null;
       xref = null;
       globalColorSpaceCache = null;
     });
@@ -105,12 +100,7 @@ describe("Default appearance", function () {
         fontColor: new Uint8ClampedArray([107, 217, 41]),
       };
       expect(
-        parseAppearanceStream(
-          appearance,
-          evaluatorOptions,
-          xref,
-          globalColorSpaceCache
-        )
+        parseAppearanceStream(appearance, xref, globalColorSpaceCache)
       ).toEqual(result);
       expect(appearance.pos).toEqual(0);
     });
@@ -131,12 +121,7 @@ describe("Default appearance", function () {
         fontColor: new Uint8ClampedArray([237, 43, 112]),
       };
       expect(
-        parseAppearanceStream(
-          appearance,
-          evaluatorOptions,
-          xref,
-          globalColorSpaceCache
-        )
+        parseAppearanceStream(appearance, xref, globalColorSpaceCache)
       ).toEqual(result);
       expect(appearance.pos).toEqual(0);
     });
@@ -173,12 +158,7 @@ describe("Default appearance", function () {
         fontColor: new Uint8ClampedArray([135, 78, 254]),
       };
       expect(
-        parseAppearanceStream(
-          appearance,
-          evaluatorOptions,
-          xref,
-          globalColorSpaceCache
-        )
+        parseAppearanceStream(appearance, xref, globalColorSpaceCache)
       ).toEqual(result);
       expect(appearance.pos).toEqual(0);
     });
@@ -201,12 +181,7 @@ describe("Default appearance", function () {
         fontColor: new Uint8ClampedArray([16, 124, 16]),
       };
       expect(
-        parseAppearanceStream(
-          appearance,
-          evaluatorOptions,
-          xref,
-          globalColorSpaceCache
-        )
+        parseAppearanceStream(appearance, xref, globalColorSpaceCache)
       ).toEqual(result);
       expect(appearance.pos).toEqual(0);
     });
@@ -232,12 +207,7 @@ describe("Default appearance", function () {
         fontColor: new Uint8ClampedArray([149, 63, 60]),
       };
       expect(
-        parseAppearanceStream(
-          appearance,
-          evaluatorOptions,
-          xref,
-          globalColorSpaceCache
-        )
+        parseAppearanceStream(appearance, xref, globalColorSpaceCache)
       ).toEqual(result);
       expect(appearance.pos).toEqual(0);
     });
@@ -261,12 +231,7 @@ describe("Default appearance", function () {
         fontColor: new Uint8ClampedArray([0, 85, 127]),
       };
       expect(
-        parseAppearanceStream(
-          appearance,
-          evaluatorOptions,
-          xref,
-          globalColorSpaceCache
-        )
+        parseAppearanceStream(appearance, xref, globalColorSpaceCache)
       ).toEqual(result);
       expect(appearance.pos).toEqual(0);
     });

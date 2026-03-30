@@ -620,23 +620,9 @@ function isLittleEndian() {
   return view32[0] === 1;
 }
 
-// Checks if it's possible to eval JS expressions.
-function isEvalSupported() {
-  try {
-    new Function(""); // eslint-disable-line no-new, no-new-func
-    return true;
-  } catch {
-    return false;
-  }
-}
-
 class FeatureTest {
   static get isLittleEndian() {
     return shadow(this, "isLittleEndian", isLittleEndian());
-  }
-
-  static get isEvalSupported() {
-    return shadow(this, "isEvalSupported", isEvalSupported());
   }
 
   static get isOffscreenCanvasSupported() {

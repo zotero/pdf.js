@@ -21,16 +21,28 @@ import {
   MathClamp,
   shadow,
   unreachable,
+  warn,
 } from "../shared/util.js";
 import { PostScriptLexer, PostScriptParser } from "./ps_parser.js";
 import { BaseStream } from "./base_stream.js";
+import { buildPostScriptWasmFunction } from "./postscript/wasm_compiler.js";
 import { isNumberArray } from "./core_utils.js";
 import { LocalFunctionCache } from "./image_utils.js";
 
 class PDFFunctionFactory {
+  static #useWasm = true;
+
+  static setOptions({ useWasm }) {
+    PDFFunctionFactory.#useWasm = useWasm;
+  }
+
   constructor({ xref, isEvalSupported = true }) {
     this.xref = xref;
     this.isEvalSupported = isEvalSupported !== false;
+  }
+
+  get useWasm() {
+    return PDFFunctionFactory.#useWasm;
   }
 
   create(fn, parseArray = false) {
@@ -357,6 +369,24 @@ class PDFFunction {
     if (!range) {
       throw new FormatError("No range.");
     }
+
+    if (factory.useWasm) {
+      try {
+        const wasmFn = buildPostScriptWasmFunction(
+          fn.getString(),
+          domain,
+          range
+        );
+        if (wasmFn) {
+          return wasmFn; // (src, srcOffset, dest, destOffset) → void
+        }
+      } catch {
+        // Fall through to the existing interpreter-based path.
+      }
+    }
+
+    warn("Unable to compile PS function, using interpreter");
+    fn.reset();
 
     const lexer = new PostScriptLexer(fn);
     const parser = new PostScriptParser(lexer);

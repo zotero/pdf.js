@@ -76,6 +76,7 @@ class DocumentData {
     this.hasSignatureAnnotations = false;
     this.fieldToParent = new RefSetCache();
     this.outline = null;
+    this.embeddedFiles = null;
   }
 }
 
@@ -162,6 +163,8 @@ class PDFEditor {
   acroFormQ = 0;
 
   outlineItems = null;
+
+  embeddedFiles = new Map();
 
   constructor({ useObjectStreams = true, title = "", author = "" } = {}) {
     [this.rootRef, this.rootDict] = this.newDict;
@@ -694,6 +697,7 @@ class PDFEditor {
     await this.#mergeStructTrees(allDocumentData);
     await this.#mergeAcroForms(allDocumentData);
     this.#buildOutline(allDocumentData);
+    await this.#collectEmbeddedFiles(allDocumentData);
 
     return this.writePDF();
   }
@@ -723,6 +727,9 @@ class PDFEditor {
       pdfManager
         .ensureCatalog("documentOutlineForEditor")
         .then(outline => (documentData.outline = outline)),
+      pdfManager
+        .ensureCatalog("rawEmbeddedFiles")
+        .then(ef => (documentData.embeddedFiles = ef)),
     ]);
     const structTreeRoot = documentData.structTreeRoot;
     if (structTreeRoot) {
@@ -2078,13 +2085,15 @@ class PDFEditor {
     const maxLeaves =
       MAX_IN_NAME_TREE_NODE <= 1 ? allEntries.length : MAX_IN_NAME_TREE_NODE;
     const [treeRef, treeDict] = this.newDict;
-    const stack = [{ dict: treeDict, entries: allEntries }];
+    const stack = [{ dict: treeDict, entries: allEntries, isRoot: true }];
     const valueType = areNames ? "Names" : "Nums";
 
     while (stack.length > 0) {
-      const { dict, entries } = stack.pop();
+      const { dict, entries, isRoot } = stack.pop();
       if (entries.length <= maxLeaves) {
-        dict.set("Limits", [entries[0][0], entries.at(-1)[0]]);
+        if (!isRoot) {
+          dict.set("Limits", [entries[0][0], entries.at(-1)[0]]);
+        }
         dict.set(valueType, entries.flat());
         continue;
       }
@@ -2122,6 +2131,63 @@ class PDFEditor {
       /* areNames = */ false
     );
     rootDict.set("PageLabels", pageLabelsRef);
+  }
+
+  /**
+   * Collect and clone EmbeddedFiles from all source documents.
+   * @param {Array<DocumentData>} allDocumentData
+   */
+  async #collectEmbeddedFiles(allDocumentData) {
+    const { embeddedFiles } = this;
+    for (const documentData of allDocumentData) {
+      const {
+        embeddedFiles: docEmbeddedFiles,
+        document: { xref },
+      } = documentData;
+      if (!docEmbeddedFiles?.size) {
+        continue;
+      }
+      this.currentDocument = documentData;
+      for (const [key, valueRef] of docEmbeddedFiles) {
+        let name = key;
+        if (embeddedFiles.has(name)) {
+          const displayName = stringToPDFString(
+            key,
+            /* keepEscapeSequence = */ true
+          );
+          for (let i = 1; ; i++) {
+            const deduped = `${displayName}_${i}`;
+            if (!embeddedFiles.has(deduped)) {
+              name = deduped;
+              break;
+            }
+          }
+        }
+        embeddedFiles.set(
+          name,
+          await this.#collectDependencies(valueRef, true, xref)
+        );
+      }
+      this.currentDocument = null;
+    }
+  }
+
+  #makeEmbeddedFilesTree() {
+    const { embeddedFiles } = this;
+    if (embeddedFiles.size === 0) {
+      return;
+    }
+    if (!this.namesDict) {
+      [this.namesRef, this.namesDict] = this.newDict;
+      this.rootDict.set("Names", this.namesRef);
+    }
+    this.namesDict.set(
+      "EmbeddedFiles",
+      this.#makeNameNumTree(
+        Array.from(embeddedFiles.entries()),
+        /* areNames = */ true
+      )
+    );
   }
 
   #makeDestinationsTree() {
@@ -2245,6 +2311,7 @@ class PDFEditor {
     this.#makeAcroForm();
     this.#makePageTree();
     this.#makePageLabelsTree();
+    this.#makeEmbeddedFilesTree();
     this.#makeDestinationsTree();
     this.#makeStructTree();
     await this.#makeOutline();

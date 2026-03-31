@@ -6429,6 +6429,71 @@ small scripts as well as for`);
 
         await loadingTask.destroy();
       });
+
+      it("preserves EmbeddedFiles (attachments) when extracting pages", async function () {
+        let loadingTask = getDocument(buildGetDocumentParams("attachment.pdf"));
+        let pdfDoc = await loadingTask.promise;
+
+        // Verify the original document has the expected attachment.
+        const originalAttachments = await pdfDoc.getAttachments();
+        expect(originalAttachments["foo.txt"]).toBeDefined();
+
+        const data = await pdfDoc.extractPages([
+          { document: null, includePages: [0] },
+        ]);
+        await loadingTask.destroy();
+
+        loadingTask = getDocument(data);
+        pdfDoc = await loadingTask.promise;
+
+        const attachments = await pdfDoc.getAttachments();
+        expect(attachments).not.toBeNull();
+        expect(attachments["foo.txt"]).toEqual({
+          rawFilename: "foo.txt",
+          filename: "foo.txt",
+          content: new Uint8Array([98, 97, 114, 32, 98, 97, 122, 32, 10]),
+          description: "",
+        });
+
+        await loadingTask.destroy();
+      });
+
+      it("preserves EmbeddedFiles (attachments) when merging two PDFs", async function () {
+        let loadingTask = getDocument(buildGetDocumentParams("attachment.pdf"));
+        let pdfDoc = await loadingTask.promise;
+
+        // Merge attachment.pdf with itself: both copies carry "foo.txt", so
+        // the second one should be deduplicated to "foo.txt_1".
+        const data = await pdfDoc.extractPages([
+          { document: null },
+          { document: null },
+        ]);
+        await loadingTask.destroy();
+
+        loadingTask = getDocument(data);
+        pdfDoc = await loadingTask.promise;
+
+        const attachments = await pdfDoc.getAttachments();
+        expect(attachments).not.toBeNull();
+
+        const expectedContent = new Uint8Array([
+          98, 97, 114, 32, 98, 97, 122, 32, 10,
+        ]);
+        expect(attachments["foo.txt"]).toEqual({
+          rawFilename: "foo.txt",
+          filename: "foo.txt",
+          content: expectedContent,
+          description: "",
+        });
+        expect(attachments["foo.txt_1"]).toEqual({
+          rawFilename: "foo.txt",
+          filename: "foo.txt",
+          content: expectedContent,
+          description: "",
+        });
+
+        await loadingTask.destroy();
+      });
     });
 
     describe("AcroForm", function () {

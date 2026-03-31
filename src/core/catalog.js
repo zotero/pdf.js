@@ -1084,6 +1084,15 @@ class Catalog {
     return shadow(this, "attachments", attachments);
   }
 
+  get rawEmbeddedFiles() {
+    const obj = this.#catDict.get("Names");
+    if (!(obj instanceof Dict) || !obj.has("EmbeddedFiles")) {
+      return null;
+    }
+    const nameTree = new NameTree(obj.getRaw("EmbeddedFiles"), this.xref);
+    return nameTree.getAll(/* isRaw = */ true);
+  }
+
   get xfaImages() {
     const obj = this.#catDict.get("Names");
     let xfaImages = null;

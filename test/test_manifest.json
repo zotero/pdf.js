@@ -14042,5 +14042,15 @@
     "md5": "7796f0131e7d6428c1bf24a73ff13f95",
     "rounds": 1,
     "type": "eq"
+  },
+  {
+    "id": "pdfspec-radial-gradient",
+    "file": "pdfs/pdf.pdf",
+    "md5": "dbdb23c939d2be09b43126c3c56060c7",
+    "link": true,
+    "firstPage": 1144,
+    "lastPage": 1144,
+    "rounds": 1,
+    "type": "eq"
   }
 ]

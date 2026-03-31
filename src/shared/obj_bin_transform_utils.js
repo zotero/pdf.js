@@ -61,7 +61,7 @@ class PATTERN_INFO {
 
   static N_COORD = 4; // number of coordinate pairs
 
-  static N_COLOR = 8; // number of rgb triplets
+  static N_COLOR = 8; // number of RGBA-stride color entries
 
   static N_STOP = 12; // number of gradient stops
 

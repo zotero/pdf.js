@@ -14035,5 +14035,12 @@
     "md5": "2870c3136be00ddd975149b2c7d1e6df",
     "rounds": 1,
     "type": "eq"
+  },
+  {
+    "id": "function-based-shading",
+    "file": "pdfs/function_based_shading.pdf",
+    "md5": "7796f0131e7d6428c1bf24a73ff13f95",
+    "rounds": 1,
+    "type": "eq"
   }
 ]

@@ -215,8 +215,8 @@ describe("obj_bin_transform", function () {
         0, 0, 50, 0, 100, 0, 0, 50, 50, 50, 100, 50, 0, 100, 50, 100, 100, 100,
       ]),
       new Uint8Array([
-        255, 0, 0, 0, 255, 0, 0, 0, 255, 255, 255, 0, 128, 128, 128, 255, 0,
-        255, 0, 255, 255, 255, 128, 0, 128, 0, 128,
+        255, 0, 0, 0, 0, 255, 0, 0, 0, 0, 255, 0, 255, 255, 0, 0, 128, 128, 128,
+        0, 255, 0, 255, 0, 0, 255, 255, 0, 255, 128, 0, 0, 128, 0, 128, 0,
       ]),
       [
         {
@@ -335,7 +335,7 @@ describe("obj_bin_transform", function () {
           "Mesh",
           4,
           new Float32Array([0, 0, 10, 10]),
-          new Uint8Array([255, 0, 0]),
+          new Uint8Array([255, 0, 0, 0]),
           [],
           [0, 0, 10, 10],
           [0, 0, 10, 10],
@@ -383,7 +383,7 @@ describe("obj_bin_transform", function () {
           "Mesh",
           6,
           new Float32Array([0, 0, 10, 10]),
-          new Uint8Array([255, 128, 64]),
+          new Uint8Array([255, 128, 64, 0]),
           [
             {
               type: MeshFigureType.PATCH,
@@ -415,7 +415,7 @@ describe("obj_bin_transform", function () {
           "Mesh",
           4,
           new Float32Array([0, 0, 10, 10]),
-          new Uint8Array([255, 0, 0]),
+          new Uint8Array([255, 0, 0, 0]),
           [],
           [0, 0, 10, 10],
           [0, 0, 10, 10],
@@ -432,7 +432,7 @@ describe("obj_bin_transform", function () {
           "Mesh",
           5,
           new Float32Array([0, 0, 5, 5]),
-          new Uint8Array([0, 255, 0]),
+          new Uint8Array([0, 255, 0, 0]),
           [],
           [0, 0, 5, 5],
           null,
@@ -451,7 +451,7 @@ describe("obj_bin_transform", function () {
           "Mesh",
           4,
           new Float32Array([-10, -5, 20, 15, 0, 30]),
-          new Uint8Array([255, 0, 0, 0, 255, 0, 0, 0, 255]),
+          new Uint8Array([255, 0, 0, 0, 0, 255, 0, 0, 0, 0, 255, 0]),
           [],
           null,
           null,

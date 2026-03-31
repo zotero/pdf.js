@@ -14,6 +14,7 @@
  */
 
 import { bidi } from "../../src/core/bidi.js";
+import { fetchData } from "../../src/display/display_utils.js";
 import { isNodeJS } from "../../src/shared/util.js";
 
 const BIDI_TEST_DATA_PATH = isNodeJS ? "./test/bidi/" : "../bidi/";
@@ -21,11 +22,10 @@ const BIDI_TEST_DATA_PATH = isNodeJS ? "./test/bidi/" : "../bidi/";
 async function readTestFile(filename) {
   const path = BIDI_TEST_DATA_PATH + filename;
   if (isNodeJS) {
-    const fs = process.getBuiltinModule("fs");
-    return fs.promises.readFile(path, "utf8");
+    const fs = process.getBuiltinModule("fs/promises");
+    return fs.readFile(path, "utf8");
   }
-  const response = await fetch(new URL(path, window.location));
-  return response.text();
+  return fetchData(new URL(path, window.location), /* type = */ "text");
 }
 
 // Unicode Bidirectional Algorithm tests.

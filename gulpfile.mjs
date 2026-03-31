@@ -2487,7 +2487,6 @@ function packageJson() {
     license: DIST_LICENSE,
     optionalDependencies: {
       "@napi-rs/canvas": "^0.1.96",
-      "node-readable-to-web-readable-stream": "^0.4.2",
     },
     browser: {
       canvas: false,

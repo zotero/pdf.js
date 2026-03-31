@@ -616,22 +616,134 @@ class TilingPattern {
     this.ctx = ctx;
     this.canvasGraphicsFactory = canvasGraphicsFactory;
     this.baseTransform = baseTransform;
+    // baseTransform * patternMatrix.
+    this.patternBaseMatrix = this.matrix
+      ? Util.transform(baseTransform, this.matrix)
+      : baseTransform;
+  }
+
+  // Returns [n, m] tile index if the fill area fits within one tile,
+  // null otherwise.
+  canSkipPatternCanvas([width, height, offsetX, offsetY]) {
+    const [x0, y0, x1, y1] = this.bbox;
+    const absXStep = Math.abs(this.xstep);
+    const absYStep = Math.abs(this.ystep);
+
+    // dims is in pattern space, so compare directly with xstep/ystep.
+    if (width > absXStep + 1e-6 || height > absYStep + 1e-6) {
+      return null;
+    }
+
+    // Tile n covers [x0+n·xstep, x1+n·xstep]; find the range intersecting
+    // [offsetX, offsetX+width].
+    const nXFirst = Math.floor((offsetX - x1) / absXStep) + 1;
+    const nXLast = Math.ceil((offsetX + width - x0) / absXStep) - 1;
+    const nYFirst = Math.floor((offsetY - y1) / absYStep) + 1;
+    const nYLast = Math.ceil((offsetY + height - y0) / absYStep) - 1;
+    return nXLast <= nXFirst && nYLast <= nYFirst ? [nXFirst, nYFirst] : null;
+  }
+
+  // Converts clippedBBox from device space to pattern space and stores it
+  // as [width, height, offsetX, offsetY] in dims.
+  updatePatternDims(clippedBBox, dims) {
+    const inv = Util.inverseTransform(this.patternBaseMatrix);
+    const c1 = [clippedBBox[0], clippedBBox[1]];
+    const c2 = [clippedBBox[2], clippedBBox[3]];
+    Util.applyTransform(c1, inv);
+    Util.applyTransform(c2, inv);
+    dims[0] = Math.abs(c2[0] - c1[0]);
+    dims[1] = Math.abs(c2[1] - c1[1]);
+    dims[2] = Math.min(c1[0], c2[0]);
+    dims[3] = Math.min(c1[1], c2[1]);
+  }
+
+  // Renders the tile operators onto a fresh canvas and returns it.
+  _renderTileCanvas(owner, opIdx, dimx, dimy) {
+    const [x0, y0, x1, y1] = this.bbox;
+    const tmpCanvas = owner.canvasFactory.create(dimx.size, dimy.size);
+    const tmpCtx = tmpCanvas.context;
+    const graphics = this.canvasGraphicsFactory.createCanvasGraphics(
+      tmpCtx,
+      opIdx
+    );
+    graphics.groupLevel = owner.groupLevel;
+
+    this.setFillAndStrokeStyleToContext(graphics, this.paintType, this.color);
+
+    tmpCtx.translate(-dimx.scale * x0, -dimy.scale * y0);
+    // 0: sub-ops are indexed under the top-level opIdx from
+    // createCanvasGraphics.
+    graphics.transform(0, dimx.scale, 0, 0, dimy.scale, 0, 0);
+
+    // Required to balance the save/restore in CanvasGraphics beginDrawing.
+    tmpCtx.save();
+    graphics.dependencyTracker?.save();
+
+    this.clipBbox(graphics, x0, y0, x1, y1);
+    graphics.baseTransform = getCurrentTransform(graphics.ctx);
+    graphics.executeOperatorList(this.operatorList);
+
+    graphics.endDrawing();
+    graphics.dependencyTracker?.restore();
+    tmpCtx.restore();
+
+    return tmpCanvas;
+  }
+
+  _getCombinedScales() {
+    const scale = new Float32Array(2);
+    Util.singularValueDecompose2dScale(this.matrix, scale);
+    const [matrixScaleX, matrixScaleY] = scale;
+    Util.singularValueDecompose2dScale(this.baseTransform, scale);
+    return [matrixScaleX * scale[0], matrixScaleY * scale[1]];
+  }
+
+  // Draws a single tile directly onto owner, clipped to path.
+  drawPattern(owner, path, useEOFill = false, [n, m], opIdx) {
+    const [x0, y0, x1, y1] = this.bbox;
+    const bboxWidth = x1 - x0;
+    const bboxHeight = y1 - y0;
+
+    const [combinedScaleX, combinedScaleY] = this._getCombinedScales();
+    const dimx = this.getSizeAndScale(
+      bboxWidth,
+      this.ctx.canvas.width,
+      combinedScaleX
+    );
+    const dimy = this.getSizeAndScale(
+      bboxHeight,
+      this.ctx.canvas.height,
+      combinedScaleY
+    );
+
+    // Isolate blend modes from the main canvas.
+    const tmpCanvas = this._renderTileCanvas(owner, opIdx, dimx, dimy);
+
+    owner.save();
+    if (useEOFill) {
+      owner.ctx.clip(path, "evenodd");
+    } else {
+      owner.ctx.clip(path);
+    }
+    // Position tile (n, m) in device space; the clip above is unaffected
+    // by setTransform.
+    owner.ctx.setTransform(...this.patternBaseMatrix);
+    owner.ctx.translate(n * this.xstep, m * this.ystep);
+    owner.ctx.drawImage(tmpCanvas.canvas, x0, y0, bboxWidth, bboxHeight);
+
+    owner.canvasFactory.destroy(tmpCanvas);
+    owner.restore();
   }
 
   createPatternCanvas(owner, opIdx) {
-    const {
-      bbox,
-      operatorList,
-      paintType,
-      tilingType,
-      color,
-      canvasGraphicsFactory,
-    } = this;
+    const [x0, y0, x1, y1] = this.bbox;
+    const width = x1 - x0;
+    const height = y1 - y0;
     let { xstep, ystep } = this;
     xstep = Math.abs(xstep);
     ystep = Math.abs(ystep);
 
-    info("TilingType: " + tilingType);
+    info("TilingType: " + this.tilingType);
 
     // A tiling pattern as defined by PDF spec 8.7.2 is a cell whose size is
     // described by bbox, and may repeat regularly by shifting the cell by
@@ -651,45 +763,32 @@ class TilingPattern {
     //   "Figures on adjacent tiles should not overlap" (PDF spec 8.7.3.1),
     //   but overlapping cells without common pixels are still valid.
 
-    const x0 = bbox[0],
-      y0 = bbox[1],
-      x1 = bbox[2],
-      y1 = bbox[3];
-    const width = x1 - x0;
-    const height = y1 - y0;
-
     // Obtain scale from matrix and current transformation matrix.
-    const scale = new Float32Array(2);
-    Util.singularValueDecompose2dScale(this.matrix, scale);
-    const [matrixScaleX, matrixScaleY] = scale;
-    Util.singularValueDecompose2dScale(this.baseTransform, scale);
-    const combinedScaleX = matrixScaleX * scale[0];
-    const combinedScaleY = matrixScaleY * scale[1];
+    const [combinedScaleX, combinedScaleY] = this._getCombinedScales();
 
+    // Use width and height values that are as close as possible to the end
+    // result when the pattern is used. Too low value makes the pattern look
+    // blurry. Too large value makes it look too crispy.
     let canvasWidth = width,
       canvasHeight = height,
       redrawHorizontally = false,
       redrawVertically = false;
 
-    const xScaledStep = Math.ceil(xstep * combinedScaleX);
-    const yScaledStep = Math.ceil(ystep * combinedScaleY);
-    const xScaledWidth = Math.ceil(width * combinedScaleX);
-    const yScaledHeight = Math.ceil(height * combinedScaleY);
-
-    if (xScaledStep >= xScaledWidth) {
+    if (
+      Math.ceil(xstep * combinedScaleX) >= Math.ceil(width * combinedScaleX)
+    ) {
       canvasWidth = xstep;
     } else {
       redrawHorizontally = true;
     }
-    if (yScaledStep >= yScaledHeight) {
+    if (
+      Math.ceil(ystep * combinedScaleY) >= Math.ceil(height * combinedScaleY)
+    ) {
       canvasHeight = ystep;
     } else {
       redrawVertically = true;
     }
 
-    // Use width and height values that are as close as possible to the end
-    // result when the pattern is used. Too low value makes the pattern look
-    // blurry. Too large value makes it look too crispy.
     const dimx = this.getSizeAndScale(
       canvasWidth,
       this.ctx.canvas.width,
@@ -701,43 +800,7 @@ class TilingPattern {
       combinedScaleY
     );
 
-    const tmpCanvas = owner.canvasFactory.create(dimx.size, dimy.size);
-    const tmpCtx = tmpCanvas.context;
-    const graphics = canvasGraphicsFactory.createCanvasGraphics(tmpCtx, opIdx);
-    graphics.groupLevel = owner.groupLevel;
-
-    this.setFillAndStrokeStyleToContext(graphics, paintType, color);
-
-    tmpCtx.translate(-dimx.scale * x0, -dimy.scale * y0);
-    graphics.transform(
-      // We pass 0 as the 'opIdx' argument, but the value is irrelevant.
-      // We know that we are in a 'CanvasNestedDependencyTracker' that captures
-      // all the sub-operations needed to create this pattern canvas and uses
-      // the top-level operation index as their index.
-      0,
-      dimx.scale,
-      0,
-      0,
-      dimy.scale,
-      0,
-      0
-    );
-
-    // To match CanvasGraphics beginDrawing we must save the context here or
-    // else we end up with unbalanced save/restores.
-    tmpCtx.save();
-    graphics.dependencyTracker?.save();
-
-    this.clipBbox(graphics, x0, y0, x1, y1);
-
-    graphics.baseTransform = getCurrentTransform(graphics.ctx);
-
-    graphics.executeOperatorList(operatorList);
-
-    graphics.endDrawing();
-
-    graphics.dependencyTracker?.restore();
-    tmpCtx.restore();
+    const tmpCanvas = this._renderTileCanvas(owner, opIdx, dimx, dimy);
 
     if (redrawHorizontally || redrawVertically) {
       // The tile is overlapping itself, so we create a new tile with
@@ -862,14 +925,12 @@ class TilingPattern {
   }
 
   getPattern(ctx, owner, inverse, pathType, opIdx) {
-    // PDF spec 8.7.2 NOTE 1: pattern's matrix is relative to initial matrix.
-    let matrix = inverse;
-    if (pathType !== PathType.SHADING) {
-      matrix = Util.transform(matrix, owner.baseTransform);
-      if (this.matrix) {
-        matrix = Util.transform(matrix, this.matrix);
-      }
-    }
+    // PDF spec 8.7.2: prepend inverse CTM to patternBaseMatrix to position
+    // the CSS pattern.
+    const matrix =
+      pathType !== PathType.SHADING
+        ? Util.transform(inverse, this.patternBaseMatrix)
+        : inverse;
 
     const temporaryPatternCanvas = this.createPatternCanvas(owner, opIdx);
 

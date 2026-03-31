@@ -294,7 +294,7 @@ function compilePatternInfo(ir) {
   }
 
   const nCoord = Math.floor(coords.length / 2);
-  const nColor = Math.floor(colors.length / 3);
+  const nColor = Math.floor(colors.length / 4);
   const nStop = colorStops.length;
   const nFigures = figures.length;
 
@@ -312,7 +312,7 @@ function compilePatternInfo(ir) {
   const byteLen =
     20 +
     nCoord * 8 +
-    nColor * 3 +
+    nColor * 4 +
     nStop * 8 +
     (bbox ? 16 : 0) +
     (background ? 3 : 0) +
@@ -336,7 +336,7 @@ function compilePatternInfo(ir) {
   offset += nCoord * 8;
 
   u8data.set(colors, offset);
-  offset += nColor * 3;
+  offset += nColor * 4;
 
   for (const [pos, hex] of colorStops) {
     dataView.setFloat32(offset, pos, true);

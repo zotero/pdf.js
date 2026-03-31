@@ -986,6 +986,18 @@ describe("PostScript Type 4 lexer, parser, and Wasm compiler", function () {
       expect(r).toBeCloseTo(0.25, 9);
     });
 
+    it("CSE: shared subexpression compiled once, correct result, one local", async function () {
+      // { 3 add dup mul } → (x+3)^2.  The "x+3" node is shared (dup), so CSE
+      // caches it in one local that is released and reused for later operands.
+      const source = "{ 3 add dup mul }";
+      const bytes = compilePostScriptToWasm(source, [0, 10], [0, 169]);
+      expect(bytes).not.toBeNull();
+      expect(getWasmLocalCount(bytes)).toBe(1);
+      // x=2 → (2+3)^2 = 25
+      const r = await compileAndRun(source, [0, 10], [0, 169], [2]);
+      expect(r).toBeCloseTo(25, 9);
+    });
+
     it("reuses temporary locals across sequential shared-subexpression codegen", function () {
       const bytes = compilePostScriptToWasm(
         "{ dup 1 add dup mul exch 2 add dup mul add }",

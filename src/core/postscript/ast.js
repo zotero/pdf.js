@@ -623,7 +623,50 @@ class PSStackToTree {
       stack.push(new PsArgNode(i));
     }
     this._evalBlock(program.body, stack);
-    return this._failed ? null : stack;
+    if (this._failed) {
+      return null;
+    }
+    PSStackToTree.#markShared(stack);
+    return stack;
+  }
+
+  // Set node.shared / sharedCount on non-atomic nodes referenced more than
+  // once.  arg/const are excluded — they are cheap to re-emit inline.
+  static #markShared(outputs) {
+    const refCount = new Map();
+    const visit = node => {
+      if (!node || node.type === PS_NODE.arg || node.type === PS_NODE.const) {
+        return;
+      }
+      const prev = refCount.get(node) ?? 0;
+      refCount.set(node, prev + 1);
+      if (prev > 0) {
+        return;
+      }
+      switch (node.type) {
+        case PS_NODE.unary:
+          visit(node.operand);
+          break;
+        case PS_NODE.binary:
+          visit(node.first);
+          visit(node.second);
+          break;
+        case PS_NODE.ternary:
+          visit(node.cond);
+          visit(node.then);
+          visit(node.otherwise);
+          break;
+      }
+    };
+    for (const output of outputs) {
+      visit(output);
+    }
+    for (const [node, count] of refCount) {
+      if (count > 1) {
+        node.shared = true;
+        node.sharedCount = count; // remaining-use tracking in backends
+      }
+    }
   }
 
   _evalBlock(block, stack) {

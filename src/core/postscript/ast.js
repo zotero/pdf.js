@@ -664,7 +664,7 @@ class PSStackToTree {
     for (const [node, count] of refCount) {
       if (count > 1) {
         node.shared = true;
-        node.sharedCount = count; // remaining-use tracking in backends
+        node.sharedCount = count;
       }
     }
   }

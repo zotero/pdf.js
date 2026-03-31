@@ -25,6 +25,7 @@ import {
 } from "../shared/util.js";
 import { PostScriptLexer, PostScriptParser } from "./ps_parser.js";
 import { BaseStream } from "./base_stream.js";
+import { buildPostScriptJsFunction } from "./postscript/js_evaluator.js";
 import { buildPostScriptWasmFunction } from "./postscript/wasm_compiler.js";
 import { isNumberArray } from "./core_utils.js";
 import { LocalFunctionCache } from "./image_utils.js";
@@ -370,8 +371,8 @@ class PDFFunction {
       throw new FormatError("No range.");
     }
 
-    if (factory.useWasm) {
-      try {
+    try {
+      if (factory.useWasm) {
         const wasmFn = buildPostScriptWasmFunction(
           fn.getString(),
           domain,
@@ -380,9 +381,14 @@ class PDFFunction {
         if (wasmFn) {
           return wasmFn; // (src, srcOffset, dest, destOffset) → void
         }
-      } catch {
-        // Fall through to the existing interpreter-based path.
+      } else {
+        const jsFn = buildPostScriptJsFunction(fn.getString(), domain, range);
+        if (jsFn) {
+          return jsFn; // (src, srcOffset, dest, destOffset) → void
+        }
       }
+    } catch {
+      // Fall through to the existing interpreter-based path.
     }
 
     warn("Unable to compile PS function, using interpreter");

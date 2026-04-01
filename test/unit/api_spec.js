@@ -6982,5 +6982,46 @@ small scripts as well as for`);
         await newLoadingTask.destroy();
       });
     });
+
+    describe("extract pages from password-protected PDF (bug 2028369)", function () {
+      it("should preserve password protection when merging the same pdf", async function () {
+        const loadingTask = getDocument(
+          buildGetDocumentParams("pr6531_2.pdf", { password: "asdfasdf" })
+        );
+        const pdfDoc = await loadingTask.promise;
+
+        const data = await pdfDoc.extractPages([
+          { document: null },
+          { document: null },
+        ]);
+        await loadingTask.destroy();
+
+        // Opening the result without a password must fail.
+        // Use a copy so the underlying ArrayBuffer is not detached before the
+        // second getDocument call below.
+        const passwordNeededLoadingTask = getDocument(data.slice());
+        await passwordNeededLoadingTask.promise.then(
+          function () {
+            // Shouldn't get here.
+            expect(false).toEqual(true);
+          },
+          function (err) {
+            expect(err).toBeInstanceOf(PasswordException);
+            expect(err.code).toEqual(PasswordResponses.NEED_PASSWORD);
+          }
+        );
+        await passwordNeededLoadingTask.destroy();
+
+        // Opening the result with the correct password must succeed.
+        const passwordAcceptedLoadingTask = getDocument({
+          data,
+          password: "asdfasdf",
+        });
+        const newPdfDoc = await passwordAcceptedLoadingTask.promise;
+        expect(newPdfDoc).toBeInstanceOf(PDFDocumentProxy);
+        expect(newPdfDoc.numPages).toEqual(2);
+        await passwordAcceptedLoadingTask.destroy();
+      });
+    });
   });
 });

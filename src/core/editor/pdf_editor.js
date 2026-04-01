@@ -108,7 +108,15 @@ class XRefWrapper {
 }
 
 class PDFEditor {
+  // Whether the edited PDF contains only one file. This is used to determine if
+  // we can handle some potential duplications.
+  // For example, there are no obvious way to dedup page labels when merging
+  // multiple PDF files.
   hasSingleFile = false;
+
+  // Whether the edited PDF contains multiple files. This is used to determine
+  // if we can preserve some information such as passwords.
+  isSingleFile = false;
 
   #newAnnotationsParams = null;
 
@@ -563,6 +571,9 @@ class PDFEditor {
   async extractPages(pageInfos, annotationStorage, handler, task) {
     const promises = [];
     let newIndex = 0;
+    this.isSingleFile =
+      pageInfos.length === 1 ||
+      pageInfos.every(info => info.document === pageInfos[0].document);
     this.hasSingleFile = pageInfos.length === 1;
     const allDocumentData = [];
 
@@ -2323,7 +2334,7 @@ class PDFEditor {
    */
   #makeInfo() {
     const infoMap = new Map();
-    if (this.hasSingleFile) {
+    if (this.isSingleFile) {
       const {
         xref: { trailer },
       } = this.oldPages[0].documentData.document;
@@ -2356,7 +2367,7 @@ class PDFEditor {
    * @returns {Promise<[Dict|null, CipherTransformFactory|null, Array|null]>}
    */
   async #makeEncrypt() {
-    if (!this.hasSingleFile) {
+    if (!this.isSingleFile) {
       return [null, null, null];
     }
     const { documentData } = this.oldPages[0];

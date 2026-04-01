@@ -15,7 +15,6 @@
 
 import { Dict, Ref } from "./primitives.js";
 import {
-  FeatureTest,
   FormatError,
   info,
   MathClamp,
@@ -23,7 +22,6 @@ import {
   unreachable,
   warn,
 } from "../shared/util.js";
-import { PostScriptLexer, PostScriptParser } from "./ps_parser.js";
 import { BaseStream } from "./base_stream.js";
 import { buildPostScriptJsFunction } from "./postscript/js_evaluator.js";
 import { buildPostScriptWasmFunction } from "./postscript/wasm_compiler.js";
@@ -371,89 +369,20 @@ class PDFFunction {
       throw new FormatError("No range.");
     }
 
+    const psCode = fn.getString();
+
     try {
       if (factory.useWasm) {
-        const wasmFn = buildPostScriptWasmFunction(
-          fn.getString(),
-          domain,
-          range
-        );
+        const wasmFn = buildPostScriptWasmFunction(psCode, domain, range);
         if (wasmFn) {
           return wasmFn; // (src, srcOffset, dest, destOffset) → void
         }
-      } else {
-        const jsFn = buildPostScriptJsFunction(fn.getString(), domain, range);
-        if (jsFn) {
-          return jsFn; // (src, srcOffset, dest, destOffset) → void
-        }
       }
-    } catch {
-      // Fall through to the existing interpreter-based path.
-    }
+    } catch {}
 
-    warn("Unable to compile PS function, using interpreter");
-    fn.reset();
+    warn("Failed to compile PostScript function to wasm, falling back to JS");
 
-    const lexer = new PostScriptLexer(fn);
-    const parser = new PostScriptParser(lexer);
-    const code = parser.parse();
-
-    if (factory.isEvalSupported && FeatureTest.isEvalSupported) {
-      const compiled = new PostScriptCompiler().compile(code, domain, range);
-      if (compiled) {
-        // Compiled function consists of simple expressions such as addition,
-        // subtraction, Math.max, and also contains 'var' and 'return'
-        // statements. See the generation in the PostScriptCompiler below.
-        // eslint-disable-next-line no-new-func
-        return new Function("src", "srcOffset", "dest", "destOffset", compiled);
-      }
-    }
-    info("Unable to compile PS function");
-
-    const numOutputs = range.length >> 1;
-    const numInputs = domain.length >> 1;
-    const evaluator = new PostScriptEvaluator(code);
-    // Cache the values for a big speed up, the cache size is limited though
-    // since the number of possible values can be huge from a PS function.
-    const cache = Object.create(null);
-    // The MAX_CACHE_SIZE is set to ~4x the maximum number of distinct values
-    // seen in our tests.
-    const MAX_CACHE_SIZE = 2048 * 4;
-    let cache_available = MAX_CACHE_SIZE;
-    const tmpBuf = new Float32Array(numInputs);
-
-    return function constructPostScriptFn(src, srcOffset, dest, destOffset) {
-      let i, value;
-      let key = "";
-      const input = tmpBuf;
-      for (i = 0; i < numInputs; i++) {
-        value = src[srcOffset + i];
-        input[i] = value;
-        key += value + "_";
-      }
-
-      const cachedValue = cache[key];
-      if (cachedValue !== undefined) {
-        dest.set(cachedValue, destOffset);
-        return;
-      }
-
-      const output = new Float32Array(numOutputs);
-      const stack = evaluator.execute(input);
-      const stackIndex = stack.length - numOutputs;
-      for (i = 0; i < numOutputs; i++) {
-        output[i] = MathClamp(
-          stack[stackIndex + i],
-          range[i * 2],
-          range[i * 2 + 1]
-        );
-      }
-      if (cache_available > 0) {
-        cache_available--;
-        cache[key] = output;
-      }
-      dest.set(output, destOffset);
-    };
+    return buildPostScriptJsFunction(psCode, domain, range);
   }
 }
 

@@ -14,6 +14,10 @@
  */
 
 import {
+  buildPostScriptJsFunction,
+  buildPostScriptProgramFunction,
+} from "../../src/core/postscript/js_evaluator.js";
+import {
   buildPostScriptWasmFunction,
   compilePostScriptToWasm,
 } from "../../src/core/postscript/wasm_compiler.js";
@@ -35,7 +39,6 @@ import {
   PsTernaryNode,
   PsUnaryNode,
 } from "../../src/core/postscript/ast.js";
-import { buildPostScriptJsFunction } from "../../src/core/postscript/js_evaluator.js";
 
 // Precision argument for toBeCloseTo() in trigonometric tests.
 const TRIGONOMETRY_EPS = 1e-10;
@@ -192,25 +195,41 @@ describe("PostScript Type 4 lexer, parser, and Wasm compiler", function () {
   describe("PostScript Type 4 Wasm compiler", function () {
     /**
      * Compile and instantiate a PostScript Type 4 function, then call it.
-     * Returns null if compilation returns null (unsupported program).
+     * Returns null if Wasm compilation returns null (unsupported program).
      * For single-output functions returns a scalar; for multi-output an Array.
+     *
+     * Validates three implementations against each other:
+     *   - Wasm compiler (PSStackToTree → Wasm binary)
+     *   - JS IR compiler (PSStackToTree → flat IR interpreted in JS)
+     *   - Direct program interpreter (raw PsProgram stack-machine interpreter)
      */
     function compileAndRun(src, domain, range, args) {
       const wasmFn = buildPostScriptWasmFunction(src, domain, range);
+      // jsFn now always returns a function: PSStackToTree IR when possible,
+      // direct program interpreter otherwise.
       const jsFn = buildPostScriptJsFunction(src, domain, range);
+      // Direct interpreter: always available, never uses PSStackToTree.
+      const interpFn = buildPostScriptProgramFunction(
+        parsePostScriptFunction(src),
+        domain,
+        range
+      );
+
       if (!wasmFn) {
-        expect(jsFn).toBeNull();
         return null;
       }
-      expect(jsFn).not.toBeNull();
+
       const nOut = range.length >> 1;
       const srcBuf = new Float64Array(args);
       const wasmDest = new Float64Array(nOut);
       const jsDest = new Float64Array(nOut);
+      const interpDest = new Float64Array(nOut);
       wasmFn(srcBuf, 0, wasmDest, 0);
       jsFn(srcBuf, 0, jsDest, 0);
+      interpFn(srcBuf, 0, interpDest, 0);
       for (let i = 0; i < nOut; i++) {
         expect(jsDest[i]).toBeCloseTo(wasmDest[i], 10);
+        expect(interpDest[i]).toBeCloseTo(wasmDest[i], 10);
       }
       return nOut === 1 ? wasmDest[0] : Array.from(wasmDest);
     }

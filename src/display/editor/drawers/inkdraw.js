@@ -13,9 +13,9 @@
  * limitations under the License.
  */
 
+import { F32_BBOX_INIT, Util } from "../../../shared/util.js";
 import { MathClamp } from "../../../shared/math_clamp.js";
 import { Outline } from "./outline.js";
-import { Util } from "../../../shared/util.js";
 
 class InkDrawOutliner {
   // The last 3 points of the line.
@@ -587,12 +587,7 @@ class InkDrawOutline extends Outline {
   }
 
   #computeBbox() {
-    const bbox = (this.#bbox = new Float32Array([
-      Infinity,
-      Infinity,
-      -Infinity,
-      -Infinity,
-    ]));
+    const bbox = (this.#bbox = F32_BBOX_INIT.slice());
 
     for (const { line } of this.#lines) {
       if (line.length <= 12) {

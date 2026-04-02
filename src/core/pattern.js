@@ -15,6 +15,7 @@
 
 import {
   assert,
+  BBOX_INIT,
   FormatError,
   info,
   MeshFigureType,
@@ -426,7 +427,7 @@ class FunctionBasedShading extends BaseShading {
     const matrix = lookupMatrix(dict.getArray("Matrix"), IDENTITY_MATRIX);
 
     // Transform the four domain corners to find the user-space bounding box.
-    this.bounds = [Infinity, Infinity, -Infinity, -Infinity];
+    this.bounds = BBOX_INIT.slice();
     Util.axialAlignedBoundingBox([x0, y0, x1, y1], matrix, this.bounds);
 
     const bboxW = this.bounds[2] - this.bounds[0];

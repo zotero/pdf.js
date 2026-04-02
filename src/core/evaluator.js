@@ -16,7 +16,9 @@
 import {
   AbortException,
   assert,
+  BBOX_INIT,
   DrawOPS,
+  F32_BBOX_INIT,
   FONT_IDENTITY_MATRIX,
   FormatError,
   info,
@@ -2309,7 +2311,7 @@ class PartialEvaluator {
                 pathMinMax.slice(),
               ]);
               pathBuffer.length = 0;
-              pathMinMax.set([Infinity, Infinity, -Infinity, -Infinity], 0);
+              pathMinMax.set(BBOX_INIT, 0);
             }
             continue;
           }
@@ -4980,7 +4982,7 @@ class TranslatedFont {
       // Override the fontBBox when it's undefined/empty, or when it's at least
       // (approximately) one order of magnitude smaller than the charBBox
       // (fixes issue14999_reduced.pdf).
-      this._bbox ??= [Infinity, Infinity, -Infinity, -Infinity];
+      this._bbox ??= BBOX_INIT.slice();
       Util.rectBoundingBox(...charBBox, this._bbox);
     }
 
@@ -5050,7 +5052,7 @@ class TranslatedFont {
         case OPS.constructPath:
           const minMax = operatorList.argsArray[i][2];
           // Override the fontBBox when it's undefined/empty (fixes 19624.pdf).
-          this._bbox ??= [Infinity, Infinity, -Infinity, -Infinity];
+          this._bbox ??= BBOX_INIT.slice();
           Util.rectBoundingBox(...minMax, this._bbox);
           break;
       }
@@ -5176,7 +5178,7 @@ class EvalState {
 
   currentPointY = 0;
 
-  pathMinMax = new Float32Array([Infinity, Infinity, -Infinity, -Infinity]);
+  pathMinMax = F32_BBOX_INIT.slice();
 
   pathBuffer = [];
 
@@ -5200,12 +5202,7 @@ class EvalState {
     const clone = Object.create(this);
     if (newPath) {
       clone.pathBuffer = [];
-      clone.pathMinMax = new Float32Array([
-        Infinity,
-        Infinity,
-        -Infinity,
-        -Infinity,
-      ]);
+      clone.pathMinMax = F32_BBOX_INIT.slice();
     }
     return clone;
   }

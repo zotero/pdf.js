@@ -25,6 +25,9 @@ const isNodeJS =
   !process.versions.nw &&
   !(process.versions.electron && process.type && process.type !== "browser");
 
+const BBOX_INIT = [Infinity, Infinity, -Infinity, -Infinity];
+const F32_BBOX_INIT = new Float32Array(BBOX_INIT);
+
 const FONT_IDENTITY_MATRIX = [0.001, 0, 0, 0.001, 0, 0];
 
 // Represent the percentage of the height of a single-line field over
@@ -1310,10 +1313,12 @@ export {
   assert,
   BaseException,
   BASELINE_FACTOR,
+  BBOX_INIT,
   bytesToString,
   createValidAbsoluteUrl,
   DocumentActionEventType,
   DrawOPS,
+  F32_BBOX_INIT,
   FeatureTest,
   FONT_IDENTITY_MATRIX,
   FormatError,

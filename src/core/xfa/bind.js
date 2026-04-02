@@ -180,7 +180,7 @@ class Binder {
     //   <setProperty ref="$data.Main.Help.LastName" target="assist.toolTip"/>
     // </field>
 
-    if (!formNode.hasOwnProperty("setProperty")) {
+    if (!Object.hasOwn(formNode, "setProperty")) {
       return;
     }
 
@@ -265,7 +265,7 @@ class Binder {
         continue;
       }
 
-      if (!targetNode.hasOwnProperty($content)) {
+      if (!Object.hasOwn(targetNode, $content)) {
         warn(`XFA - Invalid node to use in setProperty`);
         continue;
       }
@@ -285,8 +285,8 @@ class Binder {
     // </field>
 
     if (
-      !formNode.hasOwnProperty("items") ||
-      !formNode.hasOwnProperty("bindItems") ||
+      !Object.hasOwn(formNode, "items") ||
+      !Object.hasOwn(formNode, "bindItems") ||
       formNode.bindItems.isEmpty()
     ) {
       return;

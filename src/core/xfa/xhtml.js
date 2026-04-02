@@ -530,7 +530,7 @@ class Ul extends XhtmlObject {
 
 class XhtmlNamespace {
   static [$buildXFAObject](name, attributes) {
-    if (XhtmlNamespace.hasOwnProperty(name)) {
+    if (Object.hasOwn(XhtmlNamespace, name)) {
       return XhtmlNamespace[name](attributes);
     }
     return undefined;

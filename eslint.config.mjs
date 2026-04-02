@@ -300,6 +300,11 @@ export default [
           message: "Use `typeof` rather than `instanceof Object`.",
         },
         {
+          selector: "MemberExpression[property.name='hasOwnProperty']",
+          message:
+            "Use `Object.hasOwn` rather than `Object.prototype.hasOwnProperty`.",
+        },
+        {
           selector: "CallExpression[callee.name='assert'][arguments.length!=2]",
           message: "`assert()` must always be invoked with two arguments.",
         },

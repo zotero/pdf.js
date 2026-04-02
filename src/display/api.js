@@ -2575,7 +2575,7 @@ class WorkerTransport {
     this.#pagePromises.clear();
     this.#pageRefCache.clear();
     // Allow `AnnotationStorage`-related clean-up when destroying the document.
-    if (this.hasOwnProperty("annotationStorage")) {
+    if (Object.hasOwn(this, "annotationStorage")) {
       this.annotationStorage.resetModified();
     }
     // We also need to wait for the worker to finish its long running tasks.

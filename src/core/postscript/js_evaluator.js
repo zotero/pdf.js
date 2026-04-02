@@ -19,6 +19,7 @@ import {
   PS_VALUE_TYPE,
   PSStackToTree,
 } from "./ast.js";
+import { MathClamp } from "../../shared/util.js";
 import { TOKEN } from "./lexer.js";
 
 // Consecutive integers for a dense jump table in _execute.
@@ -341,7 +342,7 @@ class PsJsCompiler {
           const slot = ir[ip++] | 0;
           const min = ir[ip++];
           const max = ir[ip++];
-          dest[destOffset + slot] = Math.max(Math.min(stack[--sp], max), min);
+          dest[destOffset + slot] = MathClamp(stack[--sp], min, max);
           break;
         }
         case OP.IF: {

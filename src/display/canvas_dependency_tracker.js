@@ -13,7 +13,7 @@
  * limitations under the License.
  */
 
-import { FeatureTest, Util } from "../shared/util.js";
+import { FeatureTest, MathClamp, Util } from "../shared/util.js";
 
 const FORCED_DEPENDENCY_LABEL = "__forcedDependency";
 
@@ -257,22 +257,11 @@ class CanvasBBoxTracker {
 
     const bbox = [Infinity, Infinity, -Infinity, -Infinity];
     Util.axialAlignedBoundingBox([minX, minY, maxX, maxY], transform, bbox);
-    this.#pendingBBox[0] = Math.min(
-      this.#pendingBBox[0],
-      Math.max(bbox[0], clipBox[0])
-    );
-    this.#pendingBBox[1] = Math.min(
-      this.#pendingBBox[1],
-      Math.max(bbox[1], clipBox[1])
-    );
-    this.#pendingBBox[2] = Math.max(
-      this.#pendingBBox[2],
-      Math.min(bbox[2], clipBox[2])
-    );
-    this.#pendingBBox[3] = Math.max(
-      this.#pendingBBox[3],
-      Math.min(bbox[3], clipBox[3])
-    );
+
+    this.#pendingBBox[0] = MathClamp(bbox[0], clipBox[0], this.#pendingBBox[0]);
+    this.#pendingBBox[1] = MathClamp(bbox[1], clipBox[1], this.#pendingBBox[1]);
+    this.#pendingBBox[2] = MathClamp(bbox[2], this.#pendingBBox[2], clipBox[2]);
+    this.#pendingBBox[3] = MathClamp(bbox[3], this.#pendingBBox[3], clipBox[3]);
     return this;
   }
 

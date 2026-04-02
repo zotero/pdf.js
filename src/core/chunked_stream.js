@@ -14,7 +14,8 @@
  */
 
 import { arrayBuffersToBytes, MissingDataException } from "./core_utils.js";
-import { assert, MathClamp } from "../shared/util.js";
+import { assert } from "../shared/util.js";
+import { MathClamp } from "../shared/math_clamp.js";
 import { Stream } from "./stream.js";
 
 class ChunkedStream extends Stream {

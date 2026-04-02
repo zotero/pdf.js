@@ -17,12 +17,12 @@ import {
   BaseException,
   DrawOPS,
   FeatureTest,
-  MathClamp,
   shadow,
   stripPath,
   Util,
   warn,
 } from "../shared/util.js";
+import { MathClamp } from "../shared/math_clamp.js";
 import { XfaLayer } from "./xfa_layer.js";
 
 const SVG_NS = "http://www.w3.org/2000/svg";

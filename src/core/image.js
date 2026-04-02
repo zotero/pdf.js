@@ -18,7 +18,6 @@ import {
   FeatureTest,
   FormatError,
   ImageKind,
-  MathClamp,
   warn,
 } from "../shared/util.js";
 import {
@@ -32,6 +31,7 @@ import { DecodeStream } from "./decode_stream.js";
 import { ImageResizer } from "./image_resizer.js";
 import { JpegStream } from "./jpeg_stream.js";
 import { JpxImage } from "./jpx.js";
+import { MathClamp } from "../shared/math_clamp.js";
 import { Name } from "./primitives.js";
 
 /**

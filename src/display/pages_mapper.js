@@ -13,7 +13,8 @@
  * limitations under the License.
  */
 
-import { makeArr, MathClamp } from "../shared/util.js";
+import { makeArr } from "../shared/util.js";
+import { MathClamp } from "../shared/math_clamp.js";
 
 /**
  * Maps between page IDs and page numbers, allowing bidirectional conversion

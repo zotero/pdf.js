@@ -22,16 +22,12 @@ import {
   ColorManager,
   KeyboardManager,
 } from "./tools.js";
-import {
-  FeatureTest,
-  MathClamp,
-  shadow,
-  unreachable,
-} from "../../shared/util.js";
+import { FeatureTest, shadow, unreachable } from "../../shared/util.js";
 import { noContextMenu, stopEvent } from "../display_utils.js";
 import { AltText } from "./alt_text.js";
 import { Comment } from "./comment.js";
 import { EditorToolbar } from "./toolbar.js";
+import { MathClamp } from "../../shared/math_clamp.js";
 import { TouchManager } from "../touch_manager.js";
 
 /**

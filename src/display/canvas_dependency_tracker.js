@@ -13,7 +13,8 @@
  * limitations under the License.
  */
 
-import { FeatureTest, MathClamp, Util } from "../shared/util.js";
+import { FeatureTest, Util } from "../shared/util.js";
+import { MathClamp } from "../shared/math_clamp.js";
 
 const FORCED_DEPENDENCY_LABEL = "__forcedDependency";
 

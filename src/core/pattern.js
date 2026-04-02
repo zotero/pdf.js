@@ -17,7 +17,6 @@ import {
   assert,
   FormatError,
   info,
-  MathClamp,
   MeshFigureType,
   unreachable,
   Util,
@@ -34,6 +33,7 @@ import {
 } from "./core_utils.js";
 import { BaseStream } from "./base_stream.js";
 import { ColorSpaceUtils } from "./colorspace_utils.js";
+import { MathClamp } from "../shared/math_clamp.js";
 
 const ShadingType = {
   FUNCTION_BASED: 1,

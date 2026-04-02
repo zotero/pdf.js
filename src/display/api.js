@@ -26,7 +26,6 @@ import {
   info,
   isNodeJS,
   makeObj,
-  MathClamp,
   RenderingIntentFlag,
   setVerbosityLevel,
   shadow,
@@ -77,6 +76,7 @@ import { DOMFilterFactory } from "./filter_factory.js";
 import { getNetworkStream } from "display-network_stream";
 import { GlobalWorkerOptions } from "./worker_options.js";
 import { initWebGPUMesh } from "./webgpu_mesh.js";
+import { MathClamp } from "../shared/math_clamp.js";
 import { Metadata } from "./metadata.js";
 import { OptionalContentConfig } from "./optional_content_config.js";
 import { PagesMapper } from "./pages_mapper.js";

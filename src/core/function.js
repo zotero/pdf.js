@@ -18,7 +18,6 @@ import {
   FeatureTest,
   FormatError,
   info,
-  MathClamp,
   shadow,
   unreachable,
   warn,
@@ -29,6 +28,7 @@ import { buildPostScriptJsFunction } from "./postscript/js_evaluator.js";
 import { buildPostScriptWasmFunction } from "./postscript/wasm_compiler.js";
 import { isNumberArray } from "./core_utils.js";
 import { LocalFunctionCache } from "./image_utils.js";
+import { MathClamp } from "../shared/math_clamp.js";
 
 class PDFFunctionFactory {
   static #useWasm = true;

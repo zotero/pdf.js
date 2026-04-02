@@ -27,7 +27,8 @@ import {
 } from "./colorspace.js";
 import { CmykICCBasedCS, IccColorSpace } from "./icc_colorspace.js";
 import { Dict, Name, Ref } from "./primitives.js";
-import { MathClamp, shadow, unreachable, warn } from "../shared/util.js";
+import { shadow, unreachable, warn } from "../shared/util.js";
+import { MathClamp } from "../shared/math_clamp.js";
 import { MissingDataException } from "./core_utils.js";
 
 class ColorSpaceUtils {

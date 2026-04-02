@@ -19,7 +19,7 @@ import {
   PS_VALUE_TYPE,
   PSStackToTree,
 } from "./ast.js";
-import { MathClamp } from "../../shared/util.js";
+import { MathClamp } from "../../shared/math_clamp.js";
 import { TOKEN } from "./lexer.js";
 
 // Consecutive integers for a dense jump table in _execute.

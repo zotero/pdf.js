@@ -89,7 +89,7 @@ class ViewsManager extends Sidebar {
       outlinesView,
       attachmentsView,
       layersView,
-      viewsManagerAddFileButton,
+      viewsManagerAddFile: { button: viewsManagerAddFileButton },
       viewsManagerCurrentOutlineButton,
       viewsManagerSelectorButton,
       viewsManagerSelectorOptions,
@@ -98,6 +98,7 @@ class ViewsManager extends Sidebar {
     },
     eventBus,
     l10n,
+    enableMerge = false,
     enableSplitMerge = false,
     globalAbortSignal,
   }) {
@@ -149,6 +150,10 @@ class ViewsManager extends Sidebar {
       viewsManagerStatus.hidden = true;
     }
     this._enableSplitMerge = enableSplitMerge;
+    this._enableMerge = enableMerge;
+    if (!enableMerge) {
+      viewsManagerAddFileButton.hidden = true;
+    }
 
     this.menu = new Menu(
       viewsManagerSelectorOptions,
@@ -260,10 +265,10 @@ class ViewsManager extends Sidebar {
         return;
     }
 
-    if (this._enableSplitMerge) {
-      this.viewsManagerStatus.hidden = view !== SidebarView.THUMBS;
-    }
-    this.viewsManagerAddFileButton.hidden = view !== SidebarView.THUMBS;
+    this.viewsManagerStatus.hidden =
+      !this._enableSplitMerge || view !== SidebarView.THUMBS;
+    this.viewsManagerAddFileButton.hidden =
+      !this._enableMerge || view !== SidebarView.THUMBS;
     this.viewsManagerCurrentOutlineButton.hidden = view !== SidebarView.OUTLINE;
     this.viewsManagerHeaderLabel.setAttribute(
       "data-l10n-id",

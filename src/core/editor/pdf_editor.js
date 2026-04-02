@@ -560,7 +560,137 @@ class PDFEditor {
    *  excluded ranges (inclusive) or indices.
    * @property {Array<number>} [pageIndices]
    *  position of the pages in the final document.
+   * @property {number} [insertAfter]
+   *  0-based index in the base sequential document after which to insert the
+   *  pages. Sequential pageInfos (those without pageIndices) have their indices
+   *  shifted to accommodate the insertion. Cannot be combined with pageIndices.
    */
+
+  /**
+   * Return the document-local page indices that pass the include/exclude
+   * filters for the given pageInfo, in document order.
+   * @param {PageInfo} pageInfo
+   * @returns {Array<number>}
+   */
+  #getFilteredPageIndices({ document, includePages, excludePages }) {
+    if (!document) {
+      return [];
+    }
+    let keptIndices, keptRanges, deletedIndices, deletedRanges;
+    for (const page of includePages || []) {
+      if (Array.isArray(page)) {
+        (keptRanges ||= []).push(page);
+      } else {
+        (keptIndices ||= new Set()).add(page);
+      }
+    }
+    for (const page of excludePages || []) {
+      if (Array.isArray(page)) {
+        (deletedRanges ||= []).push(page);
+      } else {
+        (deletedIndices ||= new Set()).add(page);
+      }
+    }
+    const indices = [];
+    for (let i = 0, ii = document.numPages; i < ii; i++) {
+      if (deletedIndices?.has(i)) {
+        continue;
+      }
+      if (deletedRanges) {
+        let isDeleted = false;
+        for (const [start, end] of deletedRanges) {
+          if (i >= start && i <= end) {
+            isDeleted = true;
+            break;
+          }
+        }
+        if (isDeleted) {
+          continue;
+        }
+      }
+      let takePage = false;
+      if (keptIndices) {
+        takePage = keptIndices.has(i);
+      }
+      if (!takePage && keptRanges) {
+        for (const [start, end] of keptRanges) {
+          if (i >= start && i <= end) {
+            takePage = true;
+            break;
+          }
+        }
+      }
+      if (!takePage && !keptIndices && !keptRanges) {
+        takePage = true;
+      }
+      if (takePage) {
+        indices.push(i);
+      }
+    }
+    return indices;
+  }
+
+  /**
+   * Resolve insertAfter pageInfos by converting them (and sequential pageInfos)
+   * to explicit pageIndices, shifting indices to accommodate each insertion.
+   * insertAfter values are relative to the base sequential sequence (i.e. the
+   * concatenation of pages from pageInfos that have neither pageIndices nor
+   * insertAfter), so they are independent of each other.
+   * @param {Array<PageInfo>} pageInfos
+   * @returns {Array<PageInfo>}
+   */
+  #resolveInsertAfterIndices(pageInfos) {
+    // Single pass: build the base sequential sequence and collect insertAfter
+    // entries, computing each pageInfo's filtered page count only once and only
+    // for pageInfos that actually contribute pages.
+    const sequence = []; // each element is the index into pageInfos
+    const insertAfterList = [];
+    for (let i = 0; i < pageInfos.length; i++) {
+      const info = pageInfos[i];
+      if (!info.document || info.pageIndices) {
+        continue;
+      }
+      const count = this.#getFilteredPageIndices(info).length;
+      if (info.insertAfter === undefined) {
+        for (let j = 0; j < count; j++) {
+          sequence.push(i);
+        }
+      } else {
+        insertAfterList.push({ i, insertAfter: info.insertAfter, count });
+      }
+    }
+
+    // Sort by insertAfter value so that each value is interpreted relative to
+    // the same base sequential sequence, then insert into the sequence.
+    // The offset accumulates the number of pages already inserted, converting
+    // base-relative positions to current-sequence positions.
+    insertAfterList.sort((a, b) => a.insertAfter - b.insertAfter);
+    let offset = 0;
+    for (const { i, insertAfter, count } of insertAfterList) {
+      const insertPos = insertAfter + 1 + offset;
+      sequence.splice(insertPos, 0, ...new Array(count).fill(i));
+      offset += count;
+    }
+
+    // Map each pageInfo index to its final positions in the sequence using a
+    // plain array (keys are dense integers so no need for a Map).
+    const pageIndicesArr = new Array(pageInfos.length);
+    for (let pos = 0; pos < sequence.length; pos++) {
+      const infoIdx = sequence[pos];
+      (pageIndicesArr[infoIdx] ||= []).push(pos);
+    }
+
+    // Return updated pageInfos: sequential and insertAfter pageInfos now have
+    // explicit pageIndices; already-indexed pageInfos are left unchanged.
+    return pageInfos.map((info, i) => {
+      if (!info.document || info.pageIndices) {
+        return info;
+      }
+      const newInfo = { ...info, pageIndices: pageIndicesArr[i] || [] };
+      delete newInfo.insertAfter;
+      return newInfo;
+    });
+  }
 
   /**
    * Extract pages from the given documents.
@@ -574,6 +704,9 @@ class PDFEditor {
    * @return {Promise<void>}
    */
   async extractPages(pageInfos, annotationStorage, handler, task) {
+    if (pageInfos.some(info => info.insertAfter !== undefined)) {
+      pageInfos = this.#resolveInsertAfterIndices(pageInfos);
+    }
     const promises = [];
     let newIndex = 0;
     this.isSingleFile =
@@ -610,57 +743,12 @@ class PDFEditor {
       const documentData = new DocumentData(document);
       allDocumentData.push(documentData);
       promises.push(this.#collectDocumentData(documentData));
-      let keptIndices, keptRanges, deletedIndices, deletedRanges;
-      for (const page of includePages || []) {
-        if (Array.isArray(page)) {
-          (keptRanges ||= []).push(page);
-        } else {
-          (keptIndices ||= new Set()).add(page);
-        }
-      }
-      for (const page of excludePages || []) {
-        if (Array.isArray(page)) {
-          (deletedRanges ||= []).push(page);
-        } else {
-          (deletedIndices ||= new Set()).add(page);
-        }
-      }
       let pageIndex = 0;
-      for (let i = 0, ii = document.numPages; i < ii; i++) {
-        if (deletedIndices?.has(i)) {
-          continue;
-        }
-        if (deletedRanges) {
-          let isDeleted = false;
-          for (const [start, end] of deletedRanges) {
-            if (i >= start && i <= end) {
-              isDeleted = true;
-              break;
-            }
-          }
-          if (isDeleted) {
-            continue;
-          }
-        }
-
-        let takePage = false;
-        if (keptIndices) {
-          takePage = keptIndices.has(i);
-        }
-        if (!takePage && keptRanges) {
-          for (const [start, end] of keptRanges) {
-            if (i >= start && i <= end) {
-              takePage = true;
-              break;
-            }
-          }
-        }
-        if (!takePage && !keptIndices && !keptRanges) {
-          takePage = true;
-        }
-        if (!takePage) {
-          continue;
-        }
+      for (const i of this.#getFilteredPageIndices({
+        document,
+        includePages,
+        excludePages,
+      })) {
         let newPageIndex;
         if (pageIndices) {
           newPageIndex = pageIndices[pageIndex++];

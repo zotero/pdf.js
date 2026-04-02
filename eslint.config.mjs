@@ -5,6 +5,7 @@ import jasmine from "eslint-plugin-jasmine";
 import json from "@eslint/json";
 import noUnsanitized from "eslint-plugin-no-unsanitized";
 import perfectionist from "eslint-plugin-perfectionist";
+import preferMathClamp from "./external/eslint_plugins/prefer-math-clamp.mjs";
 import prettierRecommended from "eslint-plugin-prettier/recommended";
 import unicorn from "eslint-plugin-unicorn";
 
@@ -74,6 +75,7 @@ export default [
       json,
       "no-unsanitized": noUnsanitized,
       perfectionist,
+      "prefer-math-clamp": preferMathClamp,
       unicorn,
     },
 
@@ -178,6 +180,8 @@ export default [
       "unicorn/prefer-string-starts-ends-with": "error",
       "unicorn/prefer-ternary": ["error", "only-single-line"],
       "unicorn/throw-new-error": "error",
+
+      "prefer-math-clamp/prefer-math-clamp": "error",
 
       // Possible errors
       "for-direction": "error",

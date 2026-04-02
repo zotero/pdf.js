@@ -953,18 +953,15 @@ class TreeView {
       val !== null &&
       typeof val === "object" &&
       !Array.isArray(val) &&
-      Object.prototype.hasOwnProperty.call(val, "dict") &&
-      (Object.prototype.hasOwnProperty.call(val, "bytes") ||
-        Object.prototype.hasOwnProperty.call(val, "imageData") ||
+      Object.hasOwn(val, "dict") &&
+      (Object.hasOwn(val, "bytes") ||
+        Object.hasOwn(val, "imageData") ||
         val.contentStream === true)
     );
   }
 
   #isImageStream(val) {
-    return (
-      this.#isStream(val) &&
-      Object.prototype.hasOwnProperty.call(val, "imageData")
-    );
+    return this.#isStream(val) && Object.hasOwn(val, "imageData");
   }
 
   #isFormXObjectStream(val) {
@@ -977,7 +974,7 @@ class TreeView {
       val !== null &&
       typeof val === "object" &&
       !Array.isArray(val) &&
-      Object.prototype.hasOwnProperty.call(val, "dict") &&
+      Object.hasOwn(val, "dict") &&
       val.psFunction === true
     );
   }

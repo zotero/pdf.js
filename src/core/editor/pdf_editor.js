@@ -114,8 +114,9 @@ class PDFEditor {
   // multiple PDF files.
   hasSingleFile = false;
 
-  // Whether the edited PDF contains multiple files. This is used to determine
-  // if we can preserve some information such as passwords.
+  // Whether the edited PDF contains only one file used one or more times.
+  // This is used to determine if we can preserve some information such as
+  // passwords.
   isSingleFile = false;
 
   #newAnnotationsParams = null;

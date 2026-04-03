@@ -18,13 +18,13 @@ import {
   FeatureTest,
   FormatError,
   info,
-  MathClamp,
   shadow,
   unreachable,
   Util,
   warn,
 } from "../shared/util.js";
 import { BaseStream } from "./base_stream.js";
+import { MathClamp } from "../shared/math_clamp.js";
 
 /**
  * Resizes an RGB image with 3 components.

@@ -1240,12 +1240,6 @@ const makeArr = () => [];
 const makeMap = () => new Map();
 const makeObj = () => Object.create(null);
 
-// TODO: Replace all occurrences of this function with `Math.clamp` once
-//       https://github.com/tc39/proposal-math-clamp/ is generally available.
-function MathClamp(v, min, max) {
-  return Math.min(Math.max(v, min), max);
-}
-
 // TODO: Remove this once `Math.sumPrecise` is generally available.
 if (
   (typeof PDFJSDev === "undefined" ||
@@ -1351,7 +1345,6 @@ export {
   makeArr,
   makeMap,
   makeObj,
-  MathClamp,
   MeshFigureType,
   normalizeUnicode,
   objectSize,

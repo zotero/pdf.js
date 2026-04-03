@@ -13,8 +13,9 @@
  * limitations under the License.
  */
 
-import { MathClamp, Util } from "../../../shared/util.js";
+import { MathClamp } from "../../../shared/math_clamp.js";
 import { Outline } from "./outline.js";
+import { Util } from "../../../shared/util.js";
 
 class InkDrawOutliner {
   // The last 3 points of the line.

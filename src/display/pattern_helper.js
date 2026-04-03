@@ -84,21 +84,19 @@ class RadialAxialShadingPattern extends BaseShadingPattern {
     return this._type === "radial";
   }
 
-  // Returns true when the smaller circle's center (p0 when r0 ≤ r1) lies
-  // outside the larger circle. In that case the canvas radial gradient picks
-  // t > 1 solutions for points inside the outer circle and maps them to the
-  // transparent stop we append for extendEnd=false, making the gradient
-  // invisible. A two-pass draw (reversed first, normal on top) fixes this
-  // (see #20851).
-  _isCircleCenterOutside() {
-    if (!this.isRadial() || this._r0 > this._r1) {
+  // Return true when the a circle of a radial gradient isn't fully included in
+  // the other circle, which means that the gradient is conic and we need to
+  // draw the reversed gradient first to correctly render the pattern (see
+  // #20851 and #257).
+  areConic() {
+    if (!this.isRadial()) {
       return false;
     }
     const dist = Math.hypot(
       this._p0[0] - this._p1[0],
       this._p0[1] - this._p1[1]
     );
-    return dist > this._r1;
+    return dist + this._r1 > this._r0 && dist + this._r0 > this._r1;
   }
 
   _createGradient(ctx, transform = null) {
@@ -242,7 +240,7 @@ class RadialAxialShadingPattern extends BaseShadingPattern {
       }
       applyBoundingBox(tmpCtx, this._bbox);
 
-      if (this._isCircleCenterOutside()) {
+      if (this.areConic()) {
         tmpCtx.fillStyle = this._createReversedGradient(tmpCtx);
         tmpCtx.fill();
       }
@@ -257,7 +255,7 @@ class RadialAxialShadingPattern extends BaseShadingPattern {
       // Shading fills are applied relative to the current matrix which is also
       // how canvas gradients work, so there's no need to do anything special
       // here.
-      if (this._isCircleCenterOutside()) {
+      if (this.areConic()) {
         // Draw the reversed gradient first so the normal gradient can
         // correctly overlay it (see _isCircleCenterOutside for details).
         ctx.save();

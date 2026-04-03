@@ -2137,6 +2137,23 @@ class CanvasGraphics {
       fillStrokeMode === TextRenderingMode.STROKE ||
       fillStrokeMode === TextRenderingMode.FILL_STROKE;
 
+    let lineWidth = current.lineWidth;
+    const scale = current.textMatrixScale;
+    if (scale === 0 || lineWidth === 0) {
+      if (needsStroke) {
+        lineWidth = this.getSinglePixelWidth();
+      }
+    } else {
+      lineWidth /= scale;
+    }
+
+    if (fontSizeScale !== 1.0) {
+      ctx.scale(fontSizeScale, fontSizeScale);
+      lineWidth /= fontSizeScale;
+    }
+
+    ctx.lineWidth = lineWidth;
+
     if (needsFill && current.patternFill) {
       ctx.save();
       const pattern = current.fillColor.getPattern(
@@ -2164,23 +2181,6 @@ class CanvasGraphics {
       ctx.restore();
       ctx.strokeStyle = pattern;
     }
-
-    let lineWidth = current.lineWidth;
-    const scale = current.textMatrixScale;
-    if (scale === 0 || lineWidth === 0) {
-      if (needsStroke) {
-        lineWidth = this.getSinglePixelWidth();
-      }
-    } else {
-      lineWidth /= scale;
-    }
-
-    if (fontSizeScale !== 1.0) {
-      ctx.scale(fontSizeScale, fontSizeScale);
-      lineWidth /= fontSizeScale;
-    }
-
-    ctx.lineWidth = lineWidth;
 
     if (font.isInvalidPDFjsFont) {
       const chars = [];

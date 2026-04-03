@@ -529,23 +529,311 @@ function compilePostScriptToIR(source, domain, range) {
 }
 
 /**
- * Same calling convention as the Wasm wrapper:
- *   fn(src, srcOffset, dest, destOffset)
+ * Direct stack-based interpreter for a parsed PsProgram.
+ * Used when PSStackToTree fails to optimize the AST.
+ */
+class PSStackBasedInterpreter {
+  // Safe: JS is single-threaded.
+  static #stack = new Float64Array(100);
+
+  static #sp = 0;
+
+  static #push(v) {
+    if (this.#sp < this.#stack.length) {
+      this.#stack[this.#sp++] = v;
+    }
+  }
+
+  static #execOp(op) {
+    const stack = this.#stack;
+    switch (op) {
+      case TOKEN.true:
+        this.#push(1);
+        break;
+      case TOKEN.false:
+        this.#push(0);
+        break;
+      case TOKEN.abs:
+        stack[this.#sp - 1] = Math.abs(stack[this.#sp - 1]);
+        break;
+      case TOKEN.neg:
+        stack[this.#sp - 1] = -stack[this.#sp - 1];
+        break;
+      case TOKEN.ceiling:
+        stack[this.#sp - 1] = Math.ceil(stack[this.#sp - 1]);
+        break;
+      case TOKEN.floor:
+        stack[this.#sp - 1] = Math.floor(stack[this.#sp - 1]);
+        break;
+      case TOKEN.round:
+        stack[this.#sp - 1] = Math.floor(stack[this.#sp - 1] + 0.5);
+        break;
+      case TOKEN.truncate:
+        stack[this.#sp - 1] = Math.trunc(stack[this.#sp - 1]);
+        break;
+      case TOKEN.sqrt:
+        stack[this.#sp - 1] = Math.sqrt(stack[this.#sp - 1]);
+        break;
+      case TOKEN.sin:
+        stack[this.#sp - 1] = Math.sin(
+          (stack[this.#sp - 1] % 360) * _DEG_TO_RAD
+        );
+        break;
+      case TOKEN.cos:
+        stack[this.#sp - 1] = Math.cos(
+          (stack[this.#sp - 1] % 360) * _DEG_TO_RAD
+        );
+        break;
+      case TOKEN.ln:
+        stack[this.#sp - 1] = Math.log(stack[this.#sp - 1]);
+        break;
+      case TOKEN.log:
+        stack[this.#sp - 1] = Math.log10(stack[this.#sp - 1]);
+        break;
+      case TOKEN.cvi:
+        stack[this.#sp - 1] = Math.trunc(stack[this.#sp - 1]) | 0;
+        break;
+      case TOKEN.cvr:
+        break; // values are already f64
+      case TOKEN.not: {
+        const v = stack[this.#sp - 1];
+        stack[this.#sp - 1] = v === 0 || v === 1 ? 1 - v : ~(v | 0);
+        break;
+      }
+      case TOKEN.add: {
+        const b = stack[--this.#sp];
+        stack[this.#sp - 1] += b;
+        break;
+      }
+      case TOKEN.sub: {
+        const b = stack[--this.#sp];
+        stack[this.#sp - 1] -= b;
+        break;
+      }
+      case TOKEN.mul: {
+        const b = stack[--this.#sp];
+        stack[this.#sp - 1] *= b;
+        break;
+      }
+      case TOKEN.div: {
+        const b = stack[--this.#sp];
+        stack[this.#sp - 1] = b !== 0 ? stack[this.#sp - 1] / b : 0;
+        break;
+      }
+      case TOKEN.idiv: {
+        const b = stack[--this.#sp];
+        stack[this.#sp - 1] = b !== 0 ? Math.trunc(stack[this.#sp - 1] / b) : 0;
+        break;
+      }
+      case TOKEN.mod: {
+        const b = stack[--this.#sp];
+        stack[this.#sp - 1] = b !== 0 ? stack[this.#sp - 1] % b : 0;
+        break;
+      }
+      case TOKEN.exp: {
+        const b = stack[--this.#sp];
+        stack[this.#sp - 1] **= b;
+        break;
+      }
+      case TOKEN.atan: {
+        // Stack: [..., dy, dx] — dx on top.
+        const dx = stack[--this.#sp];
+        const deg = Math.atan2(stack[this.#sp - 1], dx) * _RAD_TO_DEG;
+        stack[this.#sp - 1] = deg < 0 ? deg + 360 : deg;
+        break;
+      }
+      case TOKEN.eq: {
+        const b = stack[--this.#sp];
+        stack[this.#sp - 1] = stack[this.#sp - 1] === b ? 1 : 0;
+        break;
+      }
+      case TOKEN.ne: {
+        const b = stack[--this.#sp];
+        stack[this.#sp - 1] = stack[this.#sp - 1] !== b ? 1 : 0;
+        break;
+      }
+      case TOKEN.gt: {
+        const b = stack[--this.#sp];
+        stack[this.#sp - 1] = stack[this.#sp - 1] > b ? 1 : 0;
+        break;
+      }
+      case TOKEN.ge: {
+        const b = stack[--this.#sp];
+        stack[this.#sp - 1] = stack[this.#sp - 1] >= b ? 1 : 0;
+        break;
+      }
+      case TOKEN.lt: {
+        const b = stack[--this.#sp];
+        stack[this.#sp - 1] = stack[this.#sp - 1] < b ? 1 : 0;
+        break;
+      }
+      case TOKEN.le: {
+        const b = stack[--this.#sp];
+        stack[this.#sp - 1] = stack[this.#sp - 1] <= b ? 1 : 0;
+        break;
+      }
+      case TOKEN.and: {
+        const b = stack[--this.#sp] | 0;
+        stack[this.#sp - 1] = (stack[this.#sp - 1] | 0) & b;
+        break;
+      }
+      case TOKEN.or: {
+        const b = stack[--this.#sp] | 0;
+        stack[this.#sp - 1] = stack[this.#sp - 1] | 0 | b;
+        break;
+      }
+      case TOKEN.xor: {
+        const b = stack[--this.#sp] | 0;
+        stack[this.#sp - 1] = (stack[this.#sp - 1] | 0) ^ b;
+        break;
+      }
+      case TOKEN.bitshift: {
+        const amt = stack[--this.#sp] | 0;
+        const v = stack[this.#sp - 1] | 0;
+        stack[this.#sp - 1] = amt > 0 ? v << amt : v >> -amt;
+        break;
+      }
+      case TOKEN.min: {
+        const b = stack[--this.#sp];
+        stack[this.#sp - 1] = Math.min(stack[this.#sp - 1], b);
+        break;
+      }
+      case TOKEN.max: {
+        const b = stack[--this.#sp];
+        stack[this.#sp - 1] = Math.max(stack[this.#sp - 1], b);
+        break;
+      }
+      case TOKEN.dup:
+        this.#push(stack[this.#sp - 1]);
+        break;
+      case TOKEN.exch: {
+        const a = stack[--this.#sp];
+        const b = stack[--this.#sp];
+        this.#push(a);
+        this.#push(b);
+        break;
+      }
+      case TOKEN.pop:
+        this.#sp--;
+        break;
+      case TOKEN.copy: {
+        const n = Math.trunc(stack[--this.#sp]);
+        const base = this.#sp - n;
+        for (let k = 0; k < n; k++) {
+          this.#push(stack[base + k]);
+        }
+        break;
+      }
+      case TOKEN.index: {
+        const i = Math.trunc(stack[--this.#sp]);
+        this.#push(stack[this.#sp - 1 - i]);
+        break;
+      }
+      case TOKEN.roll: {
+        // Rotate top n elements by j positions toward the top.
+        const j = Math.trunc(stack[--this.#sp]);
+        const n = Math.trunc(stack[--this.#sp]);
+        if (n > 1 && j !== 0) {
+          const mod = ((j % n) + n) % n;
+          if (mod !== 0) {
+            const base = this.#sp - n;
+            const sub = stack.slice(base, this.#sp);
+            for (let k = 0; k < n; k++) {
+              stack[base + k] = sub[(k - mod + n) % n];
+            }
+          }
+        }
+        break;
+      }
+    }
+  }
+
+  static #execBlock(instructions) {
+    for (const instr of instructions) {
+      switch (instr.type) {
+        case PS_NODE.number:
+          this.#push(instr.value);
+          break;
+        case PS_NODE.operator:
+          this.#execOp(instr.op);
+          break;
+        case PS_NODE.if:
+          if (this.#stack[--this.#sp] !== 0) {
+            this.#execBlock(instr.then.instructions);
+          }
+          break;
+        case PS_NODE.ifelse:
+          if (this.#stack[--this.#sp] !== 0) {
+            this.#execBlock(instr.then.instructions);
+          } else {
+            this.#execBlock(instr.otherwise.instructions);
+          }
+          break;
+      }
+    }
+  }
+
+  /**
+   * @param {import("./ast.js").PsProgram} program
+   * @param {number[]} domain  – flat [min0,max0, …]
+   * @param {number[]} range   – flat [min0,max0, …]
+   * @returns {Function}  – `(src, srcOffset, dest, destOffset) => void`
+   */
+  static build(program, domain, range) {
+    const nIn = domain.length >> 1;
+    const nOut = range.length >> 1;
+    const { instructions } = program.body;
+    return (src, srcOffset, dest, destOffset) => {
+      this.#sp = 0;
+      for (let i = 0; i < nIn; i++) {
+        this.#push(src[srcOffset + i]);
+      }
+      this.#execBlock(instructions);
+      // Outputs: first at bottom, last at top.
+      const base = this.#sp - nOut;
+      for (let i = 0; i < nOut; i++) {
+        const v = base + i >= 0 ? this.#stack[base + i] : 0;
+        dest[destOffset + i] = Math.max(
+          range[i * 2],
+          Math.min(range[i * 2 + 1], v)
+        );
+      }
+    };
+  }
+}
+
+/**
+ * Tries PSStackToTree-optimized IR first; falls back to direct interpreter.
  *
  * @param {string}   source
  * @param {number[]} domain  – flat [min0,max0, …]
  * @param {number[]} range   – flat [min0,max0, …]
- * @returns {Function|null}
+ * @returns {Function}  – `(src, srcOffset, dest, destOffset) => void`
  */
 function buildPostScriptJsFunction(source, domain, range) {
-  const ir = compilePostScriptToIR(source, domain, range);
-  if (!ir) {
-    return null;
+  const program = parsePostScriptFunction(source);
+  const ir = new PsJsCompiler(domain, range).compile(program);
+  if (ir) {
+    return (src, srcOffset, dest, destOffset) => {
+      PsJsCompiler.execute(ir, src, srcOffset, dest, destOffset);
+    };
   }
-
-  return (src, srcOffset, dest, destOffset) => {
-    PsJsCompiler.execute(ir, src, srcOffset, dest, destOffset);
-  };
+  // Fall back to direct interpreter.
+  return PSStackBasedInterpreter.build(program, domain, range);
 }
 
-export { buildPostScriptJsFunction, compilePostScriptToIR };
+/**
+ * @param {import("./ast.js").PsProgram} program
+ * @param {number[]} domain  – flat [min0,max0, …]
+ * @param {number[]} range   – flat [min0,max0, …]
+ * @returns {Function}  – `(src, srcOffset, dest, destOffset) => void`
+ */
+function buildPostScriptProgramFunction(program, domain, range) {
+  return PSStackBasedInterpreter.build(program, domain, range);
+}
+
+export {
+  buildPostScriptJsFunction,
+  buildPostScriptProgramFunction,
+  compilePostScriptToIR,
+};

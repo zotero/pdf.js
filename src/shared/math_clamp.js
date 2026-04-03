@@ -16,6 +16,7 @@
 // TODO: Replace all occurrences of this function, and remove the file, once
 //       https://github.com/tc39/proposal-math-clamp/ is generally available.
 function MathClamp(v, min, max) {
+  // eslint-disable-next-line prefer-math-clamp/prefer-math-clamp
   return Math.min(Math.max(v, min), max);
 }
 

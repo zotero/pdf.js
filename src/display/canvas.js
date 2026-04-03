@@ -2858,8 +2858,10 @@ class CanvasGraphics {
       this.ctx.canvas.height
     );
 
+    this.baseTransformStack.push(this.baseTransform);
     this.transform(opIdx, ...transform);
     this.transform(opIdx, ...matrix);
+    this.baseTransform = getCurrentTransform(this.ctx);
   }
 
   endAnnotation(opIdx) {
@@ -2871,6 +2873,7 @@ class CanvasGraphics {
       delete this.annotationCanvas.savedCtx;
       delete this.annotationCanvas;
     }
+    this.baseTransform = this.baseTransformStack.pop();
   }
 
   paintImageMaskXObject(opIdx, img) {

@@ -83,8 +83,6 @@ import { XRef } from "./xref.js";
 const LETTER_SIZE_MEDIABOX = [0, 0, 612, 792];
 
 class Page {
-  #areAnnotationsCached = false;
-
   #resourcesPromise = null;
 
   constructor({
@@ -874,8 +872,6 @@ class Page {
         return sortedAnnotations;
       });
 
-    this.#areAnnotationsCached = true;
-
     return shadow(this, "_parsedAnnotations", promise);
   }
 
@@ -897,7 +893,7 @@ class Page {
   ) {
     const { pageIndex } = this;
 
-    if (this.#areAnnotationsCached) {
+    if (Object.hasOwn(this, "_parsedAnnotations")) {
       const cachedAnnotations = await this._parsedAnnotations;
       for (const { data } of cachedAnnotations) {
         if (!types || types.has(data.annotationType)) {
@@ -909,6 +905,8 @@ class Page {
     }
 
     const annots = await this.pdfManager.ensure(this, "annotations");
+    let partialEvaluator;
+
     for (const annotationRef of annots) {
       promises.push(
         AnnotationFactory.create(
@@ -927,7 +925,8 @@ class Page {
             }
             annotation.data.pageIndex = pageIndex;
             if (annotation.hasTextContent && annotation.viewable) {
-              const partialEvaluator = this.#createPartialEvaluator(handler);
+              partialEvaluator ??= this.#createPartialEvaluator(handler);
+
               await annotation.extractTextContent(partialEvaluator, task, [
                 -Infinity,
                 -Infinity,

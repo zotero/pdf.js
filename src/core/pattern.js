@@ -414,14 +414,7 @@ class FunctionBasedShading extends BaseShading {
     const fn = pdfFunctionFactory.create(fnObj, /* parseArray = */ true);
 
     // Domain [x0, x1, y0, y1]; defaults to [0, 1, 0, 1].
-    let x0 = 0,
-      x1 = 1,
-      y0 = 0,
-      y1 = 1;
-    const domainArr = lookupRect(dict.getArray("Domain"), null);
-    if (domainArr) {
-      [x0, x1, y0, y1] = domainArr;
-    }
+    const [x0, x1, y0, y1] = lookupRect(dict.getArray("Domain"), [0, 1, 0, 1]);
 
     // Matrix maps shading (domain) space to user space; defaults to identity.
     const matrix = lookupMatrix(dict.getArray("Matrix"), IDENTITY_MATRIX);

@@ -127,7 +127,7 @@ class WorkerMessageHandler {
       // the `{Object, Array}.prototype` has been *incorrectly* extended.
       //
       // PLEASE NOTE: We do *not* want to slow down font parsing by adding
-      //              `hasOwnProperty` checks all over the code-base.
+      //              `Object.hasOwn` checks all over the code-base.
       const buildMsg = (type, prop) =>
         `The \`${type}.prototype\` contains unexpected enumerable property ` +
         `"${prop}", thus breaking e.g. \`for...in\` iteration of ${type}s.`;

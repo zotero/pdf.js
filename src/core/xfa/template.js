@@ -6132,7 +6132,7 @@ class Variables extends XFAObject {
 
 class TemplateNamespace {
   static [$buildXFAObject](name, attributes) {
-    if (TemplateNamespace.hasOwnProperty(name)) {
+    if (Object.hasOwn(TemplateNamespace, name)) {
       const node = TemplateNamespace[name](attributes);
       node[$setSetAttributes](attributes);
       return node;

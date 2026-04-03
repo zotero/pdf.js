@@ -262,6 +262,7 @@ export default [
       "no-useless-concat": "error",
       "no-useless-escape": "error",
       "no-useless-return": "error",
+      "prefer-object-has-own": "error",
       "prefer-promise-reject-errors": "error",
       "prefer-spread": "error",
       "wrap-iife": ["error", "any"],
@@ -297,6 +298,11 @@ export default [
           selector:
             "BinaryExpression[operator='instanceof'][right.name='Object']",
           message: "Use `typeof` rather than `instanceof Object`.",
+        },
+        {
+          selector: "MemberExpression[property.name='hasOwnProperty']",
+          message:
+            "Use `Object.hasOwn` rather than `Object.prototype.hasOwnProperty`.",
         },
         {
           selector: "CallExpression[callee.name='assert'][arguments.length!=2]",

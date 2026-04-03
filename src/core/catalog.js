@@ -718,7 +718,7 @@ class Catalog {
 
   getDestination(id) {
     // Avoid extra lookup/parsing when all destinations are already available.
-    if (this.hasOwnProperty("destinations")) {
+    if (Object.hasOwn(this, "destinations")) {
       return this.destinations[id] ?? null;
     }
 

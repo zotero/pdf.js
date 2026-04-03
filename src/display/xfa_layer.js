@@ -86,7 +86,7 @@ class XfaLayer {
           for (const option of element.children) {
             if (option.attributes.value === storedData.value) {
               option.attributes.selected = true;
-            } else if (option.attributes.hasOwnProperty("selected")) {
+            } else if (Object.hasOwn(option.attributes, "selected")) {
               delete option.attributes.selected;
             }
           }

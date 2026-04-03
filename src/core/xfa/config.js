@@ -1355,7 +1355,7 @@ class Zpl extends XFAObject {
 
 class ConfigNamespace {
   static [$buildXFAObject](name, attributes) {
-    if (ConfigNamespace.hasOwnProperty(name)) {
+    if (Object.hasOwn(ConfigNamespace, name)) {
       return ConfigNamespace[name](attributes);
     }
     return undefined;

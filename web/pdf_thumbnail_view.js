@@ -21,11 +21,7 @@
 // eslint-disable-next-line max-len
 /** @typedef {import("./pdf_rendering_queue").PDFRenderingQueue} PDFRenderingQueue */
 
-import {
-  FeatureTest,
-  OutputScale,
-  RenderingCancelledException,
-} from "pdfjs-lib";
+import { OutputScale, RenderingCancelledException } from "pdfjs-lib";
 import { RenderableView, RenderingStates } from "./renderable_view.js";
 import { AppOptions } from "./app_options.js";
 
@@ -55,26 +51,16 @@ const THUMBNAIL_WIDTH = 126; // px
  *   mode.
  */
 
-class TempImageFactory {
-  static getCanvas(width, height) {
-    let tempCanvas;
-    if (FeatureTest.isOffscreenCanvasSupported) {
-      tempCanvas = new OffscreenCanvas(width, height);
-    } else {
-      tempCanvas = document.createElement("canvas");
-      tempCanvas.width = width;
-      tempCanvas.height = height;
-    }
-
-    // Since this is a temporary canvas, we need to fill it with a white
-    // background ourselves. `#getPageDrawContext` uses CSS rules for this.
-    const ctx = tempCanvas.getContext("2d", { alpha: false });
-    ctx.save();
-    ctx.fillStyle = "rgb(255, 255, 255)";
-    ctx.fillRect(0, 0, width, height);
-    ctx.restore();
-    return [tempCanvas, ctx];
-  }
+function getTempCanvas(width, height) {
+  const canvas = new OffscreenCanvas(width, height);
+  // Since this is a temporary canvas, we need to fill it with a white
+  // background ourselves. `#getPageDrawContext` uses CSS rules for this.
+  const ctx = canvas.getContext("2d", { alpha: false });
+  ctx.save();
+  ctx.fillStyle = "rgb(255, 255, 255)";
+  ctx.fillRect(0, 0, width, height);
+  ctx.restore();
+  return [canvas, ctx];
 }
 
 class PDFThumbnailView extends RenderableView {
@@ -364,10 +350,6 @@ class PDFThumbnailView extends RenderableView {
     image.setAttribute("data-l10n-id", "pdfjs-thumb-page-canvas");
     image.setAttribute("data-l10n-args", this.#getPageL10nArgs());
     imageContainer.classList.remove("missingThumbnailImage");
-    if (!FeatureTest.isOffscreenCanvasSupported) {
-      // Clean up the canvas element since it is no longer needed.
-      reducedCanvas.width = reducedCanvas.height = 0;
-    }
   }
 
   async draw() {
@@ -506,7 +488,7 @@ class PDFThumbnailView extends RenderableView {
     }
     // drawImage does an awful job of rescaling the image, doing it gradually.
     let [reducedWidth, reducedHeight] = this.#getReducedImageDims(canvas);
-    const [reducedImage, reducedImageCtx] = TempImageFactory.getCanvas(
+    const [reducedImage, reducedImageCtx] = getTempCanvas(
       reducedWidth,
       reducedHeight
     );

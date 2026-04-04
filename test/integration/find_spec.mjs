@@ -13,7 +13,13 @@
  * limitations under the License.
  */
 
-import { closePages, FSI, loadAndWait, PDI } from "./test_utils.mjs";
+import {
+  closePages,
+  FSI,
+  loadAndWait,
+  PDI,
+  waitForTextToBe,
+} from "./test_utils.mjs";
 
 function fuzzyMatch(a, b, browserName, pixelFuzz = 3) {
   expect(a)
@@ -105,12 +111,11 @@ describe("find bar", () => {
           await page.type("#findInput", "preferences");
           await page.waitForSelector("#findInput[data-status='']");
           await page.waitForSelector(".xfaLayer .highlight");
-          await page.waitForFunction(
-            () => !!document.querySelector("#findResultsCount")?.textContent
+          await waitForTextToBe(
+            page,
+            "#findResultsCount",
+            `${FSI}1${PDI} of ${FSI}1${PDI} match`
           );
-          const resultElement = await page.waitForSelector("#findResultsCount");
-          const resultText = await resultElement.evaluate(el => el.textContent);
-          expect(resultText).toEqual(`${FSI}1${PDI} of ${FSI}1${PDI} match`);
           const selectedElement = await page.waitForSelector(
             ".highlight.selected"
           );
@@ -208,14 +213,11 @@ describe("find bar", () => {
             }
 
             // Verify we are on the expected match number.
-            const resultElement =
-              await page.waitForSelector("#findResultsCount");
-            const resultText = await resultElement.evaluate(
-              el => el.textContent
+            await waitForTextToBe(
+              page,
+              "#findResultsCount",
+              `${FSI}${i + 1}${PDI} of ${FSI}5${PDI} matches`
             );
-            expect(resultText)
-              .withContext(`In ${browserName}, match ${i + 1}`)
-              .toEqual(`${FSI}${i + 1}${PDI} of ${FSI}5${PDI} matches`);
 
             // The selected highlight must be visible in the viewport.
             const selected = await page.waitForSelector(

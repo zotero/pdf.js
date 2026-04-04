@@ -460,20 +460,20 @@ describe("Reorganize Pages View", () => {
 
           // Wait for the first result to be selected and the search to settle.
           await page.waitForSelector("#findInput[data-status='']");
-          let resultEl = await page.waitForSelector("#findResultsCount");
-          const firstResult = await resultEl.evaluate(el => el.textContent);
-          expect(firstResult)
-            .withContext(`In ${browserName}`)
-            .toEqual(`${FSI}1${PDI} of ${FSI}10${PDI} matches`);
+          await waitForTextToBe(
+            page,
+            "#findResultsCount",
+            `${FSI}1${PDI} of ${FSI}10${PDI} matches`
+          );
 
           // Navigate to the next match.
           await page.keyboard.press("Enter");
           await page.waitForSelector("#findInput[data-status='']");
-          resultEl = await page.waitForSelector("#findResultsCount");
-          const secondResult = await resultEl.evaluate(el => el.textContent);
-          expect(secondResult)
-            .withContext(`In ${browserName}`)
-            .toEqual(`${FSI}2${PDI} of ${FSI}10${PDI} matches`);
+          await waitForTextToBe(
+            page,
+            "#findResultsCount",
+            `${FSI}2${PDI} of ${FSI}10${PDI} matches`
+          );
 
           // Move a page: this previously blocked subsequent find navigation.
           await movePages(page, [3], 0);
@@ -484,11 +484,11 @@ describe("Reorganize Pages View", () => {
           // Navigate to the next match — must not be blocked.
           await page.keyboard.press("Enter");
           await page.waitForSelector("#findInput[data-status='']");
-          resultEl = await page.waitForSelector("#findResultsCount");
-          const resultAfterMove = await resultEl.evaluate(el => el.textContent);
-          expect(resultAfterMove)
-            .withContext(`In ${browserName}`)
-            .not.toEqual(secondResult);
+          await waitForTextToBe(
+            page,
+            "#findResultsCount",
+            `${FSI}3${PDI} of ${FSI}10${PDI} matches`
+          );
         })
       );
     });

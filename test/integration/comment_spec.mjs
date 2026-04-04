@@ -571,10 +571,10 @@ describe("Comment", () => {
             const rect = await getRect(page, sidebarSelector);
             const arrowKey = extraWidth > 0 ? "ArrowLeft" : "ArrowRight";
             for (let i = 0; i < Math.abs(extraWidth); i++) {
-              await waitForBrowserTrip(page);
               await kbModifierDown(page);
               await page.keyboard.press(arrowKey);
               await kbModifierUp(page);
+              await waitForBrowserTrip(page);
             }
 
             const rectAfter = await getRect(page, sidebarSelector);
@@ -592,6 +592,7 @@ describe("Comment", () => {
             const arrowKey = extraWidth > 0 ? "ArrowLeft" : "ArrowRight";
             for (let i = 0; i < Math.abs(extraWidth); i++) {
               await page.keyboard.press(arrowKey);
+              await waitForBrowserTrip(page);
             }
 
             const rectAfter = await getRect(page, sidebarSelector);

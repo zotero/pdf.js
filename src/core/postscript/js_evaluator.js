@@ -517,18 +517,6 @@ class PsJsCompiler {
 }
 
 /**
- * @param {string}   source
- * @param {number[]} domain  – flat [min0,max0, …]
- * @param {number[]} range   – flat [min0,max0, …]
- * @returns {Float64Array|null}
- */
-function compilePostScriptToIR(source, domain, range) {
-  return new PsJsCompiler(domain, range).compile(
-    parsePostScriptFunction(source)
-  );
-}
-
-/**
  * Direct stack-based interpreter for a parsed PsProgram.
  * Used when PSStackToTree fails to optimize the AST.
  */
@@ -829,8 +817,4 @@ function buildPostScriptProgramFunction(program, domain, range) {
   return PSStackBasedInterpreter.build(program, domain, range);
 }
 
-export {
-  buildPostScriptJsFunction,
-  buildPostScriptProgramFunction,
-  compilePostScriptToIR,
-};
+export { buildPostScriptJsFunction, buildPostScriptProgramFunction };

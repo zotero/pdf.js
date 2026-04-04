@@ -128,4 +128,4 @@ async function verifyManifestFiles(manifest) {
   }
 }
 
-export { downloadManifestFiles, verifyManifestFiles };
+export { calculateMD5, downloadManifestFiles, verifyManifestFiles };

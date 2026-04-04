@@ -60,6 +60,7 @@ import {
   RefSet,
   RefSetCache,
 } from "./primitives.js";
+import { FunctionType, PDFFunctionFactory } from "./function.js";
 import { getXfaFontDict, getXfaFontName } from "./xfa_fonts.js";
 import { NullStream, Stream } from "./stream.js";
 import { BaseStream } from "./base_stream.js";
@@ -73,7 +74,6 @@ import { LocalColorSpaceCache } from "./image_utils.js";
 import { ObjectLoader } from "./object_loader.js";
 import { OperatorList } from "./operator_list.js";
 import { PartialEvaluator } from "./evaluator.js";
-import { PDFFunctionFactory } from "./function.js";
 import { PDFImage } from "./image.js";
 import { StreamsSequenceStream } from "./decode_stream.js";
 import { StructTreePage } from "./struct_tree.js";
@@ -2131,7 +2131,7 @@ class PDFDocument {
         return obj;
       }
 
-      if (dict.get("FunctionType") === 4) {
+      if (dict.get("FunctionType") === FunctionType.POSTSCRIPT_CALCULATOR) {
         const source = value.getString();
         value.reset();
         const domain = dict.get("Domain") ?? [];

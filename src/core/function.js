@@ -22,6 +22,13 @@ import { isNumberArray } from "./core_utils.js";
 import { LocalFunctionCache } from "./image_utils.js";
 import { MathClamp } from "../shared/math_clamp.js";
 
+const FunctionType = {
+  SAMPLED: 0,
+  EXPONENTIAL_INTERPOLATION: 2,
+  STITCHING: 3,
+  POSTSCRIPT_CALCULATOR: 4,
+};
+
 class PDFFunctionFactory {
   static #useWasm = true;
 
@@ -126,18 +133,16 @@ class PDFFunction {
     const typeNum = dict.get("FunctionType");
 
     switch (typeNum) {
-      case 0:
+      case FunctionType.SAMPLED:
         return this.constructSampled(factory, fn, dict);
-      case 1:
-        break;
-      case 2:
+      case FunctionType.EXPONENTIAL_INTERPOLATION:
         return this.constructInterpolated(factory, dict);
-      case 3:
+      case FunctionType.STITCHING:
         return this.constructStiched(factory, dict);
-      case 4:
+      case FunctionType.POSTSCRIPT_CALCULATOR:
         return this.constructPostScript(factory, fn, dict);
     }
-    throw new FormatError("Unknown type of function");
+    throw new FormatError(`Unknown function type: ${typeNum}`);
   }
 
   static parseArray(factory, fnObj) {
@@ -391,4 +396,4 @@ function isPDFFunction(v) {
   return fnDict.has("FunctionType");
 }
 
-export { isPDFFunction, PDFFunctionFactory };
+export { FunctionType, isPDFFunction, PDFFunctionFactory };

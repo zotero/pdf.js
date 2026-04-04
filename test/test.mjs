@@ -928,11 +928,7 @@ async function startBrowser({
       // Disable logging for remote settings.
       "services.settings.loglevel": "off",
       // Disable AI/ML functionality.
-      "browser.ml.enable": false,
-      "browser.ml.chat.enabled": false,
-      "browser.ml.linkPreview.enabled": false,
-      "browser.tabs.groups.smart.enabled": false,
-      "browser.tabs.groups.smart.userEnabled": false,
+      "browser.ai.control.default": "blocked",
       "privacy.baselineFingerprintingProtection": false,
       ...extraPrefsFirefox,
     };

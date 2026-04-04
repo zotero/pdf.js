@@ -2089,15 +2089,11 @@ class PDFDocument {
           value.numComps = value.bitsPerComponent = 1;
         }
         try {
-          const pdfFunctionFactory = new PDFFunctionFactory({
-            xref: this.xref,
-            isEvalSupported: this.pdfManager.evaluatorOptions.isEvalSupported,
-          });
           const imageObj = await PDFImage.buildImage({
             xref: this.xref,
             res: Dict.empty,
             image: value,
-            pdfFunctionFactory,
+            pdfFunctionFactory: new PDFFunctionFactory({ xref: this.xref }),
             globalColorSpaceCache: this.catalog.globalColorSpaceCache,
             localColorSpaceCache: new LocalColorSpaceCache(),
           });

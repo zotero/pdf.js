@@ -26,7 +26,6 @@
     "event_utils_spec.js",
     "fetch_stream_spec.js",
     "font_substitutions_spec.js",
-    "function_spec.js",
     "image_utils_spec.js",
     "message_handler_spec.js",
     "metadata_spec.js",

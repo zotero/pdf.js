@@ -160,22 +160,13 @@ class PDFFunction {
   }
 
   static constructSampled(factory, fn, dict) {
-    function toMultiArray(arr) {
-      const inputLength = arr.length;
-      const out = [];
-      let index = 0;
-      for (let i = 0; i < inputLength; i += 2) {
-        out[index++] = [arr[i], arr[i + 1]];
-      }
-      return out;
-    }
     // See chapter 3, page 109 of the PDF reference
     function interpolate(x, xmin, xmax, ymin, ymax) {
       return ymin + (x - xmin) * ((ymax - ymin) / (xmax - xmin));
     }
 
-    let domain = toNumberArray(dict.getArray("Domain"));
-    let range = toNumberArray(dict.getArray("Range"));
+    const domain = toNumberArray(dict.getArray("Domain"));
+    const range = toNumberArray(dict.getArray("Range"));
 
     if (!domain || !range) {
       throw new FormatError("No domain or range");
@@ -183,9 +174,6 @@ class PDFFunction {
 
     const inputSize = domain.length / 2;
     const outputSize = range.length / 2;
-
-    domain = toMultiArray(domain);
-    range = toMultiArray(range);
 
     const size = toNumberArray(dict.getArray("Size"));
     const bps = dict.get("BitsPerSample");
@@ -200,14 +188,11 @@ class PDFFunction {
     if (!encode) {
       encode = [];
       for (let i = 0; i < inputSize; ++i) {
-        encode.push([0, size[i] - 1]);
+        encode.push(0, size[i] - 1);
       }
-    } else {
-      encode = toMultiArray(encode);
     }
 
-    let decode = toNumberArray(dict.getArray("Decode"));
-    decode = !decode ? range : toMultiArray(decode);
+    const decode = toNumberArray(dict.getArray("Decode")) || range;
 
     const samples = this.getSampleArray(size, outputSize, bps, fn);
     // const mask = 2 ** bps - 1;
@@ -227,8 +212,8 @@ class PDFFunction {
       // Map x_i to y_j for 0 <= i < m using the sampled function.
       for (i = 0; i < inputSize; ++i) {
         // x_i' = min(max(x_i, Domain_2i), Domain_2i+1)
-        const domain_2i = domain[i][0];
-        const domain_2i_1 = domain[i][1];
+        const domain_2i = domain[2 * i];
+        const domain_2i_1 = domain[2 * i + 1];
         const xi = MathClamp(src[srcOffset + i], domain_2i, domain_2i_1);
 
         // e_i = Interpolate(x_i', Domain_2i, Domain_2i+1,
@@ -237,8 +222,8 @@ class PDFFunction {
           xi,
           domain_2i,
           domain_2i_1,
-          encode[i][0],
-          encode[i][1]
+          encode[2 * i],
+          encode[2 * i + 1]
         );
 
         // e_i' = min(max(e_i, 0), Size_i - 1)
@@ -274,10 +259,10 @@ class PDFFunction {
 
         // r_j' = Interpolate(r_j, 0, 2^BitsPerSample - 1,
         //                    Decode_2j, Decode_2j+1)
-        rj = interpolate(rj, 0, 1, decode[j][0], decode[j][1]);
+        rj = interpolate(rj, 0, 1, decode[2 * j], decode[2 * j + 1]);
 
         // y_j = min(max(r_j, range_2j), range_2j+1)
-        dest[destOffset + j] = MathClamp(rj, range[j][0], range[j][1]);
+        dest[destOffset + j] = MathClamp(rj, range[2 * j], range[2 * j + 1]);
       }
     };
   }

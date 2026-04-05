@@ -14,10 +14,6 @@
  */
 
 import {
-  buildPostScriptJsFunction,
-  buildPostScriptProgramFunction,
-} from "../../src/core/postscript/js_evaluator.js";
-import {
   buildPostScriptWasmFunction,
   compilePostScriptToWasm,
 } from "../../src/core/postscript/wasm_compiler.js";
@@ -39,6 +35,7 @@ import {
   PsTernaryNode,
   PsUnaryNode,
 } from "../../src/core/postscript/ast.js";
+import { buildPostScriptJsFunction } from "../../src/core/postscript/js_evaluator.js";
 
 // Precision argument for toBeCloseTo() in trigonometric tests.
 const TRIGONOMETRY_EPS = 1e-10;
@@ -209,10 +206,11 @@ describe("PostScript Type 4 lexer, parser, and Wasm compiler", function () {
       // direct program interpreter otherwise.
       const jsFn = buildPostScriptJsFunction(src, domain, range);
       // Direct interpreter: always available, never uses PSStackToTree.
-      const interpFn = buildPostScriptProgramFunction(
-        parsePostScriptFunction(src),
+      const interpFn = buildPostScriptJsFunction(
+        src,
         domain,
-        range
+        range,
+        /* forceInterpreter = */ true
       );
 
       if (!wasmFn) {

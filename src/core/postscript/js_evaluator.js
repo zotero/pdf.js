@@ -327,8 +327,8 @@ class PsJsCompiler {
     let ip = 0,
       sp = 0;
     const n = ir.length;
-    const stack = PsJsCompiler.#stack;
-    const tmp = PsJsCompiler.#tmp;
+    const stack = this.#stack;
+    const tmp = this.#tmp;
 
     while (ip < n) {
       switch (ir[ip++] | 0) {

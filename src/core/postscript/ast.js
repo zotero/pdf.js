@@ -544,7 +544,7 @@ class PSStackToTree {
 
   static #init() {
     // Binary operator ids — used by _evalOp.
-    PSStackToTree.#binaryOps = new Set([
+    this.#binaryOps = new Set([
       TOKEN.add,
       TOKEN.sub,
       TOKEN.mul,
@@ -565,7 +565,7 @@ class PSStackToTree {
       TOKEN.bitshift,
     ]);
     // Unary operator ids.
-    PSStackToTree.#unaryOps = new Set([
+    this.#unaryOps = new Set([
       TOKEN.abs,
       TOKEN.neg,
       TOKEN.ceiling,
@@ -583,7 +583,7 @@ class PSStackToTree {
     ]);
     // Unary operators where f(f(x)) = f(x) — applying them twice is the same
     // as applying them once.
-    PSStackToTree.#idempotentUnary = new Set([
+    this.#idempotentUnary = new Set([
       TOKEN.abs,
       TOKEN.ceiling,
       TOKEN.cvi,
@@ -594,7 +594,7 @@ class PSStackToTree {
     ]);
     // Maps each comparison operator to its logical negation.
     // Used to simplify not(comparison) → negated-comparison.
-    PSStackToTree.#negatedComparison = new Map([
+    this.#negatedComparison = new Map([
       [TOKEN.eq, TOKEN.ne],
       [TOKEN.ne, TOKEN.eq],
       [TOKEN.lt, TOKEN.ge],

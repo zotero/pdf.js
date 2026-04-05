@@ -120,8 +120,8 @@ class Lexer {
         operatorSingletons[name] = token;
       }
     }
-    Lexer.#singletons = singletons;
-    Lexer.#operatorSingletons = operatorSingletons;
+    this.#singletons = singletons;
+    this.#operatorSingletons = operatorSingletons;
   }
 
   constructor(data) {

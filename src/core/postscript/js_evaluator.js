@@ -327,8 +327,8 @@ class PsJsCompiler {
     let ip = 0,
       sp = 0;
     const n = ir.length;
-    const stack = PsJsCompiler.#stack;
-    const tmp = PsJsCompiler.#tmp;
+    const stack = this.#stack;
+    const tmp = this.#tmp;
 
     while (ip < n) {
       switch (ir[ip++] | 0) {
@@ -795,9 +795,15 @@ class PSStackBasedInterpreter {
  * @param {number[]} range   – flat [min0,max0, …]
  * @returns {Function}  – `(src, srcOffset, dest, destOffset) => void`
  */
-function buildPostScriptJsFunction(source, domain, range) {
+function buildPostScriptJsFunction(
+  source,
+  domain,
+  range,
+  forceInterpreter = false
+) {
   const program = parsePostScriptFunction(source);
-  const ir = new PsJsCompiler(domain, range).compile(program);
+  const ir =
+    !forceInterpreter && new PsJsCompiler(domain, range).compile(program);
   if (ir) {
     return (src, srcOffset, dest, destOffset) => {
       PsJsCompiler.execute(ir, src, srcOffset, dest, destOffset);
@@ -807,14 +813,4 @@ function buildPostScriptJsFunction(source, domain, range) {
   return PSStackBasedInterpreter.build(program, domain, range);
 }
 
-/**
- * @param {import("./ast.js").PsProgram} program
- * @param {number[]} domain  – flat [min0,max0, …]
- * @param {number[]} range   – flat [min0,max0, …]
- * @returns {Function}  – `(src, srcOffset, dest, destOffset) => void`
- */
-function buildPostScriptProgramFunction(program, domain, range) {
-  return PSStackBasedInterpreter.build(program, domain, range);
-}
-
-export { buildPostScriptJsFunction, buildPostScriptProgramFunction };
+export { buildPostScriptJsFunction };

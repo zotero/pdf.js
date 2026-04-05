@@ -170,7 +170,7 @@ class PsWasmCompiler {
 
   static #init() {
     // TOKEN comparison ids → Wasm f64 comparison opcodes (leave i32 on stack).
-    PsWasmCompiler.#comparisonToOp = new Map([
+    this.#comparisonToOp = new Map([
       [TOKEN.eq, OP.f64_eq],
       [TOKEN.ne, OP.f64_ne],
       [TOKEN.lt, OP.f64_lt],
@@ -179,18 +179,20 @@ class PsWasmCompiler {
       [TOKEN.ge, OP.f64_ge],
     ]);
     // Index of each import function by name.
-    PsWasmCompiler.#importIdx = Object.create(null);
+    this.#importIdx = Object.create(null);
     for (let i = 0; i < MATH_IMPORTS.length; i++) {
-      PsWasmCompiler.#importIdx[MATH_IMPORTS[i][0]] = i;
+      this.#importIdx[MATH_IMPORTS[i][0]] = i;
     }
-    PsWasmCompiler.#degToRad = Math.PI / 180;
-    PsWasmCompiler.#radToDeg = 180 / Math.PI;
+    this.#degToRad = Math.PI / 180;
+    this.#radToDeg = 180 / Math.PI;
     // Import type entries are identical on every compilation — compute once.
-    PsWasmCompiler.#importTypeEntries = MATH_IMPORTS.map(
-      ([, , , params, results]) => [FUNC_TYPE, ...vec(params), ...vec(results)]
-    );
+    this.#importTypeEntries = MATH_IMPORTS.map(([, , , params, results]) => [
+      FUNC_TYPE,
+      ...vec(params),
+      ...vec(results),
+    ]);
     // Static Wasm sections that never change between compilations.
-    PsWasmCompiler.#importSection = new Uint8Array(
+    this.#importSection = new Uint8Array(
       section(
         SECTION.import,
         vec(
@@ -204,16 +206,16 @@ class PsWasmCompiler {
       )
     );
     // One function, type index 0.
-    PsWasmCompiler.#functionSection = new Uint8Array(
+    this.#functionSection = new Uint8Array(
       section(SECTION.function, vec([[0]]))
     );
     // Min 1 page (64 KiB), no max.
     // https://webassembly.github.io/spec/core/binary/types.html#binary-limits
-    PsWasmCompiler.#memorySection = new Uint8Array(
+    this.#memorySection = new Uint8Array(
       section(SECTION.memory, vec([[0x00, 0x01]]))
     );
     // Export "fn" (func index = nImports) and "mem" (memory) for the wrapper.
-    PsWasmCompiler.#exportSection = new Uint8Array(
+    this.#exportSection = new Uint8Array(
       section(
         SECTION.export,
         vec([
@@ -228,7 +230,7 @@ class PsWasmCompiler {
     );
     // Wasm binary magic + version (constant).
     // https://webassembly.github.io/spec/core/binary/modules.html#binary-magic
-    PsWasmCompiler.#wasmMagicVersion = new Uint8Array([
+    this.#wasmMagicVersion = new Uint8Array([
       0x00,
       0x61,
       0x73,
@@ -239,9 +241,9 @@ class PsWasmCompiler {
       0x00, // version 1
     ]);
     const f64Buf = new ArrayBuffer(8);
-    PsWasmCompiler.#f64View = new DataView(f64Buf);
-    PsWasmCompiler.#f64Arr = new Uint8Array(f64Buf);
-    PsWasmCompiler.#initialized = true;
+    this.#f64View = new DataView(f64Buf);
+    this.#f64Arr = new Uint8Array(f64Buf);
+    this.#initialized = true;
   }
 
   constructor(domain, range) {

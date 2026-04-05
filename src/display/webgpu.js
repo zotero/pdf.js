@@ -20,7 +20,7 @@ import { MeshFigureType } from "../shared/util.js";
 // applies the affine transform supplied via a uniform buffer to map them
 // to NDC (X: -1..1 left→right, Y: -1..1 bottom→top).
 // Colors are delivered as unorm8x4 (r,g,b,_) and passed through as-is.
-const WGSL = /* wgsl */ `
+const MESH_WGSL = /* wgsl */ `
 struct Uniforms {
   offsetX      : f32,
   offsetY      : f32,
@@ -65,12 +65,12 @@ fn fs_main(in : VertexOutput) -> @location(0) vec4<f32> {
 }
 `;
 
-class WebGPUMesh {
+class WebGPU {
   #initPromise = null;
 
   #device = null;
 
-  #pipeline = null;
+  #meshPipeline = null;
 
   // Format chosen to match the OffscreenCanvas swapchain on this device.
   #preferredFormat = null;
@@ -85,55 +85,60 @@ class WebGPUMesh {
         return false;
       }
       this.#preferredFormat = navigator.gpu.getPreferredCanvasFormat();
-      const device = (this.#device = await adapter.requestDevice());
-      const shaderModule = device.createShaderModule({ code: WGSL });
-
-      this.#pipeline = device.createRenderPipeline({
-        layout: "auto",
-        vertex: {
-          module: shaderModule,
-          entryPoint: "vs_main",
-          buffers: [
-            {
-              // Buffer 0: PDF content-space coords, 2 × float32 per vertex.
-              arrayStride: 2 * 4,
-              attributes: [
-                { shaderLocation: 0, offset: 0, format: "float32x2" },
-              ],
-            },
-            {
-              // Buffer 1: vertex colors, 4 × unorm8 per vertex (r, g, b, _).
-              arrayStride: 4,
-              attributes: [
-                { shaderLocation: 1, offset: 0, format: "unorm8x4" },
-              ],
-            },
-          ],
-        },
-        fragment: {
-          module: shaderModule,
-          entryPoint: "fs_main",
-          // Use the canvas-preferred format so the OffscreenCanvas swapchain
-          // and the pipeline output format always agree.
-          targets: [{ format: this.#preferredFormat }],
-        },
-        primitive: { topology: "triangle-list" },
-      });
-
+      this.#device = await adapter.requestDevice();
       return true;
     } catch {
       return false;
     }
   }
 
+  /**
+   * Start GPU initialization.
+   * @returns {Promise<boolean>}  true when a GPU device is available.
+   */
   init() {
-    if (this.#initPromise === null) {
-      this.#initPromise = this.#initGPU();
-    }
+    return (this.#initPromise ||= this.#initGPU());
   }
 
   get isReady() {
     return this.#device !== null;
+  }
+
+  /**
+   * Compile (and cache) the Gouraud-mesh pipeline.
+   */
+  loadMeshShader() {
+    if (!this.#device || this.#meshPipeline) {
+      return;
+    }
+    const shaderModule = this.#device.createShaderModule({ code: MESH_WGSL });
+    this.#meshPipeline = this.#device.createRenderPipeline({
+      layout: "auto",
+      vertex: {
+        module: shaderModule,
+        entryPoint: "vs_main",
+        buffers: [
+          {
+            // Buffer 0: PDF content-space coords, 2 × float32 per vertex.
+            arrayStride: 2 * 4,
+            attributes: [{ shaderLocation: 0, offset: 0, format: "float32x2" }],
+          },
+          {
+            // Buffer 1: vertex colors, 4 × unorm8 per vertex (r, g, b, _).
+            arrayStride: 4,
+            attributes: [{ shaderLocation: 1, offset: 0, format: "unorm8x4" }],
+          },
+        ],
+      },
+      fragment: {
+        module: shaderModule,
+        entryPoint: "fs_main",
+        // Use the canvas-preferred format so the OffscreenCanvas swapchain
+        // and the pipeline output format always agree.
+        targets: [{ format: this.#preferredFormat }],
+      },
+      primitive: { topology: "triangle-list" },
+    });
   }
 
   /**
@@ -248,6 +253,9 @@ class WebGPUMesh {
     paddedHeight,
     borderSize
   ) {
+    // Lazily compile the mesh pipeline the first time we need to draw.
+    this.loadMeshShader();
+
     const device = this.#device;
     const { offsetX, offsetY, scaleX, scaleY } = context;
     const { posData, colData, vertexCount } = this.#buildVertexStreams(
@@ -294,7 +302,7 @@ class WebGPUMesh {
     );
 
     const bindGroup = device.createBindGroup({
-      layout: this.#pipeline.getBindGroupLayout(0),
+      layout: this.#meshPipeline.getBindGroupLayout(0),
       entries: [{ binding: 0, resource: { buffer: uniformBuffer } }],
     });
 
@@ -330,7 +338,7 @@ class WebGPUMesh {
       ],
     });
     if (vertexCount > 0) {
-      renderPass.setPipeline(this.#pipeline);
+      renderPass.setPipeline(this.#meshPipeline);
       renderPass.setBindGroup(0, bindGroup);
       renderPass.setVertexBuffer(0, posBuffer);
       renderPass.setVertexBuffer(1, colBuffer);
@@ -351,14 +359,25 @@ class WebGPUMesh {
   }
 }
 
-const _webGPUMesh = new WebGPUMesh();
+const _webGPU = new WebGPU();
 
-function initWebGPUMesh() {
-  _webGPUMesh.init();
+/**
+ * Start GPU initialization as early as possible.
+ * @returns {Promise<boolean>}  true if a GPU device was acquired.
+ */
+function initGPU() {
+  return _webGPU.init();
 }
 
-function isWebGPUMeshReady() {
-  return _webGPUMesh.isReady;
+function isGPUReady() {
+  return _webGPU.isReady;
+}
+
+/**
+ * Pre-compile the Gouraud-mesh WGSL pipeline.
+ */
+function loadMeshShader() {
+  _webGPU.loadMeshShader();
 }
 
 function drawMeshWithGPU(
@@ -369,7 +388,7 @@ function drawMeshWithGPU(
   paddedHeight,
   borderSize
 ) {
-  return _webGPUMesh.draw(
+  return _webGPU.draw(
     figures,
     context,
     backgroundColor,
@@ -379,4 +398,4 @@ function drawMeshWithGPU(
   );
 }
 
-export { drawMeshWithGPU, initWebGPUMesh, isWebGPUMeshReady };
+export { drawMeshWithGPU, initGPU, isGPUReady, loadMeshShader };

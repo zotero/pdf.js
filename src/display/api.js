@@ -75,7 +75,7 @@ import { DOMCanvasFactory } from "./canvas_factory.js";
 import { DOMFilterFactory } from "./filter_factory.js";
 import { getNetworkStream } from "display-network_stream";
 import { GlobalWorkerOptions } from "./worker_options.js";
-import { initWebGPUMesh } from "./webgpu_mesh.js";
+import { initGPU } from "./webgpu.js";
 import { MathClamp } from "../shared/math_clamp.js";
 import { Metadata } from "./metadata.js";
 import { OptionalContentConfig } from "./optional_content_config.js";
@@ -323,6 +323,9 @@ function getDocument(src = {}) {
       : DOMBinaryDataFactory);
   const enableHWA = src.enableHWA === true;
   const enableWebGPU = src.enableWebGPU === true;
+  // Start GPU initialisation immediately so it runs in parallel with the
+  // worker bootstrap; the resolved boolean is forwarded to the worker.
+  const gpuPromise = enableWebGPU ? initGPU() : Promise.resolve(false);
   const useWasm = src.useWasm !== false;
   const pagesMapper = src.pagesMapper || new PagesMapper();
 
@@ -405,7 +408,7 @@ function getDocument(src = {}) {
       iccUrl,
       standardFontDataUrl,
       wasmUrl,
-      enableWebGPU,
+      hasGPU: false, // Set below.
     },
   };
   const transportParams = {
@@ -419,14 +422,16 @@ function getDocument(src = {}) {
     },
   };
 
-  worker.promise
-    .then(function () {
+  Promise.all([worker.promise, gpuPromise])
+    .then(function ([, hasGPU]) {
       if (task.destroyed) {
         throw new Error("Loading aborted");
       }
       if (worker.destroyed) {
         throw new Error("Worker was destroyed");
       }
+
+      docParams.evaluatorOptions.hasGPU = hasGPU;
 
       const workerIdPromise = worker.messageHandler.sendWithPromise(
         "GetDocRequest",
@@ -2841,13 +2846,6 @@ class WorkerTransport {
         return; // Ignore any pending requests if the worker was terminated.
       }
       this.#onProgress(data);
-    });
-
-    messageHandler.on("PrepareWebGPU", () => {
-      if (this.destroyed) {
-        return;
-      }
-      initWebGPUMesh();
     });
 
     if (typeof PDFJSDev === "undefined" || !PDFJSDev.test("MOZCENTRAL")) {

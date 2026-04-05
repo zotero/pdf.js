@@ -13,7 +13,7 @@
  * limitations under the License.
  */
 
-import { drawMeshWithGPU, isWebGPUMeshReady } from "./webgpu_mesh.js";
+import { drawMeshWithGPU, isGPUReady, loadMeshShader } from "./webgpu.js";
 import {
   FormatError,
   info,
@@ -441,6 +441,9 @@ class MeshShadingPattern extends BaseShadingPattern {
     this._bbox = IR[6];
     this._background = IR[7];
     this.matrix = null;
+    // Pre-compile the mesh pipeline now that we know GPU-renderable content
+    // is present; no-op if the GPU is not available or already compiled.
+    loadMeshShader();
   }
 
   _createMeshCanvas(combinedScale, backgroundColor, canvasFactory) {
@@ -486,7 +489,7 @@ class MeshShadingPattern extends BaseShadingPattern {
     const paddedHeight = height + BORDER_SIZE * 2;
     const tmpCanvas = canvasFactory.create(paddedWidth, paddedHeight);
 
-    if (isWebGPUMeshReady()) {
+    if (isGPUReady()) {
       tmpCanvas.context.drawImage(
         drawMeshWithGPU(
           this._figures,

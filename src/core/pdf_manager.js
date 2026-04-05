@@ -27,6 +27,7 @@ import { JpegStream } from "./jpeg_stream.js";
 import { JpxImage } from "./jpx.js";
 import { MissingDataException } from "./core_utils.js";
 import { OperatorList } from "./operator_list.js";
+import { Pattern } from "./pattern.js";
 import { PDFDocument } from "./document.js";
 import { PDFFunctionFactory } from "./function.js";
 import { Stream } from "./stream.js";
@@ -73,19 +74,6 @@ class BasePdfManager {
     evaluatorOptions.isImageDecoderSupported &&=
       FeatureTest.isImageDecoderSupported;
 
-    // Set up a one-shot callback so evaluators can notify the main thread that
-    // WebGPU-acceleratable content was found. The flag ensures the message is
-    // sent at most once per document.
-    if (evaluatorOptions.enableWebGPU) {
-      let prepareWebGPUSent = false;
-      evaluatorOptions.prepareWebGPU = () => {
-        if (!prepareWebGPUSent) {
-          prepareWebGPUSent = true;
-          handler.send("PrepareWebGPU", null);
-        }
-      };
-    }
-    delete evaluatorOptions.enableWebGPU;
     this.evaluatorOptions = Object.freeze(evaluatorOptions);
 
     // Initialize image-options once per document.
@@ -99,6 +87,7 @@ class BasePdfManager {
     CmykICCBasedCS.setOptions(options);
     JBig2CCITTFaxWasmImage.setOptions(options);
     PDFFunctionFactory.setOptions(options);
+    Pattern.setOptions(options);
   }
 
   get docId() {

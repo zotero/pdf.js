@@ -46,8 +46,15 @@ const ShadingType = {
 };
 
 class Pattern {
+  // eslint-disable-next-line no-unused-private-class-members
+  static #hasGPU = false;
+
   constructor() {
     unreachable("Cannot initialize Pattern.");
+  }
+
+  static setOptions({ hasGPU }) {
+    this.#hasGPU = hasGPU;
   }
 
   static parseShading(
@@ -56,8 +63,7 @@ class Pattern {
     res,
     pdfFunctionFactory,
     globalColorSpaceCache,
-    localColorSpaceCache,
-    prepareWebGPU = null
+    localColorSpaceCache
   ) {
     const dict = shading instanceof BaseStream ? shading.dict : shading;
     const type = dict.get("ShadingType");
@@ -65,7 +71,6 @@ class Pattern {
     try {
       switch (type) {
         case ShadingType.FUNCTION_BASED:
-          prepareWebGPU?.();
           return new FunctionBasedShading(
             dict,
             xref,
@@ -88,7 +93,6 @@ class Pattern {
         case ShadingType.LATTICE_FORM_MESH:
         case ShadingType.COONS_PATCH_MESH:
         case ShadingType.TENSOR_PATCH_MESH:
-          prepareWebGPU?.();
           return new MeshShading(
             shading,
             xref,

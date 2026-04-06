@@ -197,12 +197,8 @@ describe("api", function () {
       expect(loadingTask).toBeInstanceOf(PDFDocumentLoadingTask);
       // This can be somewhat random -- we cannot guarantee perfect
       // 'Terminate' message to the worker before/after setting up pdfManager.
-      const destroyed = loadingTask._worker.promise.then(() =>
-        loadingTask.destroy()
-      );
-
-      await destroyed;
-      expect(true).toEqual(true);
+      await loadingTask._worker.promise.then(() => loadingTask.destroy());
+      await loadingTask.promise.catch(() => {});
     });
 
     it("creates pdf doc from TypedArray", async function () {

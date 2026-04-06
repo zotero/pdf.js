@@ -27,7 +27,11 @@ import {
   stringToAsciiOrUTF16BE,
 } from "../core_utils.js";
 import { Dict, isName, Name, Ref, RefSet, RefSetCache } from "../primitives.js";
-import { getModificationDate, stringToPDFString } from "../../shared/util.js";
+import {
+  getModificationDate,
+  stringToBytes,
+  stringToPDFString,
+} from "../../shared/util.js";
 import { incrementalUpdate, writeValue } from "../writer.js";
 import { NameTree, NumberTree } from "../name_number_tree.js";
 import { AnnotationFactory } from "../annotation.js";
@@ -2458,15 +2462,10 @@ class PDFEditor {
     // PDF version must be in the range 1.0 to 1.7 inclusive.
     // We add a binary comment line to ensure that the file is treated
     // as a binary file by applications that open it.
-    const header = [
-      ...`%PDF-${this.version}\n%`.split("").map(c => c.charCodeAt(0)),
-      0xfa,
-      0xde,
-      0xfa,
-      0xce,
-    ];
+    const header = stringToBytes(`%PDF-${this.version}\n%\xfa\xde\xfa\xce`);
+
     return incrementalUpdate({
-      originalData: new Uint8Array(header),
+      originalData: header,
       changes,
       xrefInfo: {
         startXRef: null,

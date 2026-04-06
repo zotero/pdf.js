@@ -430,47 +430,53 @@ describe("CFFCompiler", function () {
     const fdSelect = new CFFFDSelect(0, [3, 2, 1]);
     const c = new CFFCompiler();
     const out = c.compileFDSelect(fdSelect);
-    expect(out).toEqual([
-      0, // format
-      3, // gid: 0 fd 3
-      2, // gid: 1 fd 3
-      1, // gid: 2 fd 3
-    ]);
+    expect(out).toEqual(
+      new Uint8Array([
+        0, // format
+        3, // gid: 0 fd 3
+        2, // gid: 1 fd 3
+        1, // gid: 2 fd 3
+      ])
+    );
   });
 
   it("compiles fdselect format 3", function () {
     const fdSelect = new CFFFDSelect(3, [0, 0, 1, 1]);
     const c = new CFFCompiler();
     const out = c.compileFDSelect(fdSelect);
-    expect(out).toEqual([
-      3, // format
-      0, // nRanges (high)
-      2, // nRanges (low)
-      0, // range struct 0 - first (high)
-      0, // range struct 0 - first (low)
-      0, // range struct 0 - fd
-      0, // range struct 0 - first (high)
-      2, // range struct 0 - first (low)
-      1, // range struct 0 - fd
-      0, // sentinel (high)
-      4, // sentinel (low)
-    ]);
+    expect(out).toEqual(
+      new Uint8Array([
+        3, // format
+        0, // nRanges (high)
+        2, // nRanges (low)
+        0, // range struct 0 - first (high)
+        0, // range struct 0 - first (low)
+        0, // range struct 0 - fd
+        0, // range struct 0 - first (high)
+        2, // range struct 0 - first (low)
+        1, // range struct 0 - fd
+        0, // sentinel (high)
+        4, // sentinel (low)
+      ])
+    );
   });
 
   it("compiles fdselect format 3, single range", function () {
     const fdSelect = new CFFFDSelect(3, [0, 0]);
     const c = new CFFCompiler();
     const out = c.compileFDSelect(fdSelect);
-    expect(out).toEqual([
-      3, // format
-      0, // nRanges (high)
-      1, // nRanges (low)
-      0, // range struct 0 - first (high)
-      0, // range struct 0 - first (low)
-      0, // range struct 0 - fd
-      0, // sentinel (high)
-      2, // sentinel (low)
-    ]);
+    expect(out).toEqual(
+      new Uint8Array([
+        3, // format
+        0, // nRanges (high)
+        1, // nRanges (low)
+        0, // range struct 0 - first (high)
+        0, // range struct 0 - first (low)
+        0, // range struct 0 - fd
+        0, // sentinel (high)
+        2, // sentinel (low)
+      ])
+    );
   });
 
   it("compiles charset of CID font", function () {
@@ -479,13 +485,15 @@ describe("CFFCompiler", function () {
     const numGlyphs = 7;
     const out = c.compileCharset(charset, numGlyphs, new CFFStrings(), true);
     // All CID charsets get turned into a simple format 2.
-    expect(out).toEqual([
-      2, // format
-      0, // cid (high)
-      1, // cid (low)
-      0, // nLeft (high)
-      numGlyphs - 2, // nLeft (low)
-    ]);
+    expect(out).toEqual(
+      new Uint8Array([
+        2, // format
+        0, // cid (high)
+        1, // cid (low)
+        0, // nLeft (high)
+        numGlyphs - 2, // nLeft (low)
+      ])
+    );
   });
 
   it("compiles charset of non CID font", function () {
@@ -494,13 +502,15 @@ describe("CFFCompiler", function () {
     const numGlyphs = 3;
     const out = c.compileCharset(charset, numGlyphs, new CFFStrings(), false);
     // All non-CID fonts use a format 0 charset.
-    expect(out).toEqual([
-      0, // format
-      0, // sid of 'space' (high)
-      1, // sid of 'space' (low)
-      0, // sid of 'exclam' (high)
-      2, // sid of 'exclam' (low)
-    ]);
+    expect(out).toEqual(
+      new Uint8Array([
+        0, // format
+        0, // sid of 'space' (high)
+        1, // sid of 'space' (low)
+        0, // sid of 'exclam' (high)
+        2, // sid of 'exclam' (low)
+      ])
+    );
   });
 
   // TODO a lot more compiler tests

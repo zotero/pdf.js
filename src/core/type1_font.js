@@ -153,6 +153,8 @@ function getEexecBlock(stream, suggestedLength) {
  * Type1Font is also a CIDFontType0.
  */
 class Type1Font {
+  #rawFileLength;
+
   constructor(name, file, properties) {
     // Some bad generators embed pfb file as is, we have to strip 6-byte header.
     // Also, length1 and length2 might be off by 6 bytes as well.
@@ -200,6 +202,7 @@ class Type1Font {
     for (const key in data.properties) {
       properties[key] = data.properties[key];
     }
+    this.#rawFileLength = headerBlock.length + eexecBlock.length;
 
     const charstrings = data.charstrings;
     const type2Charstrings = this.getType2Charstrings(charstrings);
@@ -323,7 +326,7 @@ class Type1Font {
   }
 
   wrap(name, glyphs, charstrings, subrs, properties) {
-    const cff = new CFF();
+    const cff = new CFF(this.#rawFileLength);
     cff.header = new CFFHeader(1, 0, 4, 4);
 
     cff.names = [name];

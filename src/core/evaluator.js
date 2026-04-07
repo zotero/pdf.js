@@ -29,6 +29,7 @@ import {
   Util,
   warn,
 } from "../shared/util.js";
+import { CheckedOperatorList, OperatorList } from "./operator_list.js";
 import { CMapFactory, IdentityCMap } from "./cmap.js";
 import { Cmd, Dict, EOF, isName, Name, Ref, RefSet } from "./primitives.js";
 import {
@@ -85,7 +86,6 @@ import { getGlyphsUnicode } from "./glyphlist.js";
 import { getMetrics } from "./metrics.js";
 import { getUnicodeForGlyph } from "./unicode.js";
 import { MurmurHash3_64 } from "../shared/murmurhash3.js";
-import { OperatorList } from "./operator_list.js";
 import { PDFImage } from "./image.js";
 import { Stream } from "./stream.js";
 
@@ -501,7 +501,17 @@ class PartialEvaluator {
     if (optionalContent !== undefined) {
       operatorList.addOp(OPS.beginMarkedContentProps, ["OC", optionalContent]);
     }
+
     const group = dict.get("Group");
+    let newOpList;
+
+    // If it's a group, a new canvas will be created that is the size of the
+    // bounding box and translated to the correct position so we don't need to
+    // apply the bounding box to it.
+    const f32matrix = matrix && new Float32Array(matrix);
+    const args = [f32matrix, (!group && f32bbox) || null];
+    const localResources = dict.get("Resources");
+
     if (group) {
       groupOptions = {
         matrix,
@@ -509,6 +519,7 @@ class PartialEvaluator {
         smask,
         isolated: false,
         knockout: false,
+        needsIsolation: false,
       };
 
       const groupSubtype = group.get("S");
@@ -532,30 +543,30 @@ class PartialEvaluator {
         smask.backdrop = colorSpace.getRgbHex(smask.backdrop, 0);
       }
 
-      operatorList.addOp(OPS.beginGroup, [groupOptions]);
+      newOpList = new CheckedOperatorList();
+    } else {
+      newOpList = operatorList;
+      operatorList.addOp(OPS.paintFormXObjectBegin, args);
     }
-
-    // If it's a group, a new canvas will be created that is the size of the
-    // bounding box and translated to the correct position so we don't need to
-    // apply the bounding box to it.
-    const f32matrix = matrix && new Float32Array(matrix);
-    const args = [f32matrix, (!group && f32bbox) || null];
-    operatorList.addOp(OPS.paintFormXObjectBegin, args);
-
-    const localResources = dict.get("Resources");
 
     await this.getOperatorList({
       stream: xobj,
       task,
       resources: localResources instanceof Dict ? localResources : resources,
-      operatorList,
+      operatorList: newOpList,
       initialState,
       prevRefs: seenRefs,
     });
-    operatorList.addOp(OPS.paintFormXObjectEnd, []);
 
     if (group) {
+      groupOptions.needsIsolation = newOpList.needsIsolation || !!smask;
+      operatorList.addOp(OPS.beginGroup, [groupOptions]);
+      operatorList.addOp(OPS.paintFormXObjectBegin, args);
+      operatorList.addOpList(newOpList);
+      operatorList.addOp(OPS.paintFormXObjectEnd, []);
       operatorList.addOp(OPS.endGroup, [groupOptions]);
+    } else {
+      operatorList.addOp(OPS.paintFormXObjectEnd, []);
     }
 
     if (optionalContent !== undefined) {
@@ -972,7 +983,7 @@ class PartialEvaluator {
     localTilingPatternCache
   ) {
     // Create an IR of the pattern code.
-    const tilingOpList = new OperatorList();
+    const tilingOpList = new CheckedOperatorList();
     // Merge the available resources, to prevent issues when the patternDict
     // is missing some /Resources entries (fixes issue6541.pdf).
     const patternResources = Dict.merge({
@@ -988,10 +999,12 @@ class PartialEvaluator {
     })
       .then(function () {
         const operatorListIR = tilingOpList.getIR();
+        const { needsIsolation } = tilingOpList;
         const tilingPatternIR = getTilingPatternIR(
           operatorListIR,
           patternDict,
-          color
+          color,
+          needsIsolation
         );
         // Add the dependencies to the parent operator list so they are
         // resolved before the sub operator list is executed synchronously.
@@ -1001,6 +1014,7 @@ class PartialEvaluator {
         if (patternDict.objId) {
           localTilingPatternCache.set(/* name = */ null, patternDict.objId, {
             operatorListIR,
+            needsIsolation,
             dict: patternDict,
           });
         }
@@ -1578,7 +1592,8 @@ class PartialEvaluator {
           const tilingPatternIR = getTilingPatternIR(
             localTilingPattern.operatorListIR,
             localTilingPattern.dict,
-            color
+            color,
+            localTilingPattern.needsIsolation
           );
           operatorList.addOp(fn, tilingPatternIR);
           return undefined;

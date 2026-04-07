@@ -822,4 +822,35 @@ class OperatorList {
   }
 }
 
-export { OperatorList };
+/**
+ * A subclass of OperatorList that checks whether added group or pattern
+ * operations require being drawn in isolation (i.e. on a separate canvas).
+ * A group/pattern needs isolation when it uses non-default compositing
+ * (blend mode) or a soft mask. The result is exposed via `needsIsolation`.
+ */
+class CheckedOperatorList extends OperatorList {
+  needsIsolation = false;
+
+  addOp(fn, args) {
+    if (!this.needsIsolation) {
+      if (fn === OPS.beginGroup) {
+        // Propagate isolation only if the nested group itself needs it.
+        this.needsIsolation = args[0].needsIsolation;
+      } else if (fn === OPS.setGState) {
+        for (const [key, val] of args[0]) {
+          if (key === "BM" && val !== "source-over") {
+            this.needsIsolation = true;
+            break;
+          }
+          if (key === "SMask" && val !== false) {
+            this.needsIsolation = true;
+            break;
+          }
+        }
+      }
+    }
+    super.addOp(fn, args);
+  }
+}
+
+export { CheckedOperatorList, OperatorList };

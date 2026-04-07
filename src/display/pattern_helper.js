@@ -614,6 +614,7 @@ class TilingPattern {
     this.ystep = IR[6];
     this.paintType = IR[7];
     this.tilingType = IR[8];
+    this.needsIsolation = IR[9] ?? true;
     this.ctx = ctx;
     this.canvasGraphicsFactory = canvasGraphicsFactory;
     this.baseTransform = baseTransform;
@@ -702,23 +703,6 @@ class TilingPattern {
   // Draws a single tile directly onto owner, clipped to path.
   drawPattern(owner, path, useEOFill = false, [n, m], opIdx) {
     const [x0, y0, x1, y1] = this.bbox;
-    const bboxWidth = x1 - x0;
-    const bboxHeight = y1 - y0;
-
-    const [combinedScaleX, combinedScaleY] = this._getCombinedScales();
-    const dimx = this.getSizeAndScale(
-      bboxWidth,
-      this.ctx.canvas.width,
-      combinedScaleX
-    );
-    const dimy = this.getSizeAndScale(
-      bboxHeight,
-      this.ctx.canvas.height,
-      combinedScaleY
-    );
-
-    // Isolate blend modes from the main canvas.
-    const tmpCanvas = this._renderTileCanvas(owner, opIdx, dimx, dimy);
 
     owner.save();
     if (useEOFill) {
@@ -730,9 +714,39 @@ class TilingPattern {
     // by setTransform.
     owner.ctx.setTransform(...this.patternBaseMatrix);
     owner.ctx.translate(n * this.xstep, m * this.ystep);
-    owner.ctx.drawImage(tmpCanvas.canvas, x0, y0, bboxWidth, bboxHeight);
+    if (
+      this.needsIsolation ||
+      owner.ctx.globalAlpha !== 1 ||
+      owner.ctx.globalCompositeOperation !== "source-over" ||
+      owner.inSMaskMode
+    ) {
+      const bboxWidth = x1 - x0;
+      const bboxHeight = y1 - y0;
+      const [combinedScaleX, combinedScaleY] = this._getCombinedScales();
+      const dimx = this.getSizeAndScale(
+        bboxWidth,
+        this.ctx.canvas.width,
+        combinedScaleX
+      );
+      const dimy = this.getSizeAndScale(
+        bboxHeight,
+        this.ctx.canvas.height,
+        combinedScaleY
+      );
+      // Isolate blend modes from the main canvas.
+      const tmpCanvas = this._renderTileCanvas(owner, opIdx, dimx, dimy);
+      owner.ctx.drawImage(tmpCanvas.canvas, x0, y0, bboxWidth, bboxHeight);
+      owner.canvasFactory.destroy(tmpCanvas);
+    } else {
+      // No blend modes or transparency: render the tile directly onto owner.
+      this.setFillAndStrokeStyleToContext(owner, this.paintType, this.color);
+      this.clipBbox(owner, x0, y0, x1, y1);
+      owner.baseTransformStack.push(owner.baseTransform);
+      owner.baseTransform = getCurrentTransform(owner.ctx);
+      owner.executeOperatorList(this.operatorList);
+      owner.baseTransform = owner.baseTransformStack.pop();
+    }
 
-    owner.canvasFactory.destroy(tmpCanvas);
     owner.restore();
   }
 
@@ -892,14 +906,15 @@ class TilingPattern {
   clipBbox(graphics, x0, y0, x1, y1) {
     const bboxWidth = x1 - x0;
     const bboxHeight = y1 - y0;
-    graphics.ctx.rect(x0, y0, bboxWidth, bboxHeight);
+    const clip = new Path2D();
+    clip.rect(x0, y0, bboxWidth, bboxHeight);
     Util.axialAlignedBoundingBox(
       [x0, y0, x1, y1],
       getCurrentTransform(graphics.ctx),
       graphics.current.minMax
     );
-    graphics.clip();
-    graphics.endPath();
+    graphics.ctx.clip(clip);
+    graphics.current.updateClipFromPath();
   }
 
   setFillAndStrokeStyleToContext(graphics, paintType, color) {

@@ -1139,7 +1139,7 @@ class DummyShading extends BaseShading {
   }
 }
 
-function getTilingPatternIR(operatorList, dict, color) {
+function getTilingPatternIR(operatorList, dict, color, needsIsolation = true) {
   const matrix = lookupMatrix(dict.getArray("Matrix"), IDENTITY_MATRIX);
   const bbox = lookupNormalRect(dict.getArray("BBox"), null);
   // Ensure that the pattern has a non-zero width and height, to prevent errors
@@ -1174,6 +1174,7 @@ function getTilingPatternIR(operatorList, dict, color) {
     ystep,
     paintType,
     tilingType,
+    needsIsolation,
   ];
 }
 

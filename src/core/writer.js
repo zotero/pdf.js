@@ -149,7 +149,9 @@ async function writeValue(value, buffer, transform) {
     // matrices (e.g. [0.000008 0 0 0.000008 0 0]).
     // The numbers must be "rounded" only when pdf.js is producing them and the
     // current transformation matrix is well known.
-    buffer.push(value.toString());
+    // toFixed(10) avoids scientific notation and rounds; the replace removes
+    // trailing zeros (and a trailing dot for integers).
+    buffer.push(value.toFixed(10).replace(/\.?0+$/, ""));
   } else if (typeof value === "boolean") {
     buffer.push(value.toString());
   } else if (value instanceof Dict) {

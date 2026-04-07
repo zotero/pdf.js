@@ -162,7 +162,7 @@ class ViewsManager extends Sidebar {
       attachmentsTitle: "pdfjs-views-manager-attachments-title",
       layersTitle: "pdfjs-views-manager-layers-title1",
       notificationButton: "pdfjs-toggle-views-manager-notification-button",
-      toggleButton: "pdfjs-toggle-views-manager-button",
+      toggleButton: "pdfjs-toggle-views-manager-button1",
     });
 
     this.#addEventListeners();

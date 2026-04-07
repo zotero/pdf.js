@@ -2608,7 +2608,8 @@ class CanvasGraphics {
     this.save(opIdx);
     // If there's an active soft mask we don't want it enabled for the group, so
     // clear it out. The mask and suspended canvas will be restored in endGroup.
-    if (this.inSMaskMode) {
+    const { inSMaskMode } = this;
+    if (inSMaskMode) {
       this.endSMaskMode();
       this.current.activeSMask = null;
     }
@@ -2635,6 +2636,28 @@ class CanvasGraphics {
     // modes.
     if (group.knockout) {
       warn("Knockout groups not supported.");
+    }
+
+    if (
+      !group.needsIsolation &&
+      currentCtx.globalAlpha === 1 &&
+      currentCtx.globalCompositeOperation === "source-over" &&
+      !inSMaskMode
+    ) {
+      if (group.bbox) {
+        let clip = new Path2D();
+        const [x0, y0, x1, y1] = group.bbox;
+        clip.rect(x0, y0, x1 - x0, y1 - y0);
+        if (group.matrix) {
+          const path = new Path2D();
+          path.addPath(clip, new DOMMatrix(group.matrix));
+          clip = path;
+        }
+        currentCtx.clip(clip);
+      }
+      this.groupStack.push(null); // null = no intermediate canvas
+      this.groupLevel++;
+      return;
     }
 
     const currentTransform = getCurrentTransform(currentCtx);
@@ -2756,6 +2779,12 @@ class CanvasGraphics {
     this.groupLevel--;
     const groupCtx = this.ctx;
     const ctx = this.groupStack.pop();
+    if (ctx === null) {
+      // Simple group: content was drawn directly on the parent canvas.
+      this.restore(opIdx);
+      return;
+    }
+
     this.ctx = ctx;
     // Turn off image smoothing to avoid sub pixel interpolation which can
     // look kind of blurry for some pdfs.

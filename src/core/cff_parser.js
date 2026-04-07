@@ -1898,10 +1898,8 @@ class CFFCompiler {
 
     // If there is no object, just create an index.
     if (count === 0) {
-      return [0, 0];
+      return new Uint8Array(2);
     }
-
-    const data = [(count >> 8) & 0xff, count & 0xff];
 
     let lastOffset = 1,
       i;
@@ -1920,29 +1918,32 @@ class CFFCompiler {
       offsetSize = 4;
     }
 
+    const data = new Uint8Array(2 + offsetSize * (count + 1) + lastOffset);
+    let pos = 0;
+
+    data[pos++] = (count >> 8) & 0xff;
+    data[pos++] = count & 0xff;
+
     // Next byte contains the offset size use to reference object in the file
-    data.push(offsetSize);
+    data[pos++] = offsetSize;
 
     // Add another offset after this one because we need a new offset
     let relativeOffset = 1;
     for (i = 0; i < count + 1; i++) {
       if (offsetSize === 1) {
-        data.push(relativeOffset & 0xff);
+        data[pos++] = relativeOffset & 0xff;
       } else if (offsetSize === 2) {
-        data.push((relativeOffset >> 8) & 0xff, relativeOffset & 0xff);
+        data[pos++] = (relativeOffset >> 8) & 0xff;
+        data[pos++] = relativeOffset & 0xff;
       } else if (offsetSize === 3) {
-        data.push(
-          (relativeOffset >> 16) & 0xff,
-          (relativeOffset >> 8) & 0xff,
-          relativeOffset & 0xff
-        );
+        data[pos++] = (relativeOffset >> 16) & 0xff;
+        data[pos++] = (relativeOffset >> 8) & 0xff;
+        data[pos++] = relativeOffset & 0xff;
       } else {
-        data.push(
-          (relativeOffset >>> 24) & 0xff,
-          (relativeOffset >> 16) & 0xff,
-          (relativeOffset >> 8) & 0xff,
-          relativeOffset & 0xff
-        );
+        data[pos++] = (relativeOffset >>> 24) & 0xff;
+        data[pos++] = (relativeOffset >> 16) & 0xff;
+        data[pos++] = (relativeOffset >> 8) & 0xff;
+        data[pos++] = relativeOffset & 0xff;
       }
 
       if (objects[i]) {
@@ -1952,9 +1953,10 @@ class CFFCompiler {
 
     for (i = 0; i < count; i++) {
       // Notify the tracker where the object will be offset in the data.
-      trackers[i]?.offset(data.length);
+      trackers[i]?.offset(pos);
 
-      data.push(...objects[i]);
+      data.set(objects[i], pos);
+      pos += objects[i].length;
     }
     return data;
   }

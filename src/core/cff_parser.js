@@ -228,7 +228,7 @@ class CFFParser {
 
   parse() {
     const properties = this.properties;
-    const cff = new CFF();
+    const cff = new CFF(this.bytes.length);
     this.cff = cff;
 
     // The first five sections must be in order, all the others are reached
@@ -1017,6 +1017,10 @@ class CFF {
 
   charStringCount = 0;
 
+  constructor(rawFileLength = 0) {
+    this.rawFileLength = rawFileLength;
+  }
+
   duplicateFirstGlyph() {
     // Browsers will not display a glyph at position 0. Typically glyph 0 is
     // notdef, but a number of fonts put a valid glyph there so it must be
@@ -1372,6 +1376,57 @@ class CFFOffsetTracker {
   }
 }
 
+class CompilerOutput {
+  #buf;
+
+  #bufLength = 1024;
+
+  #pos = 0;
+
+  constructor(minLength) {
+    // Note: Usually the compiled size is smaller than the initial data,
+    //       however in some cases it may increase slightly.
+    this.#initBuf(minLength);
+  }
+
+  #initBuf(minLength) {
+    // Compute the first power of two that is as big as the `minLength`.
+    while (this.#bufLength < minLength) {
+      this.#bufLength *= 2;
+    }
+    const newBuf = new Uint8Array(this.#bufLength);
+
+    if (this.#buf) {
+      newBuf.set(this.#buf, 0);
+    }
+    this.#buf = newBuf;
+  }
+
+  get data() {
+    return this.#buf.subarray(0, this.#pos);
+  }
+
+  get finalData() {
+    const data = this.#buf.slice(0, this.#pos);
+    this.#buf = null;
+    return data;
+  }
+
+  get length() {
+    return this.#pos;
+  }
+
+  add(data) {
+    const newPos = this.#pos + data.length;
+    if (newPos > this.#bufLength) {
+      // It should be very rare that the buffer needs to grow.
+      this.#initBuf(newPos);
+    }
+    this.#buf.set(data, this.#pos);
+    this.#pos = newPos;
+  }
+}
+
 // Takes a CFF and converts it to the binary representation.
 class CFFCompiler {
   constructor(cff) {
@@ -1380,21 +1435,7 @@ class CFFCompiler {
 
   compile() {
     const cff = this.cff;
-    const output = {
-      data: [],
-      length: 0,
-      add(data) {
-        try {
-          // It's possible to exceed the call stack maximum size when trying
-          // to push too much elements.
-          // In case of failure, we fallback to the `concat` method.
-          this.data.push(...data);
-        } catch {
-          this.data = this.data.concat(data);
-        }
-        this.length = this.data.length;
-      },
-    };
+    const output = new CompilerOutput(cff.rawFileLength);
 
     // Compile the five entries that must be in order.
     const header = this.compileHeader(cff.header);
@@ -1499,7 +1540,7 @@ class CFFCompiler {
     // the sanitizer will bail out. Add a dummy byte to avoid that.
     output.add([0]);
 
-    return output.data;
+    return output.finalData;
   }
 
   encodeNumber(value) {
@@ -1781,7 +1822,7 @@ class CFFCompiler {
     } else {
       const length = 1 + numGlyphsLessNotDef * 2;
       out = new Uint8Array(length);
-      out[0] = 0; // format 0
+      // format 0, skip redundant `out[0] = 0;` assignment.
       let charsetIndex = 0;
       const numCharsets = charset.charset.length;
       let warned = false;
@@ -1802,11 +1843,11 @@ class CFFCompiler {
         out[i + 1] = sid & 0xff;
       }
     }
-    return this.compileTypedArray(out);
+    return out;
   }
 
   compileEncoding(encoding) {
-    return this.compileTypedArray(encoding.raw);
+    return encoding.raw;
   }
 
   compileFDSelect(fdSelect) {
@@ -1847,11 +1888,7 @@ class CFFCompiler {
         out = new Uint8Array(ranges);
         break;
     }
-    return this.compileTypedArray(out);
-  }
-
-  compileTypedArray(data) {
-    return Array.from(data);
+    return out;
   }
 
   compileIndex(index, trackers = []) {
@@ -1915,9 +1952,8 @@ class CFFCompiler {
 
     for (i = 0; i < count; i++) {
       // Notify the tracker where the object will be offset in the data.
-      if (trackers[i]) {
-        trackers[i].offset(data.length);
-      }
+      trackers[i]?.offset(data.length);
+
       data.push(...objects[i]);
     }
     return data;

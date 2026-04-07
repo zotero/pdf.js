@@ -14,7 +14,11 @@
  */
 
 import { Dict, Name, Ref, RefSetCache } from "../../src/core/primitives.js";
-import { incrementalUpdate, writeDict } from "../../src/core/writer.js";
+import {
+  incrementalUpdate,
+  writeDict,
+  writeValue,
+} from "../../src/core/writer.js";
 import { bytesToString } from "../../src/shared/util.js";
 import { StringStream } from "../../src/core/stream.js";
 
@@ -256,6 +260,58 @@ describe("Writer", function () {
         "%%EOF\n";
 
       expect(data).toEqual(expected);
+    });
+  });
+
+  describe("writeValue numbers", function () {
+    async function serialize(value) {
+      const buffer = [];
+      await writeValue(value, buffer, null);
+      return buffer.join("");
+    }
+
+    it("should write integers unchanged", async function () {
+      expect(await serialize(0)).toEqual("0");
+      expect(await serialize(1)).toEqual("1");
+      expect(await serialize(-42)).toEqual("-42");
+      expect(await serialize(123456789)).toEqual("123456789");
+    });
+
+    it("should write normal floats without trailing zeros", async function () {
+      expect(await serialize(1.5)).toEqual("1.5");
+      expect(await serialize(-3.14)).toEqual("-3.14");
+      expect(await serialize(1.23001)).toEqual("1.23001");
+      // Trailing zeros must be stripped.
+      expect(await serialize(1.1)).toEqual("1.1");
+      expect(await serialize(2.0)).toEqual("2");
+    });
+
+    it("should not use scientific notation for very small numbers", async function () {
+      // JavaScript's toString() would produce e.g. "8e-6", which is invalid
+      // PDF.
+      expect(await serialize(0.000008)).toEqual("0.000008");
+      expect(await serialize(0.000001)).toEqual("0.000001");
+      expect(await serialize(0.0000001)).toEqual("0.0000001");
+      expect(await serialize(-0.000008)).toEqual("-0.000008");
+    });
+
+    it("should not use scientific notation for very large numbers", async function () {
+      // JavaScript produces scientific notation above ~1e21 but such values
+      // are unlikely in PDFs; values below that threshold must be plain.
+      expect(await serialize(1e10)).toEqual("10000000000");
+      expect(await serialize(1.5e6)).toEqual("1500000");
+    });
+
+    it("should round to at most 10 decimal places", async function () {
+      // 1/3 has infinite decimals; must be capped at 10 places.
+      const result = await serialize(1 / 3);
+      expect(result).toMatch(/^0\.\d{1,10}$/);
+      expect(result.replace("0.", "").length).toBeLessThanOrEqual(10);
+    });
+
+    it("should handle zero and negative zero", async function () {
+      expect(await serialize(0)).toEqual("0");
+      expect(await serialize(-0)).toEqual("0");
     });
   });
 

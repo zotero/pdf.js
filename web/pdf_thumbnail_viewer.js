@@ -707,7 +707,7 @@ class PDFThumbnailViewer {
       pagesMapper.movePages(selectedPages, pagesToMove, newIndex);
 
       this.#updateCurrentPage(this.#updateThumbnails(currentPageNumber));
-      this.#computeThumbnailsPosition();
+      this.#thumbnailsPositions = null;
 
       selectedPages.clear();
       this.#pageNumberToRemove = NaN;
@@ -920,7 +920,7 @@ class PDFThumbnailViewer {
     pagesMapper.pastePages(index);
     this.#updateThumbnails(currentPageNumber);
     this.#updateCurrentPage(index + 1, /* forceFocus = */ true);
-    this.#computeThumbnailsPosition();
+    this.#thumbnailsPositions = null;
 
     this.eventBus.dispatch("pagesedited", {
       source: this,
@@ -956,6 +956,8 @@ class PDFThumbnailViewer {
 
     pagesMapper.deletePages(pagesToDelete);
     this.#updateCurrentPage(this.#updateThumbnails(currentPageNumber));
+    this.#thumbnailsPositions = null;
+
     selectedPages.clear();
     this.#updateMenuEntries();
 

@@ -3311,19 +3311,25 @@ class Font {
       "hmtx",
       (function fontFieldsHmtx() {
         const charstrings = font.charstrings;
-        const cffWidths = font.cff ? font.cff.widths : null;
-        let hmtx = "\x00\x00\x00\x00"; // Fake .notdef
+        const cffWidths = font.cff?.widths ?? null;
+
+        const data = new Uint8Array(numGlyphs * 4);
+        // Fake .notdef (width=0 and lsb=0) first, skip redundant assignment.
+        let pos = 4;
+
         for (let i = 1, ii = numGlyphs; i < ii; i++) {
           let width = 0;
           if (charstrings) {
-            const charstring = charstrings[i - 1];
-            width = "width" in charstring ? charstring.width : 0;
+            width = charstrings[i - 1].width || 0;
           } else if (cffWidths) {
             width = Math.ceil(cffWidths[i] || 0);
           }
-          hmtx += string16(width) + string16(0);
+          data[pos++] = (width >> 8) & 0xff;
+          data[pos++] = width & 0xff;
+          // Use lsb=0, skip redundant assignment.
+          pos += 2;
         }
-        return hmtx;
+        return data;
       })()
     );
 

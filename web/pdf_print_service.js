@@ -144,6 +144,12 @@ class PDFPrintService {
       this.pageStyleSheet.remove();
       this.pageStyleSheet = null;
     }
+    if (this._blobURLs) {
+      for (const url of this._blobURLs) {
+        URL.revokeObjectURL(url);
+      }
+      this._blobURLs = null;
+    }
     this.scratchCanvas.width = this.scratchCanvas.height = 0;
     this.scratchCanvas = null;
     activeService = null;
@@ -189,7 +195,13 @@ class PDFPrintService {
     this.throwIfInactive();
     const img = document.createElement("img");
     this.scratchCanvas.toBlob(blob => {
-      img.src = URL.createObjectURL(blob);
+      const blobURL = URL.createObjectURL(blob);
+      img.src = blobURL;
+      // Defer revocation until after printing completes (in destroy()) to avoid
+      // broken print images in Firefox when a service worker is registered,
+      // since Firefox re-fetches blob URLs when rendering the print dialog.
+      // See https://github.com/mozilla/pdf.js/issues/19988
+      (this._blobURLs ??= []).push(blobURL);
     });
 
     const wrapper = document.createElement("div");
@@ -201,13 +213,9 @@ class PDFPrintService {
     img.onload = resolve;
     img.onerror = reject;
 
-    promise
-      .catch(() => {
-        // Avoid "Uncaught promise" messages in the console.
-      })
-      .then(() => {
-        URL.revokeObjectURL(img.src);
-      });
+    promise.catch(() => {
+      // Avoid "Uncaught promise" messages in the console.
+    });
     return promise;
   }
 

@@ -876,8 +876,8 @@ function createOS2Table(properties, charstrings, override) {
     string16(properties.capHeight) + // sCapHeight
     string16(0) + // usDefaultChar
     string16(firstCharIndex || properties.firstChar) + // usBreakChar
-    "\x00\x03"
-  ); // usMaxContext
+    "\x00\x03" // usMaxContext
+  );
 }
 
 function createPostTable(properties) {
@@ -891,8 +891,8 @@ function createPostTable(properties) {
     "\x00\x00\x00\x00" + // minMemType42
     "\x00\x00\x00\x00" + // maxMemType42
     "\x00\x00\x00\x00" + // minMemType1
-    "\x00\x00\x00\x00"
-  ); // maxMemType1
+    "\x00\x00\x00\x00" // maxMemType1
+  );
 }
 
 function createPostscriptName(name) {
@@ -3281,8 +3281,8 @@ class Font {
         "\x00\x11" + // lowestRecPPEM
         "\x00\x00" + // fontDirectionHint
         "\x00\x00" + // indexToLocFormat
-        "\x00\x00"
-    ); // glyphDataFormat
+        "\x00\x00" // glyphDataFormat
+    );
 
     // Horizontal header
     builder.addTable(
@@ -3303,8 +3303,8 @@ class Font {
         "\x00\x00" + // -reserved-
         "\x00\x00" + // -reserved-
         "\x00\x00" + // metricDataFormat
-        string16(numGlyphs)
-    ); // Number of HMetrics
+        string16(numGlyphs) // Number of HMetrics
+    );
 
     // Horizontal metrics
     builder.addTable(
@@ -3336,8 +3336,9 @@ class Font {
     // Maximum profile
     builder.addTable(
       "maxp",
-      "\x00\x00\x50\x00" + string16(numGlyphs) // Version number
-    ); // Num of glyphs
+      "\x00\x00\x50\x00" + // Version number
+        string16(numGlyphs) // Num of glyphs
+    );
 
     // Naming tables
     builder.addTable("name", createNameTable(fontName));

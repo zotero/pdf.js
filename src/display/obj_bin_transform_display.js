@@ -13,7 +13,13 @@
  * limitations under the License.
  */
 
-import { assert, FeatureTest, MeshFigureType, Util } from "../shared/util.js";
+import {
+  assert,
+  BBOX_INIT,
+  FeatureTest,
+  MeshFigureType,
+  Util,
+} from "../shared/util.js";
 import {
   CSS_FONT_INFO,
   FONT_INFO,
@@ -438,7 +444,7 @@ class PatternInfo {
       const shadingType = this.data[PATTERN_INFO.SHADING_TYPE];
       let bounds = null;
       if (coords.length > 0) {
-        bounds = [Infinity, Infinity, -Infinity, -Infinity];
+        bounds = BBOX_INIT.slice();
 
         for (let i = 0, ii = coords.length; i < ii; i += 2) {
           Util.pointBoundingBox(coords[i], coords[i + 1], bounds);

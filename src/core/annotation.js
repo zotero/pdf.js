@@ -23,6 +23,8 @@ import {
   AnnotationType,
   assert,
   BASELINE_FACTOR,
+  BBOX_INIT,
+  F32_BBOX_INIT,
   FeatureTest,
   getModificationDate,
   info,
@@ -637,7 +639,7 @@ function getQuadPoints(dict, rect) {
 
 function getTransformMatrix(rect, bbox, matrix) {
   // 12.5.5: Algorithm: Appearance streams
-  const minMax = new Float32Array([Infinity, Infinity, -Infinity, -Infinity]);
+  const minMax = F32_BBOX_INIT.slice();
   Util.axialAlignedBoundingBox(bbox, matrix, minMax);
   const [minX, minY, maxX, maxY] = minMax;
   if (minX === maxX || minY === maxY) {
@@ -1724,7 +1726,7 @@ class MarkupAnnotation extends Annotation {
     fillAlpha,
     pointsCallback,
   }) {
-    const bbox = (this.data.rect = [Infinity, Infinity, -Infinity, -Infinity]);
+    const bbox = (this.data.rect = BBOX_INIT.slice());
 
     const buffer = ["q"];
     if (extra) {
@@ -4463,7 +4465,7 @@ class PolylineAnnotation extends MarkupAnnotation {
 
       // If the /Rect-entry is empty/wrong, create a fallback rectangle so that
       // we get similar rendering/highlighting behaviour as in Adobe Reader.
-      const bbox = [Infinity, Infinity, -Infinity, -Infinity];
+      const bbox = BBOX_INIT.slice();
       for (let i = 0, ii = vertices.length; i < ii; i += 2) {
         Util.rectBoundingBox(
           vertices[i] - borderAdjust,
@@ -4551,7 +4553,7 @@ class InkAnnotation extends MarkupAnnotation {
 
       // If the /Rect-entry is empty/wrong, create a fallback rectangle so that
       // we get similar rendering/highlighting behaviour as in Adobe Reader.
-      const bbox = [Infinity, Infinity, -Infinity, -Infinity];
+      const bbox = BBOX_INIT.slice();
       for (const inkList of this.data.inkLists) {
         for (let i = 0, ii = inkList.length; i < ii; i += 2) {
           Util.rectBoundingBox(

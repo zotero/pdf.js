@@ -190,6 +190,7 @@ class ChunkedStream extends Stream {
       if (strEnd > this.progressiveDataLength) {
         this.ensureRange(pos, strEnd);
       }
+      this.pos = strEnd;
       return bytes.subarray(pos, strEnd);
     }
 

@@ -332,6 +332,15 @@ function safeString16(value) {
   return String.fromCharCode((value >> 8) & 0xff, value & 0xff);
 }
 
+function ensureInt16(v) {
+  if (typeof PDFJSDev === "undefined" || PDFJSDev.test("TESTING")) {
+    assert(
+      typeof v === "number" && Math.abs(v) < 2 ** 16,
+      `ensureInt16: Unexpected input "${v}".`
+    );
+  }
+}
+
 function isTrueTypeFile(file) {
   const header = file.peekBytes(4);
   return (
@@ -3324,6 +3333,7 @@ class Font {
           } else if (cffWidths) {
             width = Math.ceil(cffWidths[i] || 0);
           }
+          ensureInt16(width);
           data[pos++] = (width >> 8) & 0xff;
           data[pos++] = width & 0xff;
           // Use lsb=0, skip redundant assignment.

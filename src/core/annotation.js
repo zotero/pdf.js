@@ -2544,6 +2544,7 @@ class WidgetAnnotation extends Annotation {
         defaultVPadding,
         descent,
         lineHeight,
+        alignment,
         annotationStorage
       );
     }
@@ -2907,6 +2908,7 @@ class TextWidgetAnnotation extends WidgetAnnotation {
     vPadding,
     descent,
     lineHeight,
+    alignment,
     annotationStorage
   ) {
     const combWidth = width / this.data.maxLen;
@@ -2919,11 +2921,19 @@ class TextWidgetAnnotation extends WidgetAnnotation {
       buf.push(`(${escapeString(text.substring(start, end))}) Tj`);
     }
 
+    const textWidth = combWidth * positions.length;
+    let hShift = hPadding;
+    if (alignment === 1) {
+      hShift += Math.floor((width - textWidth) / (2 * combWidth)) * combWidth;
+    } else if (alignment === 2) {
+      hShift += width - textWidth;
+    }
+
     const renderedComb = buf.join(` ${numberToString(combWidth)} 0 Td `);
     return (
       `/Tx BMC q ${colors}BT ` +
       defaultAppearance +
-      ` 1 0 0 1 ${numberToString(hPadding)} ${numberToString(
+      ` 1 0 0 1 ${numberToString(hShift)} ${numberToString(
         vPadding + descent
       )} Tm ${renderedComb}` +
       " ET Q EMC"

@@ -28,7 +28,6 @@ import {
   ISOAdobeCharset,
 } from "./charsets.js";
 import { ExpertEncoding, StandardEncoding } from "./encodings.js";
-import { readInt16 } from "./core_utils.js";
 
 // Maximum subroutine call depth of type 2 charstrings. Matches OTS.
 const MAX_SUBR_NESTING = 10;
@@ -355,6 +354,7 @@ class CFFParser {
   }
 
   parseDict(dict) {
+    const view = new DataView(dict.buffer, dict.byteOffset, dict.bytesLength);
     let pos = 0;
 
     function parseOperand() {
@@ -362,14 +362,12 @@ class CFFParser {
       if (value === 30) {
         return parseFloatOperand();
       } else if (value === 28) {
-        value = readInt16(dict, pos);
+        value = view.getInt16(pos);
         pos += 2;
         return value;
       } else if (value === 29) {
-        value = dict[pos++];
-        value = (value << 8) | dict[pos++];
-        value = (value << 8) | dict[pos++];
-        value = (value << 8) | dict[pos++];
+        value = view.getInt32(pos);
+        pos += 4;
         return value;
       } else if (value >= 32 && value <= 246) {
         return value - 139;
@@ -378,7 +376,7 @@ class CFFParser {
       } else if (value >= 251 && value <= 254) {
         return -((value - 251) * 256) - dict[pos++] - 108;
       }
-      warn('CFFParser_parseDict: "' + value + '" is a reserved command.');
+      warn(`CFFParser.parseDict: "${value}" is a reserved command.`);
       return NaN;
     }
 
@@ -489,6 +487,7 @@ class CFFParser {
     if (!data || state.callDepth > MAX_SUBR_NESTING) {
       return false;
     }
+    const view = new DataView(data.buffer, data.byteOffset, data.bytesLength);
     let stackSize = state.stackSize;
     const stack = state.stack;
 
@@ -513,7 +512,7 @@ class CFFParser {
         }
       } else if (value === 28) {
         // number (16 bit)
-        stack[stackSize] = readInt16(data, j);
+        stack[stackSize] = view.getInt16(j);
         j += 2;
         stackSize++;
       } else if (value === 14) {
@@ -539,12 +538,7 @@ class CFFParser {
         stackSize++;
       } else if (value === 255) {
         // number (32 bit)
-        stack[stackSize] =
-          ((data[j] << 24) |
-            (data[j + 1] << 16) |
-            (data[j + 2] << 8) |
-            data[j + 3]) /
-          65536;
+        stack[stackSize] = view.getInt32(j) / 65536;
         j += 4;
         stackSize++;
       } else if (value === 19 || value === 20) {

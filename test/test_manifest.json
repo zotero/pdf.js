@@ -14075,5 +14075,27 @@
     "md5": "7f0f390a70228fffe95835518ec266c5",
     "rounds": 1,
     "type": "eq"
+  },
+  {
+    "id": "issue21068",
+    "file": "pdfs/issue21068.pdf",
+    "md5": "69558d166186923ad9d639d91884dbd6",
+    "rounds": 1,
+    "type": "eq",
+    "print": true,
+    "annotationStorage": {
+      "27R": {
+        "value": "123"
+      },
+      "28R": {
+        "value": "123"
+      },
+      "29R": {
+        "value": "1234"
+      },
+      "30R": {
+        "value": "123"
+      }
+    }
   }
 ]

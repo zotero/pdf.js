@@ -14105,5 +14105,12 @@
     "link": true,
     "rounds": 1,
     "type": "eq"
+  },
+  {
+    "id": "recursiveCompositGlyf",
+    "file": "pdfs/recursiveCompositGlyf.pdf",
+    "md5": "e4e106d20e4af10d7a5f1a5da02db66f",
+    "rounds": 1,
+    "type": "eq"
   }
 ]

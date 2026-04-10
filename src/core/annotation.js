@@ -2547,6 +2547,7 @@ class WidgetAnnotation extends Annotation {
         descent,
         lineHeight,
         alignment,
+        bidi(lines[0]).dir === "rtl",
         annotationStorage
       );
     }
@@ -2911,6 +2912,7 @@ class TextWidgetAnnotation extends WidgetAnnotation {
     descent,
     lineHeight,
     alignment,
+    isRTL,
     annotationStorage
   ) {
     const combWidth = width / this.data.maxLen;
@@ -2921,6 +2923,9 @@ class TextWidgetAnnotation extends WidgetAnnotation {
     const positions = font.getCharPositions(text);
     for (const [start, end] of positions) {
       buf.push(`(${escapeString(text.substring(start, end))}) Tj`);
+    }
+    if (isRTL) {
+      buf.reverse();
     }
 
     const textWidth = combWidth * positions.length;

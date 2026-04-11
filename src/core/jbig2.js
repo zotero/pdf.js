@@ -14,14 +14,7 @@
  */
 
 import { BaseException, shadow } from "../shared/util.js";
-import {
-  log2,
-  MAX_INT_32,
-  MIN_INT_32,
-  readInt8,
-  readUint16,
-  readUint32,
-} from "./core_utils.js";
+import { log2, MAX_INT_32, MIN_INT_32 } from "./core_utils.js";
 import { ArithmeticDecoder } from "./arithmetic_decoder.js";
 import { CCITTFaxDecoder } from "./ccitt.js";
 
@@ -34,10 +27,7 @@ class Jbig2Error extends BaseException {
 // Utility data structures
 class ContextCache {
   getContexts(id) {
-    if (id in this) {
-      return this[id];
-    }
-    return (this[id] = new Int8Array(1 << 16));
+    return (this[id] ??= new Int8Array(1 << 16));
   }
 }
 
@@ -1148,9 +1138,9 @@ function decodeHalftoneRegion(
   return regionBitmap;
 }
 
-function readSegmentHeader(data, start) {
+function readSegmentHeader(data, view, start) {
   const segmentHeader = {};
-  segmentHeader.number = readUint32(data, start);
+  segmentHeader.number = view.getUint32(start);
   const flags = data[start + 4];
   const segmentType = flags & 0x3f;
   if (!SegmentTypes[segmentType]) {
@@ -1166,7 +1156,7 @@ function readSegmentHeader(data, start) {
   const retainBits = [referredFlags & 31];
   let position = start + 6;
   if (referredToCount === 7) {
-    referredToCount = readUint32(data, position - 1) & 0x1fffffff;
+    referredToCount = view.getUint32(position - 1) & 0x1fffffff;
     position += 3;
     let bytes = (referredToCount + 8) >> 3;
     retainBits[0] = data[position++];
@@ -1192,9 +1182,9 @@ function readSegmentHeader(data, start) {
     if (referredToSegmentNumberSize === 1) {
       number = data[position];
     } else if (referredToSegmentNumberSize === 2) {
-      number = readUint16(data, position);
+      number = view.getUint16(position);
     } else {
-      number = readUint32(data, position);
+      number = view.getUint32(position);
     }
     referredTo.push(number);
     position += referredToSegmentNumberSize;
@@ -1203,17 +1193,21 @@ function readSegmentHeader(data, start) {
   if (!pageAssociationFieldSize) {
     segmentHeader.pageAssociation = data[position++];
   } else {
-    segmentHeader.pageAssociation = readUint32(data, position);
+    segmentHeader.pageAssociation = view.getUint32(position);
     position += 4;
   }
-  segmentHeader.length = readUint32(data, position);
+  segmentHeader.length = view.getUint32(position);
   position += 4;
 
   if (segmentHeader.length === 0xffffffff) {
     // 7.2.7 Segment data length, unknown segment length
     if (segmentType === 38) {
       // ImmediateGenericRegion
-      const genericRegionInfo = readRegionSegmentInformation(data, position);
+      const genericRegionInfo = readRegionSegmentInformation(
+        data,
+        view,
+        position
+      );
       const genericRegionSegmentFlags =
         data[position + RegionSegmentInformationFieldLength];
       const genericRegionMmr = !!(genericRegionSegmentFlags & 1);
@@ -1250,10 +1244,11 @@ function readSegmentHeader(data, start) {
 }
 
 function readSegments(header, data, start, end) {
+  const view = new DataView(data.buffer, data.byteOffset, data.byteLength);
   const segments = [];
   let position = start;
   while (position < end) {
-    const segmentHeader = readSegmentHeader(data, position);
+    const segmentHeader = readSegmentHeader(data, view, position);
     position = segmentHeader.headerEnd;
     const segment = {
       header: segmentHeader,
@@ -1280,29 +1275,27 @@ function readSegments(header, data, start, end) {
 }
 
 // 7.4.1 Region segment information field
-function readRegionSegmentInformation(data, start) {
+function readRegionSegmentInformation(data, view, start) {
   return {
-    width: readUint32(data, start),
-    height: readUint32(data, start + 4),
-    x: readUint32(data, start + 8),
-    y: readUint32(data, start + 12),
+    width: view.getUint32(start),
+    height: view.getUint32(start + 4),
+    x: view.getUint32(start + 8),
+    y: view.getUint32(start + 12),
     combinationOperator: data[start + 16] & 7,
   };
 }
 const RegionSegmentInformationFieldLength = 17;
 
 function processSegment(segment, visitor) {
-  const header = segment.header;
-
-  const data = segment.data,
-    end = segment.end;
-  let position = segment.start;
+  const { header, data, start, end } = segment;
+  const view = new DataView(data.buffer, data.byteOffset, data.byteLength);
+  let position = start;
   let args, at, i, atLength;
   switch (header.type) {
     case 0: // SymbolDictionary
       // 7.4.2 Symbol dictionary segment syntax
       const dictionary = {};
-      const dictionaryFlags = readUint16(data, position); // 7.4.2.1.1
+      const dictionaryFlags = view.getUint16(position); // 7.4.2.1.1
       dictionary.huffman = !!(dictionaryFlags & 1);
       dictionary.refinement = !!(dictionaryFlags & 2);
       dictionary.huffmanDHSelector = (dictionaryFlags >> 2) & 3;
@@ -1319,8 +1312,8 @@ function processSegment(segment, visitor) {
         at = [];
         for (i = 0; i < atLength; i++) {
           at.push({
-            x: readInt8(data, position),
-            y: readInt8(data, position + 1),
+            x: view.getInt8(position),
+            y: view.getInt8(position + 1),
           });
           position += 2;
         }
@@ -1330,16 +1323,16 @@ function processSegment(segment, visitor) {
         at = [];
         for (i = 0; i < 2; i++) {
           at.push({
-            x: readInt8(data, position),
-            y: readInt8(data, position + 1),
+            x: view.getInt8(position),
+            y: view.getInt8(position + 1),
           });
           position += 2;
         }
         dictionary.refinementAt = at;
       }
-      dictionary.numberOfExportedSymbols = readUint32(data, position);
+      dictionary.numberOfExportedSymbols = view.getUint32(position);
       position += 4;
-      dictionary.numberOfNewSymbols = readUint32(data, position);
+      dictionary.numberOfNewSymbols = view.getUint32(position);
       position += 4;
       args = [
         dictionary,
@@ -1353,9 +1346,9 @@ function processSegment(segment, visitor) {
     case 6: // ImmediateTextRegion
     case 7: // ImmediateLosslessTextRegion
       const textRegion = {};
-      textRegion.info = readRegionSegmentInformation(data, position);
+      textRegion.info = readRegionSegmentInformation(data, view, position);
       position += RegionSegmentInformationFieldLength;
-      const textRegionSegmentFlags = readUint16(data, position);
+      const textRegionSegmentFlags = view.getUint16(position);
       position += 2;
       textRegion.huffman = !!(textRegionSegmentFlags & 1);
       textRegion.refinement = !!(textRegionSegmentFlags & 2);
@@ -1368,7 +1361,7 @@ function processSegment(segment, visitor) {
       textRegion.dsOffset = (textRegionSegmentFlags << 17) >> 27;
       textRegion.refinementTemplate = (textRegionSegmentFlags >> 15) & 1;
       if (textRegion.huffman) {
-        const textRegionHuffmanFlags = readUint16(data, position);
+        const textRegionHuffmanFlags = view.getUint16(position);
         position += 2;
         textRegion.huffmanFS = textRegionHuffmanFlags & 3;
         textRegion.huffmanDS = (textRegionHuffmanFlags >> 2) & 3;
@@ -1385,14 +1378,14 @@ function processSegment(segment, visitor) {
         at = [];
         for (i = 0; i < 2; i++) {
           at.push({
-            x: readInt8(data, position),
-            y: readInt8(data, position + 1),
+            x: view.getInt8(position),
+            y: view.getInt8(position + 1),
           });
           position += 2;
         }
         textRegion.refinementAt = at;
       }
-      textRegion.numberOfSymbolInstances = readUint32(data, position);
+      textRegion.numberOfSymbolInstances = view.getUint32(position);
       position += 4;
       args = [textRegion, header.referredTo, data, position, end];
       break;
@@ -1404,7 +1397,7 @@ function processSegment(segment, visitor) {
       patternDictionary.template = (patternDictionaryFlags >> 1) & 3;
       patternDictionary.patternWidth = data[position++];
       patternDictionary.patternHeight = data[position++];
-      patternDictionary.maxPatternIndex = readUint32(data, position);
+      patternDictionary.maxPatternIndex = view.getUint32(position);
       position += 4;
       args = [patternDictionary, header.number, data, position, end];
       break;
@@ -1412,7 +1405,7 @@ function processSegment(segment, visitor) {
     case 23: // ImmediateLosslessHalftoneRegion
       // 7.4.5 Halftone region segment syntax
       const halftoneRegion = {};
-      halftoneRegion.info = readRegionSegmentInformation(data, position);
+      halftoneRegion.info = readRegionSegmentInformation(data, view, position);
       position += RegionSegmentInformationFieldLength;
       const halftoneRegionFlags = data[position++];
       halftoneRegion.mmr = !!(halftoneRegionFlags & 1);
@@ -1420,24 +1413,24 @@ function processSegment(segment, visitor) {
       halftoneRegion.enableSkip = !!(halftoneRegionFlags & 8);
       halftoneRegion.combinationOperator = (halftoneRegionFlags >> 4) & 7;
       halftoneRegion.defaultPixelValue = (halftoneRegionFlags >> 7) & 1;
-      halftoneRegion.gridWidth = readUint32(data, position);
+      halftoneRegion.gridWidth = view.getUint32(position);
       position += 4;
-      halftoneRegion.gridHeight = readUint32(data, position);
+      halftoneRegion.gridHeight = view.getUint32(position);
       position += 4;
-      halftoneRegion.gridOffsetX = readUint32(data, position) & 0xffffffff;
+      halftoneRegion.gridOffsetX = view.getUint32(position) & 0xffffffff;
       position += 4;
-      halftoneRegion.gridOffsetY = readUint32(data, position) & 0xffffffff;
+      halftoneRegion.gridOffsetY = view.getUint32(position) & 0xffffffff;
       position += 4;
-      halftoneRegion.gridVectorX = readUint16(data, position);
+      halftoneRegion.gridVectorX = view.getUint16(position);
       position += 2;
-      halftoneRegion.gridVectorY = readUint16(data, position);
+      halftoneRegion.gridVectorY = view.getUint16(position);
       position += 2;
       args = [halftoneRegion, header.referredTo, data, position, end];
       break;
     case 38: // ImmediateGenericRegion
     case 39: // ImmediateLosslessGenericRegion
       const genericRegion = {};
-      genericRegion.info = readRegionSegmentInformation(data, position);
+      genericRegion.info = readRegionSegmentInformation(data, view, position);
       position += RegionSegmentInformationFieldLength;
       const genericRegionSegmentFlags = data[position++];
       genericRegion.mmr = !!(genericRegionSegmentFlags & 1);
@@ -1448,8 +1441,8 @@ function processSegment(segment, visitor) {
         at = [];
         for (i = 0; i < atLength; i++) {
           at.push({
-            x: readInt8(data, position),
-            y: readInt8(data, position + 1),
+            x: view.getInt8(position),
+            y: view.getInt8(position + 1),
           });
           position += 2;
         }
@@ -1459,16 +1452,16 @@ function processSegment(segment, visitor) {
       break;
     case 48: // PageInformation
       const pageInfo = {
-        width: readUint32(data, position),
-        height: readUint32(data, position + 4),
-        resolutionX: readUint32(data, position + 8),
-        resolutionY: readUint32(data, position + 12),
+        width: view.getUint32(position),
+        height: view.getUint32(position + 4),
+        resolutionX: view.getUint32(position + 8),
+        resolutionY: view.getUint32(position + 12),
       };
       if (pageInfo.height === 0xffffffff) {
         delete pageInfo.height;
       }
       const pageSegmentFlags = data[position + 16];
-      readUint16(data, position + 17); // pageStripingInformation
+      view.getUint16(position + 17); // pageStripingInformation
       pageInfo.lossless = !!(pageSegmentFlags & 1);
       pageInfo.refinement = !!(pageSegmentFlags & 2);
       pageInfo.defaultPixelValue = (pageSegmentFlags >> 2) & 1;
@@ -1484,7 +1477,7 @@ function processSegment(segment, visitor) {
     case 51: // EndOfFile
       break;
     case 53: // Tables
-      args = [header.number, data, position, end];
+      args = [header.number, data, view, position, end];
       break;
     case 62: // 7.4.15 defines 2 extension types which
       // are comments and can be ignored.
@@ -1494,11 +1487,8 @@ function processSegment(segment, visitor) {
         `segment type ${header.typeName}(${header.type}) is not implemented`
       );
   }
-  const callbackName = "on" + header.typeName;
-  if (callbackName in visitor) {
-    // eslint-disable-next-line prefer-spread
-    visitor[callbackName].apply(visitor, args);
-  }
+  // eslint-disable-next-line prefer-spread
+  visitor["on" + header.typeName]?.apply(visitor, args);
 }
 
 function processSegments(segments, visitor) {
@@ -1521,6 +1511,7 @@ function parseJbig2(data) {
   if (typeof PDFJSDev === "undefined" || !PDFJSDev.test("IMAGE_DECODERS")) {
     throw new Error("Not implemented: parseJbig2");
   }
+  const view = new DataView(data.buffer, data.byteOffset, data.byteLength);
   const end = data.length;
   let position = 0;
 
@@ -1542,7 +1533,7 @@ function parseJbig2(data) {
   const flags = data[position++];
   header.randomAccess = !(flags & 1);
   if (!(flags & 2)) {
-    header.numberOfPages = readUint32(data, position);
+    header.numberOfPages = view.getUint32(position);
     position += 4;
   }
 
@@ -1803,9 +1794,9 @@ class SimpleSegmentVisitor {
     this.onImmediateHalftoneRegion(...arguments);
   }
 
-  onTables(currentSegment, data, start, end) {
+  onTables(currentSegment, data, view, start, end) {
     const customTables = (this.customTables ||= {});
-    customTables[currentSegment] = decodeTablesSegment(data, start, end);
+    customTables[currentSegment] = decodeTablesSegment(data, view, start, end);
   }
 }
 
@@ -1931,12 +1922,12 @@ class HuffmanTable {
   }
 }
 
-function decodeTablesSegment(data, start, end) {
+function decodeTablesSegment(data, view, start, end) {
   // Decodes a Tables segment, i.e., a custom Huffman table.
   // Annex B.2 Code table structure.
   const flags = data[start];
-  const lowestValue = readUint32(data, start + 1) & 0xffffffff;
-  const highestValue = readUint32(data, start + 5) & 0xffffffff;
+  const lowestValue = view.getUint32(start + 1) & 0xffffffff;
+  const highestValue = view.getUint32(start + 5) & 0xffffffff;
   const reader = new Reader(data, start + 9, end);
 
   const prefixSizeBits = ((flags >> 1) & 7) + 1;

@@ -4469,6 +4469,19 @@ class PartialEvaluator {
           hash.update(cidToGidMap.peekBytes());
         }
       }
+
+      if (type.name === "Type3") {
+        // Type3 fonts with the same metrics/encoding but different CharProcs
+        // must not be aliased, since their glyphs may render completely
+        // differently (e.g. one font uses SMask glyph programs, another uses
+        // plain paths, see issue 19634).
+        const charProcs = baseDict.get("CharProcs");
+        if (charProcs instanceof Dict) {
+          for (const [key, entry] of charProcs.getRawEntries()) {
+            hash.update(entry instanceof Ref ? `${key}\0${entry}` : key);
+          }
+        }
+      }
     }
 
     return {

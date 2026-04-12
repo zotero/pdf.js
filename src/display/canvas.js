@@ -644,7 +644,6 @@ class CanvasGraphics {
     this.baseTransformStack = [];
     this.groupLevel = 0;
     this.smaskStack = [];
-    this.smaskCounter = 0;
     this.tempSMask = null;
     this.smaskGroupCanvases = [];
     this.suspendedCtx = null;
@@ -712,7 +711,7 @@ class CanvasGraphics {
     if (transform) {
       this.ctx.transform(...transform);
       this.outputScaleX = transform[0];
-      this.outputScaleY = transform[0];
+      this.outputScaleY = transform[3];
     }
     this.ctx.transform(...viewport.transform);
     this.viewportScale = viewport.scale;
@@ -1231,8 +1230,14 @@ class CanvasGraphics {
         case "SMask":
           this.dependencyTracker?.recordSimpleData("SMask", opIdx);
           this.current.activeSMask = value ? this.tempSMask : null;
+          if (this.current.activeSMask) {
+            // Save the current blend mode so that it can be applied when
+            // compositing the SMask result back to the main canvas.
+            this.current.activeSMask.blendMode =
+              this.ctx.globalCompositeOperation;
+          }
           this.tempSMask = null;
-          this.checkSMaskState();
+          this.checkSMaskState(opIdx);
           break;
         case "TR":
           this.dependencyTracker?.recordSimpleData("filter", opIdx);
@@ -1247,10 +1252,10 @@ class CanvasGraphics {
     return !!this.suspendedCtx;
   }
 
-  checkSMaskState() {
+  checkSMaskState(opIdx) {
     const inSMaskMode = this.inSMaskMode;
     if (this.current.activeSMask && !inSMaskMode) {
-      this.beginSMaskMode();
+      this.beginSMaskMode(opIdx);
     } else if (!this.current.activeSMask && inSMaskMode) {
       this.endSMaskMode();
     }
@@ -1346,7 +1351,7 @@ class CanvasGraphics {
     );
     ctx.save();
     ctx.globalAlpha = 1;
-    ctx.globalCompositeOperation = "source-over";
+    ctx.globalCompositeOperation = smask.blendMode || "source-over";
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.drawImage(layerCtx.canvas, 0, 0);
     ctx.restore();
@@ -1463,7 +1468,7 @@ class CanvasGraphics {
       // state then copy it over to the temporary canvas.
       copyCtxState(this.suspendedCtx, this.ctx);
     }
-    this.checkSMaskState();
+    this.checkSMaskState(opIdx);
 
     // Ensure that the clipping path is reset (fixes issue6413.pdf).
     this.pendingClip = null;
@@ -2687,9 +2692,6 @@ class CanvasGraphics {
 
     this.current.startNewPathAndClipBox([0, 0, drawnWidth, drawnHeight]);
 
-    if (group.smask) {
-      this.smaskCounter++;
-    }
     const scratchCanvas = this.canvasFactory.create(drawnWidth, drawnHeight);
     if (group.smask) {
       this.smaskGroupCanvases.push(scratchCanvas);
@@ -2700,6 +2702,24 @@ class CanvasGraphics {
     // we have to translate the group ctx.
     groupCtx.translate(-offsetX, -offsetY);
     groupCtx.transform(...currentTransform);
+
+    if (
+      !group.isolated &&
+      !group.smask &&
+      inSMaskMode &&
+      group.needsIsolation
+    ) {
+      // For non-isolated groups that need isolation and are entered from SMask
+      // mode, copy the current canvas background so that inner blend modes
+      // (e.g. "screen") interact correctly with the background rather than
+      // compositing onto a transparent canvas.
+      // Groups without needsIsolation have no inner blend modes; their content
+      // is composited correctly via the SMask in endGroup without a copy.
+      groupCtx.save();
+      groupCtx.setTransform(1, 0, 0, 1, 0, 0);
+      groupCtx.drawImage(currentCtx.canvas, -offsetX, -offsetY);
+      groupCtx.restore();
+    }
 
     // Apply the bbox to the group context.
     if (group.bbox) {
@@ -2724,7 +2744,6 @@ class CanvasGraphics {
         subtype: group.smask.subtype,
         backdrop: group.smask.backdrop,
         transferMap: group.smask.transferMap || null,
-        startTransformInverse: null, // used during suspend operation
       });
     }
     if (

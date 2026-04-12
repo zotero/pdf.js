@@ -147,8 +147,13 @@ function mirrorContextOperations(ctx, destCtx) {
   };
 
   ctx.setTransform = function (a, b, c, d, e, f) {
-    destCtx.setTransform(a, b, c, d, e, f);
-    this.__originalSetTransform(a, b, c, d, e, f);
+    if (b === undefined) {
+      destCtx.setTransform(a);
+      this.__originalSetTransform(a);
+    } else {
+      destCtx.setTransform(a, b, c, d, e, f);
+      this.__originalSetTransform(a, b, c, d, e, f);
+    }
   };
 
   ctx.resetTransform = function () {
@@ -1467,6 +1472,13 @@ class CanvasGraphics {
       // Graphics state is stored on the main(suspended) canvas. Restore its
       // state then copy it over to the temporary canvas.
       copyCtxState(this.suspendedCtx, this.ctx);
+      // The scratch canvas may have been freshly created by beginSMaskMode
+      // (called from checkSMaskState during a previous endGroup), in which
+      // case its save/restore stack is empty and ctx.restore() above was a
+      // no-op. Explicitly sync the CTM from the main canvas so that any CTM
+      // change that the mirrored restore applied to the main canvas is also
+      // reflected on the scratch canvas.
+      this.ctx.setTransform(this.suspendedCtx.getTransform());
     }
     this.checkSMaskState(opIdx);
 
@@ -2805,6 +2817,13 @@ class CanvasGraphics {
       this.restore(opIdx);
       if (this.dependencyTracker) {
         this.ctx.restore();
+        // beginSMaskMode() may have been called inside restore(opIdx) above
+        // (via checkSMaskState), creating a fresh scratch canvas. If so,
+        // the mirrored ctx.restore() just synced main's CTM but left the
+        // scratch at the stale CTM set by beginSMaskMode(). Re-sync it.
+        if (this.inSMaskMode) {
+          this.ctx.setTransform(this.suspendedCtx.getTransform());
+        }
       }
     } else {
       this.ctx.restore();

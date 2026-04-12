@@ -656,7 +656,6 @@ class FeatureTest {
     return shadow(
       this,
       "isSanitizerSupported",
-      // eslint-disable-next-line no-undef
       typeof Sanitizer !== "undefined"
     );
   }

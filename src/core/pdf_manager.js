@@ -196,7 +196,7 @@ class NetworkPdfManager extends BasePdfManager {
     try {
       const value = obj[prop];
       if (typeof value === "function") {
-        return value.apply(obj, args);
+        return await value.apply(obj, args);
       }
       return value;
     } catch (ex) {

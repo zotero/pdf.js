@@ -316,7 +316,10 @@ const InternalViewerUtils = {
   },
 
   getContentTokens(contentsVal, xref) {
-    const refs = Array.isArray(contentsVal) ? contentsVal : [contentsVal];
+    // Contents may be a Ref to a stream, a direct array of Refs, or a Ref to
+    // an array of Refs.  Resolve one level to detect the array case.
+    const resolvedVal = xref.fetchIfRef(contentsVal);
+    const refs = Array.isArray(resolvedVal) ? resolvedVal : [contentsVal];
     const rawContents = [];
     const tokens = [];
     const rawBytesArr = [];

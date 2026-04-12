@@ -302,10 +302,6 @@ function writeUint32(bytes, index, value) {
   bytes[index] = value >>> 24;
 }
 
-function int32(b0, b1, b2, b3) {
-  return (b0 << 24) + (b1 << 16) + (b2 << 8) + b3;
-}
-
 function string16(value) {
   if (typeof PDFJSDev === "undefined" || PDFJSDev.test("TESTING")) {
     assert(
@@ -1400,6 +1396,7 @@ class Font {
         length,
         offset,
         data,
+        view: new DataView(data.buffer, data.byteOffset, data.byteLength),
       };
     }
 
@@ -2025,17 +2022,14 @@ class Font {
     }
 
     function sanitizeHead(head, numGlyphs, locaLength) {
-      const data = head.data;
+      const { data, view } = head;
 
       // Validate version:
       // Should always be 0x00010000
-      const version = int32(data[0], data[1], data[2], data[3]);
+      const version = view.getInt32(0);
       if (version >> 16 !== 1) {
         info("Attempting to fix invalid version in head table: " + version);
-        data[0] = 0;
-        data[1] = 1;
-        data[2] = 0;
-        data[3] = 0;
+        view.setInt32(0, 0x00010000);
       }
 
       const indexToLocFormat = signedInt16(data[50], data[51]);

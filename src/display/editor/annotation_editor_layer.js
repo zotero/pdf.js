@@ -30,11 +30,11 @@ import {
   AnnotationEditorType,
   FeatureTest,
 } from "../../shared/util.js";
+import { setLayerDimensions, stopEvent } from "../display_utils.js";
 import { AnnotationEditor } from "./editor.js";
 import { FreeTextEditor } from "./freetext.js";
 import { HighlightEditor } from "./highlight.js";
 import { InkEditor } from "./ink.js";
-import { setLayerDimensions } from "../display_utils.js";
 import { SignatureEditor } from "./signature.js";
 import { StampEditor } from "./stamp.js";
 
@@ -344,8 +344,7 @@ class AnnotationEditorLayer {
           }
           const editor = this.#editors.get(id);
           if (editor?.annotationElementId === null) {
-            e.stopPropagation();
-            e.preventDefault();
+            stopEvent(e);
             editor.dblclick(e);
           }
         },

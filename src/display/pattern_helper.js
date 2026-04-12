@@ -920,6 +920,7 @@ class TilingPattern {
   setFillAndStrokeStyleToContext(graphics, paintType, color) {
     const context = graphics.ctx,
       current = graphics.current;
+    current.patternFill = current.patternStroke = false;
     switch (paintType) {
       case PaintType.COLORED:
         const { fillStyle, strokeStyle } = this.ctx;

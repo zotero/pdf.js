@@ -62,7 +62,6 @@ import { FontRendererFactory } from "./font_renderer.js";
 import { getFontBasicMetrics } from "./metrics.js";
 import { GlyfTable } from "./glyf.js";
 import { OpenTypeFileBuilder } from "./opentype_file_builder.js";
-import { readUint32 } from "./core_utils.js";
 import { Stream } from "./stream.js";
 import { Type1Font } from "./type1_font.js";
 
@@ -338,10 +337,9 @@ function ensureInt16(v) {
 }
 
 function isTrueTypeFile(file) {
-  const header = file.peekBytes(4);
-  return (
-    readUint32(header, 0) === 0x00010000 || bytesToString(header) === "true"
-  );
+  const header = file.peekBytes(4),
+    str = bytesToString(header);
+  return str === "\x00\x01\x00\x00" || str === "true";
 }
 
 function isTrueTypeCollectionFile(file) {

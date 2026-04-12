@@ -112,8 +112,7 @@ class MathMLSanitizer {
       this,
       "sanitizer",
       FeatureTest.isSanitizerSupported
-        ? // eslint-disable-next-line no-undef
-          new Sanitizer({
+        ? new Sanitizer({
             elements: [...MathMLElements].map(name => ({
               name,
               namespace: MathMLNamespace,

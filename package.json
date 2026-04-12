@@ -16,7 +16,7 @@
     "autoprefixer": "^10.4.27",
     "babel-loader": "^10.1.1",
     "babel-plugin-add-header-comment": "^1.0.3",
-    "babel-plugin-istanbul": "^7.0.1",
+    "babel-plugin-istanbul": "^8.0.0",
     "c8": "^11.0.0",
     "cached-iterable": "^0.3.0",
     "caniuse-lite": "^1.0.30001787",

@@ -168,7 +168,13 @@ function lookupCmap(ranges, unicode) {
   };
 }
 
-function compileGlyf(code, cmds, font) {
+function compileGlyf(code, cmds, font, visitedGlyphs = new Set()) {
+  if (visitedGlyphs.has(code)) {
+    warn("compileGlyf: skipping recursive composite glyph reference.");
+    return;
+  }
+
+  visitedGlyphs.add(code);
   function moveTo(x, y) {
     if (firstPoint) {
       // Close the current subpath in adding a straight line to the first point.
@@ -250,7 +256,7 @@ function compileGlyf(code, cmds, font) {
           // TODO: we must use arg1 and arg2 to make something similar to:
           // https://github.com/freetype/freetype/blob/edd4fedc5427cf1cf1f4b045e53ff91eb282e9d4/src/truetype/ttgload.c#L1209
         }
-        compileGlyf(subglyph, cmds, font);
+        compileGlyf(subglyph, cmds, font, visitedGlyphs);
         cmds.restore();
       }
     } while (flags & 0x20);
@@ -352,6 +358,7 @@ function compileGlyf(code, cmds, font) {
       startPoint = endPoint + 1;
     }
   }
+  visitedGlyphs.delete(code);
 }
 
 function compileCharString(charStringCode, cmds, font, glyphId) {

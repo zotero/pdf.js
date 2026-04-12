@@ -275,28 +275,6 @@ function log2(x) {
   return x > 0 ? Math.ceil(Math.log2(x)) : 0;
 }
 
-function readInt8(data, offset) {
-  return (data[offset] << 24) >> 24;
-}
-
-function readInt16(data, offset) {
-  return ((data[offset] << 24) | (data[offset + 1] << 16)) >> 16;
-}
-
-function readUint16(data, offset) {
-  return (data[offset] << 8) | data[offset + 1];
-}
-
-function readUint32(data, offset) {
-  return (
-    ((data[offset] << 24) |
-      (data[offset + 1] << 16) |
-      (data[offset + 2] << 8) |
-      data[offset + 3]) >>>
-    0
-  );
-}
-
 // Checks if ch is one of the following characters: SPACE, TAB, CR or LF.
 function isWhiteSpace(ch) {
   return ch === 0x20 || ch === 0x09 || ch === 0x0d || ch === 0x0a;
@@ -804,10 +782,6 @@ export {
   ParserEOFException,
   parseXFAPath,
   PDF_VERSION_REGEXP,
-  readInt16,
-  readInt8,
-  readUint16,
-  readUint32,
   recoverJsURL,
   RESOURCES_KEYS_OPERATOR_LIST,
   RESOURCES_KEYS_TEXT_CONTENT,

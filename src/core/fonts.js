@@ -312,22 +312,6 @@ function string16(value) {
   return String.fromCharCode((value >> 8) & 0xff, value & 0xff);
 }
 
-function safeString16(value) {
-  if (typeof PDFJSDev === "undefined" || PDFJSDev.test("TESTING")) {
-    assert(
-      typeof value === "number" && !Number.isNaN(value),
-      `safeString16: Unexpected input "${value}".`
-    );
-  }
-  // clamp value to the 16-bit int range
-  if (value > 0x7fff) {
-    value = 0x7fff;
-  } else if (value < -0x8000) {
-    value = -0x8000;
-  }
-  return String.fromCharCode((value >> 8) & 0xff, value & 0xff);
-}
-
 function setArray(data, pos, arr) {
   data.set(arr, pos);
   return pos + arr.length;
@@ -3286,23 +3270,32 @@ class Font {
     // Font header
     builder.addTable(
       "head",
-      "\x00\x01\x00\x00" + // Version number
-        "\x00\x00\x10\x00" + // fontRevision
-        "\x00\x00\x00\x00" + // checksumAdjustement
-        "\x5F\x0F\x3C\xF5" + // magicNumber
-        "\x00\x00" + // Flags
-        safeString16(unitsPerEm) + // unitsPerEM
-        "\x00\x00\x00\x00\x9e\x0b\x7e\x27" + // creation date
-        "\x00\x00\x00\x00\x9e\x0b\x7e\x27" + // modifification date
-        "\x00\x00" + // xMin
-        safeString16(properties.descent) + // yMin
-        "\x0F\xFF" + // xMax
-        safeString16(properties.ascent) + // yMax
-        string16(properties.italicAngle ? 2 : 0) + // macStyle
-        "\x00\x11" + // lowestRecPPEM
-        "\x00\x00" + // fontDirectionHint
-        "\x00\x00" + // indexToLocFormat
-        "\x00\x00" // glyphDataFormat
+      (function fontTableHead() {
+        const dateArr = [0x00, 0x00, 0x00, 0x00, 0x9e, 0x0b, 0x7e, 0x27];
+        const data = new Uint8Array(54),
+          view = new DataView(data.buffer);
+        let pos = 0;
+
+        pos = setArray(data, pos, [0x00, 0x01, 0x00, 0x00]); // Version number
+        pos = setArray(data, pos, [0x00, 0x00, 0x10, 0x00]); // fontRevision
+        pos += 4; // checksumAdjustement, skip redundant "\x00\x00\x00\x00"
+        pos = setArray(data, pos, [0x5f, 0x0f, 0x3c, 0xf5]); // magicNumber
+        pos += 2; // Flags, skip redundant "\x00\x00"
+        pos = setSafeInt16(view, pos, unitsPerEm); // unitsPerEM
+        pos = setArray(data, pos, dateArr); // creation date
+        pos = setArray(data, pos, dateArr); // modifification date
+        pos += 2; // xMin, skip redundant "\x00\x00"
+        pos = setSafeInt16(view, pos, properties.descent); // yMin
+        pos = setArray(data, pos, [0x0f, 0xff]); // xMax
+        pos = setSafeInt16(view, pos, properties.ascent); // yMax
+        pos = setInt16(view, pos, properties.italicAngle ? 2 : 0); // macStyle
+        setArray(data, pos, [0x00, 0x11]); // lowestRecPPEM
+        // fontDirectionHint, skip redundant "\x00\x00"
+        // indexToLocFormat, skip redundant "\x00\x00"
+        // glyphDataFormat, skip redundant "\x00\x00"
+
+        return data;
+      })()
     );
 
     // Horizontal header

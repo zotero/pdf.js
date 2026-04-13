@@ -624,19 +624,10 @@ class StampEditor extends AnnotationEditor {
       const prevHeight = newHeight;
 
       if (newWidth > 2 * width) {
-        // See bug 1820511 (Windows specific bug).
-        // TODO: once the above bug is fixed we could revert to:
-        // newWidth = Math.ceil(newWidth / 2);
-        newWidth =
-          newWidth >= 16384
-            ? Math.floor(newWidth / 2) - 1
-            : Math.ceil(newWidth / 2);
+        newWidth = Math.ceil(newWidth / 2);
       }
       if (newHeight > 2 * height) {
-        newHeight =
-          newHeight >= 16384
-            ? Math.floor(newHeight / 2) - 1
-            : Math.ceil(newHeight / 2);
+        newHeight = Math.ceil(newHeight / 2);
       }
 
       const offscreen = new OffscreenCanvas(newWidth, newHeight);

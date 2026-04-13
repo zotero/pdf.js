@@ -379,6 +379,63 @@ function meshPackData(self) {
   }
 }
 
+function buildMeshVertexData(coords, colors, figures) {
+  // Count the total expanded vertex count first for a single allocation.
+  let vertexCount = 0;
+  for (const figure of figures) {
+    if (figure.type === MeshFigureType.TRIANGLES) {
+      vertexCount += figure.coords.length;
+    } else if (figure.type === MeshFigureType.LATTICE) {
+      const vpr = figure.verticesPerRow;
+      vertexCount +=
+        (Math.floor(figure.coords.length / vpr) - 1) * (vpr - 1) * 6;
+    }
+  }
+
+  // posData: 2 × float32 per vertex (raw PDF content-space x, y).
+  // colData: 4 × uint8 per vertex (r, g, b, unused).
+  const posData = new Float32Array(vertexCount * 2);
+  const colData = new Uint8Array(vertexCount * 4);
+  let pOff = 0,
+    cOff = 0;
+
+  const addVertex = (pi, ci) => {
+    posData[pOff++] = coords[pi * 2];
+    posData[pOff++] = coords[pi * 2 + 1];
+    colData[cOff++] = colors[ci * 4];
+    colData[cOff++] = colors[ci * 4 + 1];
+    colData[cOff++] = colors[ci * 4 + 2];
+    cOff++; // alpha padding
+  };
+
+  for (const figure of figures) {
+    const ps = figure.coords;
+    const cs = figure.colors;
+    if (figure.type === MeshFigureType.TRIANGLES) {
+      for (let i = 0, ii = ps.length; i < ii; i++) {
+        addVertex(ps[i], cs[i]);
+      }
+    } else if (figure.type === MeshFigureType.LATTICE) {
+      const vpr = figure.verticesPerRow;
+      const rows = Math.floor(ps.length / vpr) - 1;
+      const cols = vpr - 1;
+      for (let i = 0; i < rows; i++) {
+        let q = i * vpr;
+        for (let j = 0; j < cols; j++, q++) {
+          addVertex(ps[q], cs[q]);
+          addVertex(ps[q + 1], cs[q + 1]);
+          addVertex(ps[q + vpr], cs[q + vpr]);
+          addVertex(ps[q + vpr + 1], cs[q + vpr + 1]);
+          addVertex(ps[q + 1], cs[q + 1]);
+          addVertex(ps[q + vpr], cs[q + vpr]);
+        }
+      }
+    }
+  }
+
+  return { posData, colData, vertexCount };
+}
+
 // Type 1 shading: a 2-in, n-out function sampled over a rectangular domain.
 class FunctionBasedShading extends BaseShading {
   // Maximum grid steps per axis to avoid huge meshes.
@@ -485,12 +542,17 @@ class FunctionBasedShading extends BaseShading {
   }
 
   getIR() {
+    const { posData, colData, vertexCount } = buildMeshVertexData(
+      this.coords,
+      this.colors,
+      this.figures
+    );
     return [
       "Mesh",
       ShadingType.FUNCTION_BASED,
-      this.coords,
-      this.colors,
-      this.figures,
+      posData,
+      colData,
+      vertexCount,
       this.bounds,
       this.bbox,
       this.background,
@@ -1114,12 +1176,17 @@ class MeshShading extends BaseShading {
   }
 
   getIR() {
+    const { posData, colData, vertexCount } = buildMeshVertexData(
+      this.coords,
+      this.colors,
+      this.figures
+    );
     return [
       "Mesh",
       this.shadingType,
-      this.coords,
-      this.colors,
-      this.figures,
+      posData,
+      colData,
+      vertexCount,
       this.bounds,
       this.bbox,
       this.background,

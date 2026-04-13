@@ -74,33 +74,13 @@ describe("pattern", function () {
 
       expect(ir[0]).toEqual("Mesh");
       expect(ir[1]).toEqual(1);
+      // Vertices are pre-expanded: 3×4 lattice →
+      // 6 quads → 12 triangles → 36 vertices
       expect(ir[2]).toBeInstanceOf(Float32Array);
-      expect(ir[2].length).toEqual(24);
-      expect(Array.from(ir[2].slice(0, 6))).toEqual([10, 20, 11, 20, 12, 20]);
-      expect(Array.from(ir[2].slice(-6))).toEqual([10, 23, 11, 23, 12, 23]);
-
-      expect(ir[3]).toBeInstanceOf(Uint8ClampedArray);
-      expect(ir[3].length).toEqual(48);
-      expect(Array.from(ir[3].slice(0, 12))).toEqual([
-        0, 0, 0, 0, 128, 0, 0, 0, 191, 0, 0, 0,
-      ]);
-      expect(Array.from(ir[3].slice(-12))).toEqual([
-        0, 212, 0, 0, 128, 212, 0, 0, 191, 212, 0, 0,
-      ]);
-
-      expect(ir[4]).toEqual([
-        jasmine.objectContaining({
-          verticesPerRow: 3,
-        }),
-      ]);
-      expect(ir[4][0].coords).toBeInstanceOf(Uint32Array);
-      expect(Array.from(ir[4][0].coords)).toEqual([
-        0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11,
-      ]);
-      expect(ir[4][0].colors).toBeInstanceOf(Uint32Array);
-      expect(Array.from(ir[4][0].colors)).toEqual([
-        0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11,
-      ]);
+      expect(ir[2].length).toEqual(72); // 36 vertices × 2 coords
+      expect(ir[3]).toBeInstanceOf(Uint8Array);
+      expect(ir[3].length).toEqual(144); // 36 vertices × 4 bytes
+      expect(ir[4]).toEqual(36); // vertexCount
       expect(ir[5]).toEqual([10, 20, 12, 23]);
       expect(ir[6]).toBeNull();
       expect(ir[7]).toBeNull();
@@ -110,17 +90,14 @@ describe("pattern", function () {
       const shading = createFunctionBasedShading({
         background: [0.25, 0.5, 0.75],
       });
-      const buffer = compilePatternInfo(shading.getIR());
+      const ir = shading.getIR();
+      const buffer = compilePatternInfo(ir);
       const reconstructedIR = new PatternInfo(buffer).getIR();
 
       expect(reconstructedIR[0]).toEqual("Mesh");
       expect(reconstructedIR[1]).toEqual(1);
-      expect(Array.from(reconstructedIR[2])).toEqual(
-        Array.from(shading.coords)
-      );
-      expect(Array.from(reconstructedIR[3])).toEqual(
-        Array.from(shading.colors)
-      );
+      expect(Array.from(reconstructedIR[2])).toEqual(Array.from(ir[2]));
+      expect(Array.from(reconstructedIR[3])).toEqual(Array.from(ir[3]));
       expect(Array.from(reconstructedIR[7])).toEqual([64, 128, 191]);
     });
 
@@ -134,8 +111,8 @@ describe("pattern", function () {
       });
       const [, , , colors] = shading.getIR();
 
-      expect(colors.length).toEqual(48);
-      expect(Array.from(colors)).toEqual(new Array(48).fill(0));
+      expect(colors.length).toEqual(144);
+      expect(Array.from(colors)).toEqual(new Array(144).fill(0));
     });
   });
 });

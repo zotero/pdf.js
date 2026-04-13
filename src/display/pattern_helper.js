@@ -14,13 +14,7 @@
  */
 
 import { drawMeshWithGPU, isGPUReady, loadMeshShader } from "./webgpu.js";
-import {
-  FormatError,
-  info,
-  MeshFigureType,
-  unreachable,
-  Util,
-} from "../shared/util.js";
+import { FormatError, info, unreachable, Util } from "../shared/util.js";
 import { getCurrentTransform } from "./display_utils.js";
 
 const PathType = {
@@ -377,66 +371,12 @@ function drawTriangle(data, context, p1, p2, p3, c1, c2, c3) {
   }
 }
 
-function drawFigure(data, figure, context) {
-  const ps = figure.coords;
-  const cs = figure.colors;
-  let i, ii;
-  switch (figure.type) {
-    case MeshFigureType.LATTICE:
-      const verticesPerRow = figure.verticesPerRow;
-      const rows = Math.floor(ps.length / verticesPerRow) - 1;
-      const cols = verticesPerRow - 1;
-      for (i = 0; i < rows; i++) {
-        let q = i * verticesPerRow;
-        for (let j = 0; j < cols; j++, q++) {
-          drawTriangle(
-            data,
-            context,
-            ps[q],
-            ps[q + 1],
-            ps[q + verticesPerRow],
-            cs[q],
-            cs[q + 1],
-            cs[q + verticesPerRow]
-          );
-          drawTriangle(
-            data,
-            context,
-            ps[q + verticesPerRow + 1],
-            ps[q + 1],
-            ps[q + verticesPerRow],
-            cs[q + verticesPerRow + 1],
-            cs[q + 1],
-            cs[q + verticesPerRow]
-          );
-        }
-      }
-      break;
-    case MeshFigureType.TRIANGLES:
-      for (i = 0, ii = ps.length; i < ii; i += 3) {
-        drawTriangle(
-          data,
-          context,
-          ps[i],
-          ps[i + 1],
-          ps[i + 2],
-          cs[i],
-          cs[i + 1],
-          cs[i + 2]
-        );
-      }
-      break;
-    default:
-      throw new Error("illegal figure");
-  }
-}
-
 class MeshShadingPattern extends BaseShadingPattern {
   constructor(IR) {
     super();
-    this._coords = IR[2];
-    this._colors = IR[3];
-    this._figures = IR[4];
+    this._posData = IR[2];
+    this._colData = IR[3];
+    this._vertexCount = IR[4];
     this._bounds = IR[5];
     this._bbox = IR[6];
     this._background = IR[7];
@@ -477,8 +417,8 @@ class MeshShadingPattern extends BaseShadingPattern {
     const scaleY = boundsHeight ? boundsHeight / height : 1;
 
     const context = {
-      coords: this._coords,
-      colors: this._colors,
+      coords: this._posData,
+      colors: this._colData,
       offsetX: -offsetX,
       offsetY: -offsetY,
       scaleX: 1 / scaleX,
@@ -489,10 +429,17 @@ class MeshShadingPattern extends BaseShadingPattern {
     const paddedHeight = height + BORDER_SIZE * 2;
     const tmpCanvas = canvasFactory.create(paddedWidth, paddedHeight);
 
-    if (isGPUReady()) {
+    // Use the GPU path when there are more than 16 triangles (> 48 vertices).
+    // With small meshes the GPU overhead is significant and the CPU path is
+    // faster. The texture has to move from the GPU to the main thread and it's
+    // costly. So it's frequent to have a lot of mesh-based shading patterns
+    // when rendering some 3D surfaces (see bug 2030745).
+    if (isGPUReady() && this._vertexCount > 48) {
       tmpCanvas.context.drawImage(
         drawMeshWithGPU(
-          this._figures,
+          this._posData,
+          this._colData,
+          this._vertexCount,
           context,
           backgroundColor,
           paddedWidth,
@@ -513,8 +460,8 @@ class MeshShadingPattern extends BaseShadingPattern {
           bytes[i + 3] = 255;
         }
       }
-      for (const figure of this._figures) {
-        drawFigure(data, figure, context);
+      for (let i = 0, ii = this._vertexCount; i < ii; i += 3) {
+        drawTriangle(data, context, i, i + 1, i + 2, i, i + 1, i + 2);
       }
       tmpCanvas.context.putImageData(data, BORDER_SIZE, BORDER_SIZE);
     }

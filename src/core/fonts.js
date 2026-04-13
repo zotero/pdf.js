@@ -327,13 +327,15 @@ function safeString16(value) {
   return String.fromCharCode((value >> 8) & 0xff, value & 0xff);
 }
 
-function ensureInt16(v) {
+function setInt16(view, pos, val) {
   if (typeof PDFJSDev === "undefined" || PDFJSDev.test("TESTING")) {
     assert(
-      typeof v === "number" && Math.abs(v) < 2 ** 16,
-      `ensureInt16: Unexpected input "${v}".`
+      typeof val === "number" && Math.abs(val) < 2 ** 16,
+      `setInt16: Unexpected input "${val}".`
     );
   }
+  view.setInt16(pos, val);
+  return pos + 2;
 }
 
 function isTrueTypeFile(file) {
@@ -3310,11 +3312,12 @@ class Font {
     // Horizontal metrics
     builder.addTable(
       "hmtx",
-      (function fontFieldsHmtx() {
+      (function fontTableHmtx() {
         const charstrings = font.charstrings;
         const cffWidths = font.cff?.widths ?? null;
 
-        const data = new Uint8Array(numGlyphs * 4);
+        const data = new Uint8Array(numGlyphs * 4),
+          view = new DataView(data.buffer);
         // Fake .notdef (width=0 and lsb=0) first, skip redundant assignment.
         let pos = 4;
 
@@ -3325,11 +3328,8 @@ class Font {
           } else if (cffWidths) {
             width = Math.ceil(cffWidths[i] || 0);
           }
-          ensureInt16(width);
-          data[pos++] = (width >> 8) & 0xff;
-          data[pos++] = width & 0xff;
-          // Use lsb=0, skip redundant assignment.
-          pos += 2;
+          pos = setInt16(view, pos, width);
+          pos += 2; // Use lsb=0, skip redundant assignment.
         }
         return data;
       })()

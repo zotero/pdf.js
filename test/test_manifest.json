@@ -14119,5 +14119,12 @@
     "md5": "ae33892db2a2421ec7c9c3e2aee07205",
     "rounds": 1,
     "type": "eq"
+  },
+  {
+    "id": "issue13520",
+    "file": "pdfs/issue13520.pdf",
+    "md5": "5a690e2303604441308f808b5fc33e22",
+    "rounds": 1,
+    "type": "eq"
   }
 ]

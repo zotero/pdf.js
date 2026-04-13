@@ -903,15 +903,11 @@ class CanvasGraphics {
       let nw = pw,
         nh = ph;
       if (ws > 2 && pw > 1) {
-        // See bug 1820511 (Windows specific bug).
-        // TODO: once the above bug is fixed we could revert to:
-        // nw = Math.ceil(pw / 2);
-        nw = pw >= 16384 ? Math.floor(pw / 2) - 1 || 1 : Math.ceil(pw / 2);
+        nw = Math.ceil(pw / 2);
         ws /= pw / nw;
       }
       if (hs > 2 && ph > 1) {
-        // TODO: see the comment above.
-        nh = ph >= 16384 ? Math.floor(ph / 2) - 1 || 1 : Math.ceil(ph) / 2;
+        nh = Math.ceil(ph / 2);
         hs /= ph / nh;
       }
       scaleSteps.push({ newWidth: nw, newHeight: nh });

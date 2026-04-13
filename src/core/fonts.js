@@ -327,6 +327,11 @@ function safeString16(value) {
   return String.fromCharCode((value >> 8) & 0xff, value & 0xff);
 }
 
+function setArray(data, pos, arr) {
+  data.set(arr, pos);
+  return pos + arr.length;
+}
+
 function setInt16(view, pos, val) {
   if (typeof PDFJSDev === "undefined" || PDFJSDev.test("TESTING")) {
     assert(
@@ -3338,8 +3343,15 @@ class Font {
     // Maximum profile
     builder.addTable(
       "maxp",
-      "\x00\x00\x50\x00" + // Version number
-        string16(numGlyphs) // Num of glyphs
+      (function fontTableMaxp() {
+        const data = new Uint8Array(6),
+          view = new DataView(data.buffer);
+
+        setArray(data, 0, [0x00, 0x00, 0x50, 0x00]); // Version number
+        setInt16(view, 4, numGlyphs); // Num of glyphs
+
+        return data;
+      })()
     );
 
     // Naming tables

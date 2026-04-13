@@ -61,6 +61,7 @@ import { compileFontInfo } from "./obj_bin_transform_core.js";
 import { FontRendererFactory } from "./font_renderer.js";
 import { getFontBasicMetrics } from "./metrics.js";
 import { GlyfTable } from "./glyf.js";
+import { MathClamp } from "../shared/math_clamp.js";
 import { OpenTypeFileBuilder } from "./opentype_file_builder.js";
 import { Stream } from "./stream.js";
 import { Type1Font } from "./type1_font.js";
@@ -311,29 +312,32 @@ function string16(value) {
   return String.fromCharCode((value >> 8) & 0xff, value & 0xff);
 }
 
-function safeString16(value) {
+function setArray(data, pos, arr) {
+  data.set(arr, pos);
+  return pos + arr.length;
+}
+
+function setInt16(view, pos, val) {
   if (typeof PDFJSDev === "undefined" || PDFJSDev.test("TESTING")) {
     assert(
-      typeof value === "number" && !Number.isNaN(value),
-      `safeString16: Unexpected input "${value}".`
+      typeof val === "number" && Math.abs(val) < 2 ** 16,
+      `setInt16: Unexpected input "${val}".`
+    );
+  }
+  view.setInt16(pos, val);
+  return pos + 2;
+}
+
+function setSafeInt16(view, pos, val) {
+  if (typeof PDFJSDev === "undefined" || PDFJSDev.test("TESTING")) {
+    assert(
+      typeof val === "number" && !Number.isNaN(val),
+      `safeString16: Unexpected input "${val}".`
     );
   }
   // clamp value to the 16-bit int range
-  if (value > 0x7fff) {
-    value = 0x7fff;
-  } else if (value < -0x8000) {
-    value = -0x8000;
-  }
-  return String.fromCharCode((value >> 8) & 0xff, value & 0xff);
-}
-
-function ensureInt16(v) {
-  if (typeof PDFJSDev === "undefined" || PDFJSDev.test("TESTING")) {
-    assert(
-      typeof v === "number" && Math.abs(v) < 2 ** 16,
-      `ensureInt16: Unexpected input "${v}".`
-    );
-  }
+  view.setInt16(pos, MathClamp(val, -0x8000, 0x7fff));
+  return pos + 2;
 }
 
 function isTrueTypeFile(file) {
@@ -3266,55 +3270,77 @@ class Font {
     // Font header
     builder.addTable(
       "head",
-      "\x00\x01\x00\x00" + // Version number
-        "\x00\x00\x10\x00" + // fontRevision
-        "\x00\x00\x00\x00" + // checksumAdjustement
-        "\x5F\x0F\x3C\xF5" + // magicNumber
-        "\x00\x00" + // Flags
-        safeString16(unitsPerEm) + // unitsPerEM
-        "\x00\x00\x00\x00\x9e\x0b\x7e\x27" + // creation date
-        "\x00\x00\x00\x00\x9e\x0b\x7e\x27" + // modifification date
-        "\x00\x00" + // xMin
-        safeString16(properties.descent) + // yMin
-        "\x0F\xFF" + // xMax
-        safeString16(properties.ascent) + // yMax
-        string16(properties.italicAngle ? 2 : 0) + // macStyle
-        "\x00\x11" + // lowestRecPPEM
-        "\x00\x00" + // fontDirectionHint
-        "\x00\x00" + // indexToLocFormat
-        "\x00\x00" // glyphDataFormat
+      (function fontTableHead() {
+        const dateArr = [0x00, 0x00, 0x00, 0x00, 0x9e, 0x0b, 0x7e, 0x27];
+        const data = new Uint8Array(54),
+          view = new DataView(data.buffer);
+        let pos = 0;
+
+        pos = setArray(data, pos, [0x00, 0x01, 0x00, 0x00]); // Version number
+        pos = setArray(data, pos, [0x00, 0x00, 0x10, 0x00]); // fontRevision
+        pos += 4; // checksumAdjustement, skip redundant "\x00\x00\x00\x00"
+        pos = setArray(data, pos, [0x5f, 0x0f, 0x3c, 0xf5]); // magicNumber
+        pos += 2; // Flags, skip redundant "\x00\x00"
+        pos = setSafeInt16(view, pos, unitsPerEm); // unitsPerEM
+        pos = setArray(data, pos, dateArr); // creation date
+        pos = setArray(data, pos, dateArr); // modifification date
+        pos += 2; // xMin, skip redundant "\x00\x00"
+        pos = setSafeInt16(view, pos, properties.descent); // yMin
+        pos = setArray(data, pos, [0x0f, 0xff]); // xMax
+        pos = setSafeInt16(view, pos, properties.ascent); // yMax
+        pos = setInt16(view, pos, properties.italicAngle ? 2 : 0); // macStyle
+        setArray(data, pos, [0x00, 0x11]); // lowestRecPPEM
+        // fontDirectionHint, skip redundant "\x00\x00"
+        // indexToLocFormat, skip redundant "\x00\x00"
+        // glyphDataFormat, skip redundant "\x00\x00"
+
+        return data;
+      })()
     );
 
     // Horizontal header
     builder.addTable(
       "hhea",
-      "\x00\x01\x00\x00" + // Version number
-        safeString16(properties.ascent) + // Typographic Ascent
-        safeString16(properties.descent) + // Typographic Descent
-        "\x00\x00" + // Line Gap
-        "\xFF\xFF" + // advanceWidthMax
-        "\x00\x00" + // minLeftSidebearing
-        "\x00\x00" + // minRightSidebearing
-        "\x00\x00" + // xMaxExtent
-        safeString16(properties.capHeight) + // caretSlopeRise
-        safeString16(Math.tan(properties.italicAngle) * properties.xHeight) + // caretSlopeRun
-        "\x00\x00" + // caretOffset
-        "\x00\x00" + // -reserved-
-        "\x00\x00" + // -reserved-
-        "\x00\x00" + // -reserved-
-        "\x00\x00" + // -reserved-
-        "\x00\x00" + // metricDataFormat
-        string16(numGlyphs) // Number of HMetrics
+      (function fontTableHhea() {
+        const data = new Uint8Array(36),
+          view = new DataView(data.buffer);
+        let pos = 0;
+
+        pos = setArray(data, pos, [0x00, 0x01, 0x00, 0x00]); // Version number
+        pos = setSafeInt16(view, pos, properties.ascent); // Typographic Ascent
+        pos = setSafeInt16(view, pos, properties.descent); // Typographic Descent
+        pos += 2; // Line Gap, skip redundant "\x00\x00"
+        pos = setArray(data, pos, [0xff, 0xff]); // advanceWidthMax
+        pos += 2; // minLeftSidebearing, skip redundant "\x00\x00"
+        pos += 2; // minRightSidebearing, skip redundant "\x00\x00"
+        pos += 2; // xMaxExtent, skip redundant "\x00\x00"
+        pos = setSafeInt16(view, pos, properties.capHeight); // caretSlopeRise
+        pos = setSafeInt16(
+          view,
+          pos,
+          Math.tan(properties.italicAngle) * properties.xHeight
+        ); // caretSlopeRun
+        pos += 2; // caretOffset, skip redundant "\x00\x00"
+        pos += 2; // -reserved-, skip redundant "\x00\x00"
+        pos += 2; // -reserved-, skip redundant "\x00\x00"
+        pos += 2; // -reserved-, skip redundant "\x00\x00"
+        pos += 2; // -reserved-, skip redundant "\x00\x00"
+        pos += 2; // metricDataFormat, skip redundant "\x00\x00"
+        setInt16(view, pos, numGlyphs); // Number of HMetrics
+
+        return data;
+      })()
     );
 
     // Horizontal metrics
     builder.addTable(
       "hmtx",
-      (function fontFieldsHmtx() {
+      (function fontTableHmtx() {
         const charstrings = font.charstrings;
         const cffWidths = font.cff?.widths ?? null;
 
-        const data = new Uint8Array(numGlyphs * 4);
+        const data = new Uint8Array(numGlyphs * 4),
+          view = new DataView(data.buffer);
         // Fake .notdef (width=0 and lsb=0) first, skip redundant assignment.
         let pos = 4;
 
@@ -3325,11 +3351,8 @@ class Font {
           } else if (cffWidths) {
             width = Math.ceil(cffWidths[i] || 0);
           }
-          ensureInt16(width);
-          data[pos++] = (width >> 8) & 0xff;
-          data[pos++] = width & 0xff;
-          // Use lsb=0, skip redundant assignment.
-          pos += 2;
+          pos = setInt16(view, pos, width);
+          pos += 2; // Use lsb=0, skip redundant assignment.
         }
         return data;
       })()
@@ -3338,8 +3361,15 @@ class Font {
     // Maximum profile
     builder.addTable(
       "maxp",
-      "\x00\x00\x50\x00" + // Version number
-        string16(numGlyphs) // Num of glyphs
+      (function fontTableMaxp() {
+        const data = new Uint8Array(6),
+          view = new DataView(data.buffer);
+
+        setArray(data, 0, [0x00, 0x00, 0x50, 0x00]); // Version number
+        setInt16(view, 4, numGlyphs); // Num of glyphs
+
+        return data;
+      })()
     );
 
     // Naming tables

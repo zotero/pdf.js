@@ -340,6 +340,17 @@ function setSafeInt16(view, pos, val) {
   return pos + 2;
 }
 
+function setInt32(view, pos, val) {
+  if (typeof PDFJSDev === "undefined" || PDFJSDev.test("TESTING")) {
+    assert(
+      typeof val === "number" && Math.abs(val) < 2 ** 32,
+      `setInt32: Unexpected input "${val}".`
+    );
+  }
+  view.setInt32(pos, val);
+  return pos + 4;
+}
+
 function isTrueTypeFile(file) {
   const header = file.peekBytes(4),
     str = bytesToString(header);
@@ -888,18 +899,21 @@ function createOS2Table(properties, charstrings, override) {
 }
 
 function createPostTable(properties) {
-  const angle = Math.floor(properties.italicAngle * 2 ** 16);
-  return (
-    "\x00\x03\x00\x00" + // Version number
-    string32(angle) + // italicAngle
-    "\x00\x00" + // underlinePosition
-    "\x00\x00" + // underlineThickness
-    string32(properties.fixedPitch ? 1 : 0) + // isFixedPitch
-    "\x00\x00\x00\x00" + // minMemType42
-    "\x00\x00\x00\x00" + // maxMemType42
-    "\x00\x00\x00\x00" + // minMemType1
-    "\x00\x00\x00\x00" // maxMemType1
-  );
+  const data = new Uint8Array(32),
+    view = new DataView(data.buffer);
+  let pos = 0;
+
+  pos = setArray(data, pos, [0x00, 0x03, 0x00, 0x00]); // Version number
+  pos = setInt32(view, pos, Math.floor(properties.italicAngle * 2 ** 16)); // italicAngle
+  pos += 2; // underlinePosition, skip redundant "\x00\x00"
+  pos += 2; // underlineThickness, skip redundant "\x00\x00"
+  setInt32(view, pos, properties.fixedPitch ? 1 : 0); // isFixedPitch
+  // minMemType42, skip redundant "\x00\x00\x00\x00"
+  // maxMemType42, skip redundant "\x00\x00\x00\x00"
+  // minMemType1, skip redundant "\x00\x00\x00\x00"
+  // maxMemType1, skip redundant "\x00\x00\x00\x00"
+
+  return data;
 }
 
 function createPostscriptName(name) {

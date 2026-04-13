@@ -265,7 +265,6 @@ function compilePatternInfo(ir) {
     coords = [],
     colors = [],
     colorStops = [],
-    figures = [],
     shadingType = null, // only needed for mesh patterns
     background = null; // background for mesh patterns
 
@@ -285,7 +284,6 @@ function compilePatternInfo(ir) {
       shadingType = ir[1];
       coords = ir[2];
       colors = ir[3];
-      figures = ir[4] || [];
       bbox = ir[6];
       background = ir[7];
       break;
@@ -296,18 +294,6 @@ function compilePatternInfo(ir) {
   const nCoord = Math.floor(coords.length / 2);
   const nColor = Math.floor(colors.length / 4);
   const nStop = colorStops.length;
-  const nFigures = figures.length;
-
-  let figuresSize = 0;
-  for (const figure of figures) {
-    figuresSize += 1;
-    figuresSize = Math.ceil(figuresSize / 4) * 4; // Ensure 4-byte alignment
-    figuresSize += 4 + figure.coords.length * 4;
-    figuresSize += 4 + figure.colors.length * 4;
-    if (figure.verticesPerRow !== undefined) {
-      figuresSize += 4;
-    }
-  }
 
   const byteLen =
     20 +
@@ -315,8 +301,7 @@ function compilePatternInfo(ir) {
     nColor * 4 +
     nStop * 8 +
     (bbox ? 16 : 0) +
-    (background ? 3 : 0) +
-    figuresSize;
+    (background ? 3 : 0);
   const buffer = new ArrayBuffer(byteLen);
   const dataView = new DataView(buffer);
   const u8data = new Uint8Array(buffer);
@@ -328,7 +313,7 @@ function compilePatternInfo(ir) {
   dataView.setUint32(PATTERN_INFO.N_COORD, nCoord, true);
   dataView.setUint32(PATTERN_INFO.N_COLOR, nColor, true);
   dataView.setUint32(PATTERN_INFO.N_STOP, nStop, true);
-  dataView.setUint32(PATTERN_INFO.N_FIGURES, nFigures, true);
+  dataView.setUint32(PATTERN_INFO.N_FIGURES, 0, true);
 
   let offset = 20;
   const coordsView = new Float32Array(buffer, offset, nCoord * 2);
@@ -353,34 +338,6 @@ function compilePatternInfo(ir) {
 
   if (background) {
     u8data.set(background, offset);
-    offset += 3;
-  }
-
-  for (let i = 0; i < figures.length; i++) {
-    const figure = figures[i];
-    dataView.setUint8(offset, figure.type);
-    offset += 1;
-    // Ensure 4-byte alignment
-    offset = Math.ceil(offset / 4) * 4;
-    dataView.setUint32(offset, figure.coords.length, true);
-    offset += 4;
-    const figureCoordsView = new Int32Array(
-      buffer,
-      offset,
-      figure.coords.length
-    );
-    figureCoordsView.set(figure.coords);
-    offset += figure.coords.length * 4;
-    dataView.setUint32(offset, figure.colors.length, true);
-    offset += 4;
-    const colorsView = new Int32Array(buffer, offset, figure.colors.length);
-    colorsView.set(figure.colors);
-    offset += figure.colors.length * 4;
-
-    if (figure.verticesPerRow !== undefined) {
-      dataView.setUint32(offset, figure.verticesPerRow, true);
-      offset += 4;
-    }
   }
   return buffer;
 }

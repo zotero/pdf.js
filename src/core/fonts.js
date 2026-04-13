@@ -61,6 +61,7 @@ import { compileFontInfo } from "./obj_bin_transform_core.js";
 import { FontRendererFactory } from "./font_renderer.js";
 import { getFontBasicMetrics } from "./metrics.js";
 import { GlyfTable } from "./glyf.js";
+import { MathClamp } from "../shared/math_clamp.js";
 import { OpenTypeFileBuilder } from "./opentype_file_builder.js";
 import { Stream } from "./stream.js";
 import { Type1Font } from "./type1_font.js";
@@ -340,6 +341,18 @@ function setInt16(view, pos, val) {
     );
   }
   view.setInt16(pos, val);
+  return pos + 2;
+}
+
+function setSafeInt16(view, pos, val) {
+  if (typeof PDFJSDev === "undefined" || PDFJSDev.test("TESTING")) {
+    assert(
+      typeof val === "number" && !Number.isNaN(val),
+      `safeString16: Unexpected input "${val}".`
+    );
+  }
+  // clamp value to the 16-bit int range
+  view.setInt16(pos, MathClamp(val, -0x8000, 0x7fff));
   return pos + 2;
 }
 
@@ -3295,23 +3308,35 @@ class Font {
     // Horizontal header
     builder.addTable(
       "hhea",
-      "\x00\x01\x00\x00" + // Version number
-        safeString16(properties.ascent) + // Typographic Ascent
-        safeString16(properties.descent) + // Typographic Descent
-        "\x00\x00" + // Line Gap
-        "\xFF\xFF" + // advanceWidthMax
-        "\x00\x00" + // minLeftSidebearing
-        "\x00\x00" + // minRightSidebearing
-        "\x00\x00" + // xMaxExtent
-        safeString16(properties.capHeight) + // caretSlopeRise
-        safeString16(Math.tan(properties.italicAngle) * properties.xHeight) + // caretSlopeRun
-        "\x00\x00" + // caretOffset
-        "\x00\x00" + // -reserved-
-        "\x00\x00" + // -reserved-
-        "\x00\x00" + // -reserved-
-        "\x00\x00" + // -reserved-
-        "\x00\x00" + // metricDataFormat
-        string16(numGlyphs) // Number of HMetrics
+      (function fontTableHhea() {
+        const data = new Uint8Array(36),
+          view = new DataView(data.buffer);
+        let pos = 0;
+
+        pos = setArray(data, pos, [0x00, 0x01, 0x00, 0x00]); // Version number
+        pos = setSafeInt16(view, pos, properties.ascent); // Typographic Ascent
+        pos = setSafeInt16(view, pos, properties.descent); // Typographic Descent
+        pos += 2; // Line Gap, skip redundant "\x00\x00"
+        pos = setArray(data, pos, [0xff, 0xff]); // advanceWidthMax
+        pos += 2; // minLeftSidebearing, skip redundant "\x00\x00"
+        pos += 2; // minRightSidebearing, skip redundant "\x00\x00"
+        pos += 2; // xMaxExtent, skip redundant "\x00\x00"
+        pos = setSafeInt16(view, pos, properties.capHeight); // caretSlopeRise
+        pos = setSafeInt16(
+          view,
+          pos,
+          Math.tan(properties.italicAngle) * properties.xHeight
+        ); // caretSlopeRun
+        pos += 2; // caretOffset, skip redundant "\x00\x00"
+        pos += 2; // -reserved-, skip redundant "\x00\x00"
+        pos += 2; // -reserved-, skip redundant "\x00\x00"
+        pos += 2; // -reserved-, skip redundant "\x00\x00"
+        pos += 2; // -reserved-, skip redundant "\x00\x00"
+        pos += 2; // metricDataFormat, skip redundant "\x00\x00"
+        setInt16(view, pos, numGlyphs); // Number of HMetrics
+
+        return data;
+      })()
     );
 
     // Horizontal metrics

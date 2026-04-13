@@ -124,9 +124,10 @@ function getViewerConfiguration() {
       outlinesView: document.getElementById("outlinesView"),
       attachmentsView: document.getElementById("attachmentsView"),
       layersView: document.getElementById("layersView"),
-      viewsManagerAddFileButton: document.getElementById(
-        "viewsManagerAddFileButton"
-      ),
+      viewsManagerAddFile: {
+        button: document.getElementById("viewsManagerAddFileButton"),
+        picker: document.getElementById("viewsManagerAddFilePicker"),
+      },
       viewsManagerCurrentOutlineButton: document.getElementById(
         "viewsManagerCurrentOutlineButton"
       ),
@@ -158,6 +159,13 @@ function getViewerConfiguration() {
         viewsManagerStatusUndoCloseButton: document.getElementById(
           "viewsManagerStatusUndoCloseButton"
         ),
+      },
+      viewsManagerWaitingBar: {
+        container: document.getElementById("viewsManagerStatusWaiting"),
+        closeButton: document.getElementById(
+          "viewsManagerStatusWaitingCloseButton"
+        ),
+        label: document.getElementById("viewsManagerStatusWaitingLabel"),
       },
       manageMenu: {
         button: document.getElementById("viewsManagerStatusActionButton"),

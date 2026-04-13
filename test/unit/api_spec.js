@@ -7018,6 +7018,116 @@ small scripts as well as for`);
         expect(newPdfDoc.numPages).toEqual(2);
         await passwordAcceptedLoadingTask.destroy();
       });
+
+      it("insertAfter places pages at the given position", async function () {
+        // page_with_number.pdf has 17 pages; text on page N (1-based) is "N".
+        // Sequential pageInfo contributes pages 1 and 3 (0-based) at base
+        // positions 0 and 1.  The insertAfter pageInfo inserts page 2 after
+        // base position 0, so the final order should be: "1" · "2" · "3".
+        let loadingTask = getDocument(
+          buildGetDocumentParams("page_with_number.pdf")
+        );
+        let pdfDoc = await loadingTask.promise;
+        const data = await pdfDoc.extractPages([
+          { document: null, includePages: [0, 2] },
+          { document: null, includePages: [1], insertAfter: 0 },
+        ]);
+        await loadingTask.destroy();
+
+        loadingTask = getDocument(data);
+        pdfDoc = await loadingTask.promise;
+        expect(pdfDoc.numPages).toEqual(3);
+
+        for (const [pageNum, expected] of [
+          [1, "1"],
+          [2, "2"],
+          [3, "3"],
+        ]) {
+          const pdfPage = await pdfDoc.getPage(pageNum);
+          const { items } = await pdfPage.getTextContent();
+          expect(mergeText(items))
+            .withContext(`Page ${pageNum}`)
+            .toEqual(expected);
+        }
+
+        await loadingTask.destroy();
+      });
+
+      it("insertAfter shifts sequential pageInfos across multiple entries", async function () {
+        // Two separate sequential pageInfos (pages 1 and 3, 0-based) form
+        // the base sequence at positions 0 and 1.  Page 2 is inserted after
+        // base position 0, so both sequential entries should be shifted and
+        // the final order should be: "1" · "2" · "3".
+        let loadingTask = getDocument(
+          buildGetDocumentParams("page_with_number.pdf")
+        );
+        let pdfDoc = await loadingTask.promise;
+        const data = await pdfDoc.extractPages([
+          { document: null, includePages: [0] },
+          { document: null, includePages: [2] },
+          { document: null, includePages: [1], insertAfter: 0 },
+        ]);
+        await loadingTask.destroy();
+
+        loadingTask = getDocument(data);
+        pdfDoc = await loadingTask.promise;
+        expect(pdfDoc.numPages).toEqual(3);
+
+        for (const [pageNum, expected] of [
+          [1, "1"],
+          [2, "2"],
+          [3, "3"],
+        ]) {
+          const pdfPage = await pdfDoc.getPage(pageNum);
+          const { items } = await pdfPage.getTextContent();
+          expect(mergeText(items))
+            .withContext(`Page ${pageNum}`)
+            .toEqual(expected);
+        }
+
+        await loadingTask.destroy();
+      });
+
+      it("insertAfter without includePages inserts all pages", async function () {
+        // Sequential pageInfo uses pages 0–5 ("1"–"6", base positions 0–5).
+        // The insertAfter pageInfo has no includePages so all 17 pages are
+        // inserted after base position 4, landing between "5" and "6".
+        // Final order: "1"·"2"·"3"·"4"·"5" · "1"…"17" · "6" = 23 pages.
+        let loadingTask = getDocument(
+          buildGetDocumentParams("page_with_number.pdf")
+        );
+        let pdfDoc = await loadingTask.promise;
+        const data = await pdfDoc.extractPages([
+          { document: null, includePages: [0, 1, 2, 3, 4, 5] },
+          { document: null, insertAfter: 4 },
+        ]);
+        await loadingTask.destroy();
+
+        loadingTask = getDocument(data);
+        pdfDoc = await loadingTask.promise;
+        expect(pdfDoc.numPages).toEqual(23);
+
+        // Last page of the first sequential chunk.
+        let pdfPage = await pdfDoc.getPage(5);
+        let { items } = await pdfPage.getTextContent();
+        expect(mergeText(items)).withContext("Page 5").toEqual("5");
+
+        // First and last of the 17 inserted pages.
+        pdfPage = await pdfDoc.getPage(6);
+        ({ items } = await pdfPage.getTextContent());
+        expect(mergeText(items)).withContext("Page 6").toEqual("1");
+
+        pdfPage = await pdfDoc.getPage(22);
+        ({ items } = await pdfPage.getTextContent());
+        expect(mergeText(items)).withContext("Page 22").toEqual("17");
+
+        // Sequential page "6" shifted to the end.
+        pdfPage = await pdfDoc.getPage(23);
+        ({ items } = await pdfPage.getTextContent());
+        expect(mergeText(items)).withContext("Page 23").toEqual("6");
+
+        await loadingTask.destroy();
+      });
     });
   });
 });

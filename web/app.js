@@ -375,6 +375,7 @@ const PDFViewerApplication = {
         enableGuessAltText: x => x === "true",
         enableNewBadge: x => x === "true",
         enablePermissions: x => x === "true",
+        enableMerge: x => x === "true",
         enableSplitMerge: x => x === "true",
         enableUpdatedAddImage: x => x === "true",
         highlightEditorColors: x => x,
@@ -461,6 +462,7 @@ const PDFViewerApplication = {
           foreground: AppOptions.get("pageColorsForeground"),
         }
       : null;
+    const enableMerge = AppOptions.get("enableMerge");
     const enableSplitMerge = AppOptions.get("enableSplitMerge");
 
     let altTextManager;
@@ -601,11 +603,13 @@ const PDFViewerApplication = {
         pageColors,
         abortSignal,
         enableSplitMerge,
+        enableMerge,
         enableNewBadge: AppOptions.get("enableNewBadge"),
         statusBar: viewsManager.viewsManagerStatusBar,
         undoBar: viewsManager.viewsManagerUndoBar,
         manageMenu: viewsManager.manageMenu,
-        addFileButton: viewsManager.viewsManagerAddFileButton,
+        waitingBar: viewsManager.viewsManagerWaitingBar,
+        addFileComponent: viewsManager.viewsManagerAddFile,
       });
       renderingQueue.setThumbnailViewer(this.pdfThumbnailViewer);
     }
@@ -765,6 +769,7 @@ const PDFViewerApplication = {
         elements: appConfig.viewsManager,
         eventBus,
         l10n,
+        enableMerge,
         enableSplitMerge,
         globalAbortSignal: abortSignal,
       });
@@ -2217,6 +2222,7 @@ const PDFViewerApplication = {
     }
     eventBus._on("pagesedited", this.onPagesEdited.bind(this), opts);
     eventBus._on("saveextractedpages", this.onSavePages.bind(this), opts);
+    eventBus._on("saveandload", this.onSaveAndLoad.bind(this), opts);
   },
 
   bindWindowEvents() {
@@ -2417,6 +2423,23 @@ const PDFViewerApplication = {
       this._downloadUrl,
       this._docFilename
     );
+  },
+
+  async onSaveAndLoad({ data: extractParams }) {
+    if (!this.pdfDocument) {
+      return;
+    }
+    const modifiedPdfBytes = await this.pdfDocument.extractPages(extractParams);
+    if (!modifiedPdfBytes) {
+      console.error(
+        "Something wrong happened when saving the edited PDF.\nPlease file a bug."
+      );
+      return;
+    }
+    this.open({
+      data: modifiedPdfBytes,
+      filename: this._docFilename,
+    });
   },
 
   _accumulateTicks(ticks, prop) {

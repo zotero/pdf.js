@@ -355,8 +355,6 @@
       }
 
       #viewsManagerAddFileButton {
-        visibility: hidden;
-
         background: var(--button-no-bg);
         width: 32px;
         height: 32px;
@@ -368,6 +366,10 @@
         &::before {
           mask-repeat: no-repeat;
           mask-image: var(--views-manager-add-file-button-icon);
+        }
+
+        > input {
+          display: none;
         }
       }
 
@@ -388,17 +390,21 @@
     }
 
     #viewsManagerStatus {
-      display: flex;
-      align-items: center;
-      align-self: stretch;
-      justify-content: space-between;
-      width: auto;
+      display: grid;
+      width: 100%;
       border: 1px solid var(--status-border-color);
 
       > div {
         min-height: 64px;
         width: 100%;
         padding-inline: 16px;
+        grid-area: 1 / 1;
+        box-sizing: border-box;
+
+        &.hidden {
+          visibility: hidden;
+          display: unset !important;
+        }
       }
 
       .viewsManagerStatusLabel {

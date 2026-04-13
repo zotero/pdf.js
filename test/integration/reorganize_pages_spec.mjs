@@ -40,6 +40,9 @@ import {
   waitForTextToBe,
   waitForTooltipToBe,
 } from "./test_utils.mjs";
+import path from "path";
+
+const __dirname = import.meta.dirname;
 
 async function waitForThumbnailVisible(page, pageNums) {
   await showViewsManager(page);
@@ -3026,6 +3029,70 @@ describe("Reorganize Pages View", () => {
               .withContext(`In ${browserName}, after undo #${i + 1}`)
               .toBe(1);
           }
+        })
+      );
+    });
+  });
+
+  describe("Merge PDF", () => {
+    let pages;
+
+    beforeEach(async () => {
+      pages = await loadAndWait(
+        "three_pages_with_number.pdf",
+        "#viewsManagerToggleButton",
+        "1",
+        null,
+        { enableSplitMerge: true, enableMerge: true }
+      );
+    });
+
+    afterEach(async () => {
+      await closePages(pages);
+    });
+
+    it("should merge a PDF after the current page", async () => {
+      await Promise.all(
+        pages.map(async ([browserName, page]) => {
+          await waitForThumbnailVisible(page, 1);
+
+          // Navigate to page 2 so the merged PDF is inserted after it.
+          await page.evaluate(() => {
+            window.PDFViewerApplication.page = 2;
+          });
+          await page.waitForFunction(
+            () => window.PDFViewerApplication.page === 2
+          );
+          await waitAndClick(page, getThumbnailSelector(2));
+
+          const handleMerged = await createPromise(page, resolve => {
+            window.PDFViewerApplication.eventBus._on(
+              "thumbnailsloaded",
+              resolve,
+              { once: true }
+            );
+          });
+
+          const picker = await page.$("#viewsManagerAddFilePicker");
+          await picker.uploadFile(
+            path.join(__dirname, "../pdfs/three_pages_with_number.pdf")
+          );
+          await awaitPromise(handleMerged);
+
+          // Original 3 pages + 3 merged pages = 6 pages total.
+          await page.waitForFunction(
+            () => parseInt(document.getElementById("pageNumber").max, 10) === 6
+          );
+
+          // Pages 1–2 come from the original document, then all 3 pages of
+          // the merged PDF, then pages 4–6 of the original shifted to the end.
+          await waitForHavingContents(page, [1, 2, 1, 2, 3, 3]);
+
+          await waitForTextToBe(
+            page,
+            "#viewsManagerStatusActionLabel",
+            `${FSI}3${PDI} selected`
+          );
         })
       );
     });

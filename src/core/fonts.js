@@ -21,6 +21,7 @@ import {
   info,
   shadow,
   string32,
+  stringToBytes,
   warn,
 } from "../shared/util.js";
 import { CFFCompiler, CFFParser } from "./cff_parser.js";
@@ -741,13 +742,13 @@ function createCmapTable(glyphs, toUnicodeExtraMap, numGlyphs) {
       string32(format31012.length / 12); // nGroups
   }
 
-  return (
+  return stringToBytes(
     cmap +
-    "\x00\x04" + // format
-    string16(format314.length + 4) + // length
-    format314 +
-    header31012 +
-    format31012
+      "\x00\x04" + // format
+      string16(format314.length + 4) + // length
+      format314 +
+      header31012 +
+      format31012
   );
 }
 
@@ -995,8 +996,7 @@ function createNameTable(name, proto) {
     }
   }
 
-  nameTable += strings.join("") + stringsUnicode.join("");
-  return nameTable;
+  return stringToBytes(nameTable + strings.join("") + stringsUnicode.join(""));
 }
 
 /**

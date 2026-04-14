@@ -63,15 +63,7 @@ class OpenTypeFileBuilder {
     // write the table data first (mostly for checksum)
     for (let i = 0; i < numTables; i++) {
       const table = tables.get(tablesNames[i]);
-      let tableOffset = tableOffsets[i];
-
-      if (table instanceof Uint8Array) {
-        file.set(table, tableOffset);
-      } else if (typeof table === "string") {
-        for (let j = 0, jj = table.length; j < jj; j++) {
-          file[tableOffset++] = table.charCodeAt(j) & 0xff;
-        }
-      }
+      file.set(table, tableOffsets[i]);
     }
 
     // sfnt version (4 bytes)

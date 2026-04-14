@@ -19,7 +19,6 @@ import {
   createValidAbsoluteUrl,
   getModificationDate,
   getUuid,
-  string32,
   stringToBytes,
   stringToPDFString,
 } from "../../src/shared/util.js";
@@ -69,14 +68,6 @@ describe("util", function () {
       const string = "a".repeat(length);
 
       expect(bytesToString(bytes)).toEqual(string);
-    });
-  });
-
-  describe("string32", function () {
-    it("converts unsigned 32-bit integers to strings", function () {
-      expect(string32(0x74727565)).toEqual("true");
-      expect(string32(0x74797031)).toEqual("typ1");
-      expect(string32(0x4f54544f)).toEqual("OTTO");
     });
   });
 

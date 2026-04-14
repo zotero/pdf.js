@@ -596,21 +596,6 @@ function stringToBytes(str) {
   return bytes;
 }
 
-function string32(value) {
-  if (typeof PDFJSDev === "undefined" || PDFJSDev.test("TESTING")) {
-    assert(
-      typeof value === "number" && Math.abs(value) < 2 ** 32,
-      `string32: Unexpected input "${value}".`
-    );
-  }
-  return String.fromCharCode(
-    (value >> 24) & 0xff,
-    (value >> 16) & 0xff,
-    (value >> 8) & 0xff,
-    value & 0xff
-  );
-}
-
 function objectSize(obj) {
   return Object.keys(obj).length;
 }
@@ -1347,7 +1332,6 @@ export {
   ResponseException,
   setVerbosityLevel,
   shadow,
-  string32,
   stringToBytes,
   stringToPDFString,
   stringToUTF8String,

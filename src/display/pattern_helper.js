@@ -15,6 +15,7 @@
 
 import { drawMeshWithGPU, isGPUReady, loadMeshShader } from "./webgpu.js";
 import { FormatError, info, unreachable, Util } from "../shared/util.js";
+import { CanvasNestedDependencyTracker } from "./canvas_dependency_tracker.js";
 import { getCurrentTransform } from "./display_utils.js";
 
 const PathType = {
@@ -651,6 +652,14 @@ class TilingPattern {
   drawPattern(owner, path, useEOFill = false, [n, m], opIdx) {
     const [x0, y0, x1, y1] = this.bbox;
 
+    const dependencyTracker = owner.dependencyTracker;
+    if (dependencyTracker) {
+      owner.dependencyTracker = new CanvasNestedDependencyTracker(
+        dependencyTracker,
+        opIdx
+      );
+    }
+
     owner.save();
     if (useEOFill) {
       owner.ctx.clip(path, "evenodd");
@@ -695,6 +704,9 @@ class TilingPattern {
     }
 
     owner.restore();
+    if (dependencyTracker) {
+      owner.dependencyTracker = dependencyTracker;
+    }
   }
 
   createPatternCanvas(owner, opIdx) {

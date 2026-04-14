@@ -1625,6 +1625,8 @@ class CanvasGraphics {
     let needRestore = false;
     const intersect = this.current.getClippedPathBoundingBox();
 
+    this.dependencyTracker?.recordDependencies(opIdx, Dependencies.fill);
+
     if (isPatternFill) {
       const dims = this.current.tilingPatternDims;
       const tileIdx = dims && fillColor.canSkipPatternCanvas(dims);
@@ -1669,8 +1671,6 @@ class CanvasGraphics {
         ctx.fill(path);
       }
     }
-
-    this.dependencyTracker?.recordDependencies(opIdx, Dependencies.fill);
 
     if (needRestore) {
       ctx.restore();

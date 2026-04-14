@@ -302,16 +302,6 @@ function writeUint32(bytes, index, value) {
   bytes[index] = value >>> 24;
 }
 
-function string16(value) {
-  if (typeof PDFJSDev === "undefined" || PDFJSDev.test("TESTING")) {
-    assert(
-      typeof value === "number" && Math.abs(value) < 2 ** 16,
-      `string16: Unexpected input "${value}".`
-    );
-  }
-  return String.fromCharCode((value >> 8) & 0xff, value & 0xff);
-}
-
 class TrueTypeTableBuilder {
   #buf;
 
@@ -1019,9 +1009,7 @@ function createPostscriptName(name) {
 }
 
 function createNameTable(name, proto) {
-  if (!proto) {
-    proto = [[], []]; // no strings and unicode strings
-  }
+  proto ||= [[], []]; // no strings and unicode strings
 
   const strings = [
     proto[0][0] || "Original licence", // 0.Copyright
@@ -1035,51 +1023,85 @@ function createNameTable(name, proto) {
     proto[0][8] || "Unknown", // 8.Manufacturer
     proto[0][9] || "Unknown", // 9.Designer
   ];
+  const stringsBytes = strings.map(s => stringToBytes(s));
 
   // Mac want 1-byte per character strings while Windows want
   // 2-bytes per character, so duplicate the names table
-  const stringsUnicode = [];
+  const stringsUnicodeBytes = new Array(strings.length);
   let i, ii, j, jj, str;
   for (i = 0, ii = strings.length; i < ii; i++) {
     str = proto[1][i] || strings[i];
 
-    const strBufUnicode = [];
+    const strUnicode = new TrueTypeTableBuilder({
+      exactLength: str.length * 2,
+    });
     for (j = 0, jj = str.length; j < jj; j++) {
-      strBufUnicode.push(string16(str.charCodeAt(j)));
+      strUnicode.setInt16(str.charCodeAt(j));
     }
-    stringsUnicode.push(strBufUnicode.join(""));
+    stringsUnicodeBytes[i] = strUnicode.data;
   }
 
-  const names = [strings, stringsUnicode];
-  const platforms = ["\x00\x01", "\x00\x03"];
-  const encodings = ["\x00\x00", "\x00\x01"];
-  const languages = ["\x00\x00", "\x04\x09"];
-
-  const namesRecordCount = strings.length * platforms.length;
-  let nameTable =
-    "\x00\x00" + // format
-    string16(namesRecordCount) + // Number of names Record
-    string16(namesRecordCount * 12 + 6); // Storage
+  const namesBytes = [stringsBytes, stringsUnicodeBytes];
+  const platformsBytes = [
+    [0x00, 0x01],
+    [0x00, 0x03],
+  ];
+  const encodingsBytes = [
+    [0x00, 0x00],
+    [0x00, 0x01],
+  ];
+  const languagesBytes = [
+    [0x00, 0x00],
+    [0x04, 0x09],
+  ];
 
   // Build the name records field
+  const nameRecords = [];
   let strOffset = 0;
-  for (i = 0, ii = platforms.length; i < ii; i++) {
-    const strs = names[i];
+  for (i = 0, ii = platformsBytes.length; i < ii; i++) {
+    const strs = namesBytes[i];
     for (j = 0, jj = strs.length; j < jj; j++) {
       str = strs[j];
-      const nameRecord =
-        platforms[i] + // platform ID
-        encodings[i] + // encoding ID
-        languages[i] + // language ID
-        string16(j) + // name ID
-        string16(str.length) +
-        string16(strOffset);
-      nameTable += nameRecord;
+      const nameRecord = new TrueTypeTableBuilder({
+        exactLength:
+          6 +
+          platformsBytes[i].length +
+          encodingsBytes[i].length +
+          languagesBytes[i].length,
+      });
+      nameRecord.setArray(platformsBytes[i]); // platform ID
+      nameRecord.setArray(encodingsBytes[i]); // encoding ID
+      nameRecord.setArray(languagesBytes[i]); // language ID
+      nameRecord.setInt16(j); // name ID
+      nameRecord.setInt16(str.length);
+      nameRecord.setInt16(strOffset);
+
+      nameRecords.push(nameRecord.data);
       strOffset += str.length;
     }
   }
 
-  return stringToBytes(nameTable + strings.join("") + stringsUnicode.join(""));
+  const namesRecordCount = stringsBytes.length * platformsBytes.length;
+  const nameTable = new TrueTypeTableBuilder({
+    exactLength:
+      6 +
+      Math.sumPrecise(nameRecords.map(arr => arr.length)) +
+      Math.sumPrecise(stringsBytes.map(arr => arr.length)) +
+      Math.sumPrecise(stringsUnicodeBytes.map(arr => arr.length)),
+  });
+  nameTable.skip(2); // format, skip redundant "\x00\x00"
+  nameTable.setInt16(namesRecordCount); // Number of names Record
+  nameTable.setInt16(namesRecordCount * 12 + 6); // Storage
+  for (const arr of nameRecords) {
+    nameTable.setArray(arr);
+  }
+  for (const arr of stringsBytes) {
+    nameTable.setArray(arr);
+  }
+  for (const arr of stringsUnicodeBytes) {
+    nameTable.setArray(arr);
+  }
+  return nameTable.data;
 }
 
 /**

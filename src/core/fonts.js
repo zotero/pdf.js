@@ -20,7 +20,6 @@ import {
   FormatError,
   info,
   shadow,
-  string32,
   stringToBytes,
   warn,
 } from "../shared/util.js";
@@ -689,12 +688,13 @@ function getRanges(glyphs, toUnicodeExtraMap, numGlyphs) {
 function createCmapTable(glyphs, toUnicodeExtraMap, numGlyphs) {
   const ranges = getRanges(glyphs, toUnicodeExtraMap, numGlyphs);
   const numTables = ranges.at(-1)[1] > 0xffff ? 2 : 1;
-  let cmap =
-    "\x00\x00" + // version
-    string16(numTables) + // numTables
-    "\x00\x03" + // platformID
-    "\x00\x01" + // encodingID
-    string32(4 + numTables * 8); // start of the table record
+
+  const cmap = new TrueTypeTableBuilder({ exactLength: 12 });
+  cmap.skip(2); // version, skip redundant "\x00\x00"
+  cmap.setInt16(numTables); // numTables
+  cmap.setArray([0x00, 0x03]); // platformID
+  cmap.setArray([0x00, 0x01]); // encodingID
+  cmap.setInt32(4 + numTables * 8); // start of the table record
 
   let i, ii, j, jj;
   for (i = ranges.length - 1; i >= 0; --i) {
@@ -712,11 +712,11 @@ function createCmapTable(glyphs, toUnicodeExtraMap, numGlyphs) {
   const searchParams = OpenTypeFileBuilder.getSearchParams(segCount, 2);
 
   // Fill up the 4 parallel arrays describing the segments.
-  let startCount = "";
-  let endCount = "";
-  let idDeltas = "";
-  let idRangeOffsets = "";
-  let glyphsIds = "";
+  const startCount = new TrueTypeTableBuilder({}),
+    endCount = new TrueTypeTableBuilder({}),
+    idDeltas = new TrueTypeTableBuilder({}),
+    idRangeOffsets = new TrueTypeTableBuilder({}),
+    glyphsIds = new TrueTypeTableBuilder({});
   let bias = 0;
 
   let range, start, end, codes;
@@ -724,8 +724,8 @@ function createCmapTable(glyphs, toUnicodeExtraMap, numGlyphs) {
     range = ranges[i];
     start = range[0];
     end = range[1];
-    startCount += string16(start);
-    endCount += string16(end);
+    startCount.setInt16(start);
+    endCount.setInt16(end);
     codes = range[2];
     let contiguous = true;
     for (j = 1, jj = codes.length; j < jj; ++j) {
@@ -738,48 +738,58 @@ function createCmapTable(glyphs, toUnicodeExtraMap, numGlyphs) {
       const offset = (segCount - i) * 2 + bias * 2;
       bias += end - start + 1;
 
-      idDeltas += string16(0);
-      idRangeOffsets += string16(offset);
+      idDeltas.skip(2); // Skip redundant "\x00\x00"
+      idRangeOffsets.setInt16(offset);
 
       for (j = 0, jj = codes.length; j < jj; ++j) {
-        glyphsIds += string16(codes[j]);
+        glyphsIds.setInt16(codes[j]);
       }
     } else {
       const startCode = codes[0];
 
-      idDeltas += string16((startCode - start) & 0xffff);
-      idRangeOffsets += string16(0);
+      idDeltas.setInt16((startCode - start) & 0xffff);
+      idRangeOffsets.skip(2); // Skip redundant "\x00\x00"
     }
   }
 
   if (trailingRangesCount > 0) {
-    endCount += "\xFF\xFF";
-    startCount += "\xFF\xFF";
-    idDeltas += "\x00\x01";
-    idRangeOffsets += "\x00\x00";
+    endCount.setArray([0xff, 0xff]);
+    startCount.setArray([0xff, 0xff]);
+    idDeltas.setArray([0x00, 0x01]);
+    idRangeOffsets.skip(2); // Skip redundant "\x00\x00"
   }
 
-  const format314 =
-    "\x00\x00" + // language
-    string16(2 * segCount) +
-    string16(searchParams.range) +
-    string16(searchParams.entry) +
-    string16(searchParams.rangeShift) +
-    endCount +
-    "\x00\x00" +
-    startCount +
-    idDeltas +
-    idRangeOffsets +
-    glyphsIds;
+  const format314 = new TrueTypeTableBuilder({
+    exactLength:
+      12 +
+      startCount.length +
+      endCount.length +
+      idDeltas.length +
+      idRangeOffsets.length +
+      glyphsIds.length,
+  });
+  format314.skip(2); // language, skip redundant "\x00\x00"
+  format314.setInt16(2 * segCount);
+  format314.setInt16(searchParams.range);
+  format314.setInt16(searchParams.entry);
+  format314.setInt16(searchParams.rangeShift);
+  format314.setArray(endCount.data);
+  format314.skip(2); // Skip redundant "\x00\x00"
+  format314.setArray(startCount.data);
+  format314.setArray(idDeltas.data);
+  format314.setArray(idRangeOffsets.data);
+  format314.setArray(glyphsIds.data);
 
-  let format31012 = "";
-  let header31012 = "";
+  let cmap31012 = null,
+    format31012 = null,
+    header31012 = null;
   if (numTables > 1) {
-    cmap +=
-      "\x00\x03" + // platformID
-      "\x00\x0A" + // encodingID
-      string32(4 + numTables * 8 + 4 + format314.length); // start of the table record
-    format31012 = "";
+    cmap31012 = new TrueTypeTableBuilder({ exactLength: 8 });
+    cmap31012.setArray([0x00, 0x03]); // platformID
+    cmap31012.setArray([0x00, 0x0a]); // encodingID
+    cmap31012.setInt32(4 + numTables * 8 + 4 + format314.length); // start of the table record
+
+    format31012 = new TrueTypeTableBuilder({});
     for (i = 0, ii = ranges.length; i < ii; i++) {
       range = ranges[i];
       start = range[0];
@@ -788,35 +798,43 @@ function createCmapTable(glyphs, toUnicodeExtraMap, numGlyphs) {
       for (j = 1, jj = codes.length; j < jj; ++j) {
         if (codes[j] !== codes[j - 1] + 1) {
           end = range[0] + j - 1;
-          format31012 +=
-            string32(start) + // startCharCode
-            string32(end) + // endCharCode
-            string32(code); // startGlyphID
+          format31012.setInt32(start); // startCharCode
+          format31012.setInt32(end); // endCharCode
+          format31012.setInt32(code); // startGlyphID
           start = end + 1;
           code = codes[j];
         }
       }
-      format31012 +=
-        string32(start) + // startCharCode
-        string32(range[1]) + // endCharCode
-        string32(code); // startGlyphID
+      format31012.setInt32(start); // startCharCode
+      format31012.setInt32(range[1]); // endCharCode
+      format31012.setInt32(code); // startGlyphID
     }
-    header31012 =
-      "\x00\x0C" + // format
-      "\x00\x00" + // reserved
-      string32(format31012.length + 16) + // length
-      "\x00\x00\x00\x00" + // language
-      string32(format31012.length / 12); // nGroups
+
+    header31012 = new TrueTypeTableBuilder({ exactLength: 16 });
+    header31012.setArray([0x00, 0x0c]); // format
+    header31012.skip(2); // reserved, skip redundant "\x00\x00"
+    header31012.setInt32(format31012.length + 16); // length
+    header31012.skip(4); // language, skip redundant "\x00\x00\x00\x00"
+    header31012.setInt32(format31012.length / 12); // nGroups
   }
 
-  return stringToBytes(
-    cmap +
-      "\x00\x04" + // format
-      string16(format314.length + 4) + // length
-      format314 +
-      header31012 +
-      format31012
-  );
+  const table = new TrueTypeTableBuilder({
+    exactLength:
+      4 +
+      cmap.length +
+      (cmap31012?.length ?? 0) +
+      format314.length +
+      (header31012?.length ?? 0) +
+      (format31012?.length ?? 0),
+  });
+  table.setArray(cmap.data);
+  table.setArray(cmap31012?.data ?? []);
+  table.setArray([0x00, 0x04]); // format
+  table.setInt16(format314.length + 4); // length
+  table.setArray(format314.data);
+  table.setArray(header31012?.data ?? []);
+  table.setArray(format31012?.data ?? []);
+  return table.data;
 }
 
 function validateOS2Table(os2, file) {

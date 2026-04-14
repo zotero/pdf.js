@@ -21,6 +21,7 @@ import {
   info,
   shadow,
   string32,
+  stringToBytes,
   warn,
 } from "../shared/util.js";
 import { CFFCompiler, CFFParser } from "./cff_parser.js";
@@ -338,6 +339,17 @@ function setSafeInt16(view, pos, val) {
   // clamp value to the 16-bit int range
   view.setInt16(pos, MathClamp(val, -0x8000, 0x7fff));
   return pos + 2;
+}
+
+function setInt32(view, pos, val) {
+  if (typeof PDFJSDev === "undefined" || PDFJSDev.test("TESTING")) {
+    assert(
+      typeof val === "number" && Math.abs(val) < 2 ** 32,
+      `setInt32: Unexpected input "${val}".`
+    );
+  }
+  view.setInt32(pos, val);
+  return pos + 4;
 }
 
 function isTrueTypeFile(file) {
@@ -730,13 +742,13 @@ function createCmapTable(glyphs, toUnicodeExtraMap, numGlyphs) {
       string32(format31012.length / 12); // nGroups
   }
 
-  return (
+  return stringToBytes(
     cmap +
-    "\x00\x04" + // format
-    string16(format314.length + 4) + // length
-    format314 +
-    header31012 +
-    format31012
+      "\x00\x04" + // format
+      string16(format314.length + 4) + // length
+      format314 +
+      header31012 +
+      format31012
   );
 }
 
@@ -844,62 +856,78 @@ function createOS2Table(properties, charstrings, override) {
   const winAscent = override.yMax || typoAscent;
   const winDescent = -override.yMin || -typoDescent;
 
-  return (
-    "\x00\x03" + // version
-    "\x02\x24" + // xAvgCharWidth
-    "\x01\xF4" + // usWeightClass
-    "\x00\x05" + // usWidthClass
-    "\x00\x00" + // fstype (0 to let the font loads via font-face on IE)
-    "\x02\x8A" + // ySubscriptXSize
-    "\x02\xBB" + // ySubscriptYSize
-    "\x00\x00" + // ySubscriptXOffset
-    "\x00\x8C" + // ySubscriptYOffset
-    "\x02\x8A" + // ySuperScriptXSize
-    "\x02\xBB" + // ySuperScriptYSize
-    "\x00\x00" + // ySuperScriptXOffset
-    "\x01\xDF" + // ySuperScriptYOffset
-    "\x00\x31" + // yStrikeOutSize
-    "\x01\x02" + // yStrikeOutPosition
-    "\x00\x00" + // sFamilyClass
-    "\x00\x00\x06" +
-    String.fromCharCode(properties.fixedPitch ? 0x09 : 0x00) +
-    "\x00\x00\x00\x00\x00\x00" + // Panose
-    string32(ulUnicodeRange1) + // ulUnicodeRange1 (Bits 0-31)
-    string32(ulUnicodeRange2) + // ulUnicodeRange2 (Bits 32-63)
-    string32(ulUnicodeRange3) + // ulUnicodeRange3 (Bits 64-95)
-    string32(ulUnicodeRange4) + // ulUnicodeRange4 (Bits 96-127)
-    "\x2A\x32\x31\x2A" + // achVendID
-    string16(properties.italicAngle ? 1 : 0) + // fsSelection
-    string16(firstCharIndex || properties.firstChar) + // usFirstCharIndex
-    string16(lastCharIndex || properties.lastChar) + // usLastCharIndex
-    string16(typoAscent) + // sTypoAscender
-    string16(typoDescent) + // sTypoDescender
-    "\x00\x64" + // sTypoLineGap (7%-10% of the unitsPerEM value)
-    string16(winAscent) + // usWinAscent
-    string16(winDescent) + // usWinDescent
-    "\x00\x00\x00\x00" + // ulCodePageRange1 (Bits 0-31)
-    "\x00\x00\x00\x00" + // ulCodePageRange2 (Bits 32-63)
-    string16(properties.xHeight) + // sxHeight
-    string16(properties.capHeight) + // sCapHeight
-    string16(0) + // usDefaultChar
-    string16(firstCharIndex || properties.firstChar) + // usBreakChar
-    "\x00\x03" // usMaxContext
-  );
+  const data = new Uint8Array(96),
+    view = new DataView(data.buffer);
+  let pos = 0;
+
+  pos = setArray(data, pos, [0x00, 0x03]); // version
+  pos = setArray(data, pos, [0x02, 0x24]); // xAvgCharWidth
+  pos = setArray(data, pos, [0x01, 0xf4]); // usWeightClass
+  pos = setArray(data, pos, [0x00, 0x05]); // usWidthClass
+  pos += 2; // fstype (0 to improve browser compatibility), skip redundant "\x00\x00"
+  pos = setArray(data, pos, [0x02, 0x8a]); // ySubscriptXSize
+  pos = setArray(data, pos, [0x02, 0xbb]); // ySubscriptYSize
+  pos += 2; // ySubscriptXOffset, skip redundant "\x00\x00"
+  pos = setArray(data, pos, [0x00, 0x8c]); // ySubscriptYOffset
+  pos = setArray(data, pos, [0x02, 0x8a]); // ySuperScriptXSize
+  pos = setArray(data, pos, [0x02, 0xbb]); // ySuperScriptYSize
+  pos += 2; // ySuperScriptXOffset, skip redundant "\x00\x00"
+  pos = setArray(data, pos, [0x01, 0xdf]); // ySuperScriptYOffset
+  pos = setArray(data, pos, [0x00, 0x31]); // yStrikeOutSize
+  pos = setArray(data, pos, [0x01, 0x02]); // yStrikeOutPosition
+  pos += 2; // sFamilyClass, skip redundant "\x00\x00"
+  pos = setArray(data, pos, [
+    0x00,
+    0x00,
+    0x06,
+    properties.fixedPitch ? 0x09 : 0x00,
+    0x00,
+    0x00,
+    0x00,
+    0x00,
+    0x00,
+    0x00,
+  ]); // Panose
+  pos = setInt32(view, pos, ulUnicodeRange1); // ulUnicodeRange1 (Bits 0-31)
+  pos = setInt32(view, pos, ulUnicodeRange2); // ulUnicodeRange2 (Bits 32-63)
+  pos = setInt32(view, pos, ulUnicodeRange3); // ulUnicodeRange3 (Bits 64-95)
+  pos = setInt32(view, pos, ulUnicodeRange4); // ulUnicodeRange4 (Bits 96-127)
+  pos = setArray(data, pos, [0x2a, 0x32, 0x31, 0x2a]); // achVendID
+  pos = setInt16(view, pos, properties.italicAngle ? 1 : 0); // fsSelection
+  pos = setInt16(view, pos, firstCharIndex || properties.firstChar); // usFirstCharIndex
+  pos = setInt16(view, pos, lastCharIndex || properties.lastChar); // usLastCharIndex
+  pos = setInt16(view, pos, typoAscent); // sTypoAscender
+  pos = setInt16(view, pos, typoDescent); // sTypoDescender
+  pos = setArray(data, pos, [0x00, 0x64]); // sTypoLineGap (7%-10% of the unitsPerEM value)
+  pos = setInt16(view, pos, winAscent); // usWinAscent
+  pos = setInt16(view, pos, winDescent); // usWinDescent
+  pos += 4; // ulCodePageRange1 (Bits 0-31), skip redundant "\x00\x00\x00\x00"
+  pos += 4; // ulCodePageRange2 (Bits 32-63), skip redundant "\x00\x00\x00\x00"
+  pos = setInt16(view, pos, properties.xHeight); // sxHeight
+  pos = setInt16(view, pos, properties.capHeight); // sCapHeight
+  pos += 2; // usDefaultChar, skip redundant "\x00\x00"
+  pos = setInt16(view, pos, firstCharIndex || properties.firstChar); // usBreakChar
+  setArray(data, pos, [0x00, 0x03]); // usMaxContext
+
+  return data;
 }
 
 function createPostTable(properties) {
-  const angle = Math.floor(properties.italicAngle * 2 ** 16);
-  return (
-    "\x00\x03\x00\x00" + // Version number
-    string32(angle) + // italicAngle
-    "\x00\x00" + // underlinePosition
-    "\x00\x00" + // underlineThickness
-    string32(properties.fixedPitch ? 1 : 0) + // isFixedPitch
-    "\x00\x00\x00\x00" + // minMemType42
-    "\x00\x00\x00\x00" + // maxMemType42
-    "\x00\x00\x00\x00" + // minMemType1
-    "\x00\x00\x00\x00" // maxMemType1
-  );
+  const data = new Uint8Array(32),
+    view = new DataView(data.buffer);
+  let pos = 0;
+
+  pos = setArray(data, pos, [0x00, 0x03, 0x00, 0x00]); // Version number
+  pos = setInt32(view, pos, Math.floor(properties.italicAngle * 2 ** 16)); // italicAngle
+  pos += 2; // underlinePosition, skip redundant "\x00\x00"
+  pos += 2; // underlineThickness, skip redundant "\x00\x00"
+  setInt32(view, pos, properties.fixedPitch ? 1 : 0); // isFixedPitch
+  // minMemType42, skip redundant "\x00\x00\x00\x00"
+  // maxMemType42, skip redundant "\x00\x00\x00\x00"
+  // minMemType1, skip redundant "\x00\x00\x00\x00"
+  // maxMemType1, skip redundant "\x00\x00\x00\x00"
+
+  return data;
 }
 
 function createPostscriptName(name) {
@@ -968,8 +996,7 @@ function createNameTable(name, proto) {
     }
   }
 
-  nameTable += strings.join("") + stringsUnicode.join("");
-  return nameTable;
+  return stringToBytes(nameTable + strings.join("") + stringsUnicode.join(""));
 }
 
 /**

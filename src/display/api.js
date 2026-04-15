@@ -967,8 +967,9 @@ class PDFDocumentProxy {
   }
 
   /**
-   * @returns {Promise<Uint8Array>} A promise that is resolved with a
-   *   {Uint8Array} containing the full data of the saved document.
+   * @returns {Promise<Uint8Array<ArrayBuffer>>} A promise that is
+   *   resolved with a {Uint8Array<ArrayBuffer>} containing the
+   *   full data of the saved document.
    */
   saveDocument() {
     return this._transport.saveDocument();

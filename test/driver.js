@@ -480,6 +480,20 @@ class Rasterize {
  * @property {HTMLDivElement} end - Container for a completion message.
  */
 
+function buffersEqual(a, b) {
+  if (a.byteLength !== b.byteLength) {
+    return false;
+  }
+  const v1 = new Uint8Array(a);
+  const v2 = new Uint8Array(b);
+  for (let i = 0; i < v1.length; i++) {
+    if (v1[i] !== v2[i]) {
+      return false;
+    }
+  }
+  return true;
+}
+
 class Driver {
   /**
    * @param {DriverOptions} options
@@ -508,6 +522,11 @@ class Driver {
     this.masterMode = params.get("mastermode") === "true";
     this.sessionIndex = parseInt(params.get("sessionindex") || "0", 10);
     this.sessionCount = parseInt(params.get("sessioncount") || "1", 10);
+
+    // Open a persistent WebSocket connection to the server for binary result
+    // submission.
+    this.ws = new WebSocket(`ws://${location.host}`);
+    this.ws.binaryType = "arraybuffer";
 
     // Create a working canvas
     this.canvas = document.createElement("canvas");
@@ -538,6 +557,11 @@ class Driver {
     // When gathering the stats the numbers seem to be more reliable
     // if the browser is given more time to start.
     setTimeout(async () => {
+      if (this.ws.readyState !== WebSocket.OPEN) {
+        await new Promise(resolve => {
+          this.ws.addEventListener("open", resolve, { once: true });
+        });
+      }
       const response = await fetch(this.manifestFile);
       if (!response.ok) {
         throw new Error(response.statusText);
@@ -622,6 +646,8 @@ class Driver {
       const prevFile = md5FileMap.get(task.md5);
       if (prevFile) {
         if (task.file !== prevFile) {
+          task._prefetchedLoadingTask?.destroy();
+          task._prefetchedLoadingTask = null;
           this._nextPage(
             task,
             `The "${task.file}" file is identical to the previously used "${prevFile}" file.`
@@ -659,6 +685,10 @@ class Driver {
 
       this._log(`  Loading file "${task.file}"\n`);
 
+      // Start fetching and parsing the next task's PDF in the worker
+      // now, so it overlaps with the current task's load and render time.
+      this._prefetchNextTask();
+
       try {
         let xfaStyleElement = null;
         if (task.enableXfa) {
@@ -670,28 +700,13 @@ class Driver {
             .getElementsByTagName("head")[0]
             .append(xfaStyleElement);
         }
-        const isOffscreenCanvasSupported =
-          task.isOffscreenCanvasSupported === false ? false : undefined;
-        const disableFontFace = task.disableFontFace === true;
-
         const documentOptions = {
-          url: new URL(task.file, window.location),
-          password: task.password,
-          cMapUrl: CMAP_URL,
-          iccUrl: ICC_URL,
-          standardFontDataUrl: STANDARD_FONT_DATA_URL,
-          wasmUrl: WASM_URL,
-          disableAutoFetch: !task.enableAutoFetch,
-          pdfBug: true,
-          useSystemFonts: task.useSystemFonts,
-          useWasm: task.useWasm,
-          useWorkerFetch: task.useWorkerFetch,
-          enableXfa: task.enableXfa,
-          isOffscreenCanvasSupported,
+          ...this._getDocumentOptions(task),
           styleElement: xfaStyleElement,
-          disableFontFace,
         };
-        const loadingTask = getDocument(documentOptions);
+        const loadingTask =
+          task._prefetchedLoadingTask ?? getDocument(documentOptions);
+        task._prefetchedLoadingTask = null;
         let promise = loadingTask.promise;
 
         if (!this.masterMode && task.type === "extract") {
@@ -849,6 +864,44 @@ class Driver {
     });
   }
 
+  _getDocumentOptions(task) {
+    return {
+      url: new URL(task.file, window.location),
+      password: task.password,
+      cMapUrl: CMAP_URL,
+      iccUrl: ICC_URL,
+      standardFontDataUrl: STANDARD_FONT_DATA_URL,
+      wasmUrl: WASM_URL,
+      disableAutoFetch: !task.enableAutoFetch,
+      pdfBug: true,
+      useSystemFonts: task.useSystemFonts,
+      useWasm: task.useWasm,
+      useWorkerFetch: task.useWorkerFetch,
+      enableXfa: task.enableXfa,
+      isOffscreenCanvasSupported:
+        task.isOffscreenCanvasSupported === false ? false : undefined,
+      disableFontFace: task.disableFontFace === true,
+    };
+  }
+
+  _prefetchNextTask() {
+    const nextIdx = this.currentTask + 1;
+    if (nextIdx >= this.manifest.length) {
+      return;
+    }
+    const task = this.manifest[nextIdx];
+    // Skip tasks that do not load a PDF or that need DOM setup (XFA style
+    // element injection) to happen synchronously before getDocument.
+    if (
+      task.type === "skip-because-failing" ||
+      task.type === "other" ||
+      task.enableXfa
+    ) {
+      return;
+    }
+    task._prefetchedLoadingTask = getDocument(this._getDocumentOptions(task));
+  }
+
   _cleanup() {
     // Clear out all the stylesheets since a new one is created for each font.
     while (document.styleSheets.length > 0) {
@@ -896,14 +949,15 @@ class Driver {
     let ctx;
 
     if (!task.pdfDoc) {
-      const dataUrl = this.canvas.toDataURL("image/png");
-      this._sendResult(dataUrl, task, failure).then(() => {
-        this._log(
-          "done" + (failure ? " (failed !: " + failure + ")" : "") + "\n"
-        );
-        this.currentTask++;
-        this._nextTask();
-      });
+      new Promise(r => {
+        this.canvas.toBlob(r, "image/png");
+      })
+        .then(blob => this._sendResult(blob, task, failure))
+        .then(() => {
+          this._log(`done${failure ? ` (failed !: ${failure})` : ""}\n`);
+          this.currentTask++;
+          this._nextTask();
+        });
       return;
     }
 
@@ -1177,7 +1231,21 @@ class Driver {
                   };
 
                   clearOutsidePartial();
-                  const baseline = ctx.canvas.toDataURL("image/png");
+                  // Capture pixel data synchronously for the comparison;
+                  // only encode to PNG in master mode where the server needs
+                  // to save it as the reference image.
+                  const baselinePixels = ctx.getImageData(
+                    0,
+                    0,
+                    ctx.canvas.width,
+                    ctx.canvas.height
+                  );
+                  const baselineBlob =
+                    this.masterMode && !task.knownPartialMismatch
+                      ? await new Promise(r => {
+                          ctx.canvas.toBlob(r, "image/png");
+                        })
+                      : null;
                   this._clearCanvas();
 
                   const recordedBBoxes = page.recordedBBoxes;
@@ -1223,7 +1291,8 @@ class Driver {
                     // one pixel of a very slightly different shade), so we
                     // avoid compating them to the non-optimized version and
                     // instead use the optimized version also for makeref.
-                    task.knownPartialMismatch ? null : baseline
+                    task.knownPartialMismatch ? null : baselinePixels,
+                    baselineBlob
                   );
                   return;
                 }
@@ -1268,32 +1337,31 @@ class Driver {
     ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
   }
 
-  _snapshot(task, failure, baselineDataUrl = null) {
+  async _snapshot(task, failure, baselinePixels = null, baselineBlob = null) {
     this._log("Snapshotting... ");
-
-    const dataUrl = this.canvas.toDataURL("image/png");
-
-    if (baselineDataUrl && baselineDataUrl !== dataUrl) {
-      failure ||= "Optimized rendering differs from full rendering.";
-    }
-
-    this._sendResult(dataUrl, task, failure, baselineDataUrl).then(() => {
-      this._log(
-        "done" + (failure ? " (failed !: " + failure + ")" : "") + "\n"
-      );
-      task.pageNum++;
-      this._nextPage(task);
+    const snapshotBlob = await new Promise(r => {
+      this.canvas.toBlob(r, "image/png");
     });
+    if (baselinePixels) {
+      const snapPixels = this.canvas
+        .getContext("2d")
+        .getImageData(0, 0, this.canvas.width, this.canvas.height);
+      if (!buffersEqual(baselinePixels.data.buffer, snapPixels.data.buffer)) {
+        failure ||= "Optimized rendering differs from full rendering.";
+      }
+    }
+    await this._sendResult(snapshotBlob, task, failure, baselineBlob);
+    this._log(`done${failure ? ` (failed !: ${failure})` : ""}\n`);
+    task.pageNum++;
+    this._nextPage(task);
   }
 
   _quit() {
     this._log("Done !");
     this.end.textContent = "Tests finished. Close this window!";
-
-    // Send the quit request
-    fetch(`/tellMeToQuit?browser=${escape(this.browser)}`, {
-      method: "POST",
-    });
+    // Send quit over the same WebSocket channel so the server processes it
+    // only after all preceding result frames have been handled.
+    this.ws.send(JSON.stringify({ type: "quit", browser: this.browser }));
   }
 
   _info(message) {
@@ -1331,8 +1399,11 @@ class Driver {
     }
   }
 
-  _sendResult(snapshot, task, failure, baselineSnapshot = null) {
-    const result = JSON.stringify({
+  async _sendResult(snapshotBlob, task, failure, baselineBlob = null) {
+    // Build a binary WebSocket frame:
+    //   [4 bytes BE: meta_len][meta JSON][4 bytes BE: snapshot_len]
+    //   [snapshot PNG][baseline PNG]
+    const meta = JSON.stringify({
       browser: this.browser,
       id: task.id,
       numPages: task.pdfDoc ? task.lastPage || task.pdfDoc.numPages : 0,
@@ -1342,14 +1413,34 @@ class Driver {
       file: task.file,
       round: task.round,
       page: task.pageMapping?.[task.pageNum] ?? task.pageNum,
-      snapshot,
-      baselineSnapshot,
       stats: task.stats.times,
       viewportWidth: task.viewportWidth,
       viewportHeight: task.viewportHeight,
       outputScale: task.outputScale,
     });
-    return this._send("/submit_task_results", result);
+    const metaBytes = new TextEncoder().encode(meta);
+    const snapshotBytes = new Uint8Array(await snapshotBlob.arrayBuffer());
+    const baselineBytes = baselineBlob
+      ? new Uint8Array(await baselineBlob.arrayBuffer())
+      : null;
+
+    const totalLen =
+      4 +
+      metaBytes.length +
+      4 +
+      snapshotBytes.length +
+      (baselineBytes?.length ?? 0);
+    const buf = new ArrayBuffer(totalLen);
+    const view = new DataView(buf);
+    const bytes = new Uint8Array(buf);
+    view.setUint32(0, metaBytes.length);
+    bytes.set(metaBytes, 4);
+    view.setUint32(4 + metaBytes.length, snapshotBytes.length);
+    bytes.set(snapshotBytes, 8 + metaBytes.length);
+    if (baselineBytes) {
+      bytes.set(baselineBytes, 8 + metaBytes.length + snapshotBytes.length);
+    }
+    this.ws.send(buf);
   }
 
   _send(url, message) {
@@ -1358,26 +1449,20 @@ class Driver {
 
     fetch(url, {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
+      headers: { "Content-Type": "application/json" },
       body: message,
     })
       .then(response => {
-        // Retry until successful.
         if (!response.ok || response.status !== 200) {
           throw new Error(response.statusText);
         }
-
         this.inFlightRequests--;
         resolve();
       })
       .catch(reason => {
         console.warn(`Driver._send failed (${url}):`, reason);
-
         this.inFlightRequests--;
         resolve();
-
         this._send(url, message);
       });
 

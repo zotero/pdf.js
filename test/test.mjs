@@ -76,6 +76,7 @@ function parseOptions() {
       headless: { type: "boolean", default: false },
       help: { type: "boolean", short: "h", default: false },
       integration: { type: "boolean", default: false },
+      jobs: { type: "string", short: "j", default: "1" },
       manifestFile: { type: "string", default: "test_manifest.json" },
       masterMode: { type: "boolean", short: "m", default: false },
       noChrome: { type: "boolean", default: false },
@@ -102,6 +103,7 @@ function parseOptions() {
         "  --headless          Run tests without visible browser windows.\n" +
         "  --help, -h          Show this help message.\n" +
         "  --integration       Run the integration tests.\n" +
+        "  --jobs, -j          Number of parallel tabs per browser. [1]\n" +
         "  --manifestFile      Path to manifest JSON file. [test_manifest.json]\n" +
         "  --masterMode, -m    Run the script in master mode.\n" +
         "  --noChrome          Skip Chrome when running tests.\n" +
@@ -138,6 +140,7 @@ function parseOptions() {
 
   return {
     ...values,
+    jobs: parseInt(values.jobs, 10) || 1,
     port: parseInt(values.port, 10) || 0,
     statsDelay: parseInt(values.statsDelay, 10) || 0,
   };
@@ -187,6 +190,9 @@ function updateRefImages() {
         console.log("  OK, not updating.");
       }
       reader.close();
+      // readline resumes stdin, making it a ref'd event-loop handle; close it
+      // explicitly so the process can exit once there is nothing else to do.
+      process.stdin.destroy();
     }
   );
 }
@@ -288,12 +294,18 @@ async function startRefTest(masterMode, showRefImages) {
 
     await startBrowsers({
       baseUrl: `http://${host}:${server.port}/test/test_slave.html`,
+      numSessions: options.jobs,
       initializeSession: session => {
         session.masterMode = masterMode;
         session.taskResults = {};
         session.tasks = {};
-        session.remaining = manifest.length;
-        manifest.forEach(function (item) {
+        const sessionManifest = getSessionManifest(
+          manifest,
+          session.sessionIndex,
+          session.sessionCount
+        );
+        session.remaining = sessionManifest.length;
+        sessionManifest.forEach(function (item) {
           var rounds = item.rounds || 1;
           var roundsResults = [];
           roundsResults.length = rounds;
@@ -350,17 +362,12 @@ function handleSessionTimeout(session) {
   if (session.closed) {
     return;
   }
-  var browser = session.name;
   console.log(
-    "TEST-UNEXPECTED-FAIL | test failed " +
-      browser +
-      " has not responded in " +
-      browserTimeout +
-      "s"
+    `TEST-UNEXPECTED-FAIL | test failed ${session.name} has not responded in ${browserTimeout}s`
   );
   session.numErrors += session.remaining;
   session.remaining = 0;
-  closeSession(browser);
+  closeSession(session.name);
 }
 
 function getTestManifest() {
@@ -384,13 +391,23 @@ function getTestManifest() {
   return manifest;
 }
 
-function checkEq(task, results, browser, masterMode) {
+function getSessionManifest(manifest, sessionIndex, sessionCount) {
+  if (sessionCount <= 1) {
+    return manifest;
+  }
+  const start = Math.floor((manifest.length * sessionIndex) / sessionCount);
+  const end = Math.floor((manifest.length * (sessionIndex + 1)) / sessionCount);
+  return manifest.slice(start, end);
+}
+
+function checkEq(task, results, session, masterMode) {
   var taskId = task.id;
-  var refSnapshotDir = path.join(refsDir, os.platform(), browser, taskId);
+  const browserType = session.browserType ?? session.name;
+  var refSnapshotDir = path.join(refsDir, os.platform(), browserType, taskId);
   var testSnapshotDir = path.join(
     testResultDir,
     os.platform(),
-    browser,
+    browserType,
     taskId
   );
 
@@ -419,11 +436,11 @@ function checkEq(task, results, browser, masterMode) {
 
     var refSnapshot = null;
     var eq = false;
-    var refPath = path.join(refSnapshotDir, page + 1 + ".png");
+    var refPath = path.join(refSnapshotDir, `${page + 1}.png`);
     if (!fs.existsSync(refPath)) {
       numEqNoSnapshot++;
       if (!masterMode) {
-        console.log("WARNING: no reference snapshot " + refPath);
+        console.log(`WARNING: no reference snapshot ${refPath}`);
       }
     } else {
       refSnapshot = fs.readFileSync(refPath);
@@ -432,44 +449,22 @@ function checkEq(task, results, browser, masterMode) {
         stripPrivatePngChunks(testSnapshot).toString("hex");
       if (!eq) {
         console.log(
-          "TEST-UNEXPECTED-FAIL | " +
-            taskType +
-            " " +
-            taskId +
-            " | in " +
-            browser +
-            " | rendering of page " +
-            (page + 1) +
-            " != reference rendering"
+          `TEST-UNEXPECTED-FAIL | ${taskType} ${taskId} | in ${session.name} | rendering of page ${page + 1} != reference rendering`
         );
 
         ensureDirSync(testSnapshotDir);
-        fs.writeFileSync(
-          path.join(testSnapshotDir, page + 1 + ".png"),
-          testSnapshot
-        );
-        fs.writeFileSync(
-          path.join(testSnapshotDir, page + 1 + "_ref.png"),
-          refSnapshot
-        );
+        const testPng = path.join(testSnapshotDir, `${page + 1}.png`);
+        const refPng = path.join(testSnapshotDir, `${page + 1}_ref.png`);
+        fs.writeFileSync(testPng, testSnapshot);
+        fs.writeFileSync(refPng, refSnapshot);
 
         // This no longer follows the format of Mozilla reftest output.
         const viewportString = `(${pageResult.viewportWidth}x${pageResult.viewportHeight}x${pageResult.outputScale})`;
         fs.appendFileSync(
           eqLog,
-          "REFTEST TEST-UNEXPECTED-FAIL | " +
-            browser +
-            "-" +
-            taskId +
-            "-page" +
-            (page + 1) +
-            " | image comparison (==)\n" +
-            `REFTEST   IMAGE 1 (TEST)${viewportString}: ` +
-            path.join(testSnapshotDir, page + 1 + ".png") +
-            "\n" +
-            `REFTEST   IMAGE 2 (REFERENCE)${viewportString}: ` +
-            path.join(testSnapshotDir, page + 1 + "_ref.png") +
-            "\n"
+          `REFTEST TEST-UNEXPECTED-FAIL | ${session.name}-${taskId}-page${page + 1} | image comparison (==)\n` +
+            `REFTEST   IMAGE 1 (TEST)${viewportString}: ${testPng}\n` +
+            `REFTEST   IMAGE 2 (REFERENCE)${viewportString}: ${refPng}\n`
         );
         numEqFailures++;
       }
@@ -478,29 +473,26 @@ function checkEq(task, results, browser, masterMode) {
       var tmpSnapshotDir = path.join(
         refsTmpDir,
         os.platform(),
-        browser,
+        browserType,
         taskId
       );
       ensureDirSync(tmpSnapshotDir);
       fs.writeFileSync(
-        path.join(tmpSnapshotDir, page + 1 + ".png"),
+        path.join(tmpSnapshotDir, `${page + 1}.png`),
         unoptimizedSnapshot ?? testSnapshot
       );
     }
   }
 
-  var session = getSession(browser);
   session.numEqNoSnapshot += numEqNoSnapshot;
   if (numEqFailures > 0) {
     session.numEqFailures += numEqFailures;
   } else {
-    console.log(
-      "TEST-PASS | " + taskType + " test " + taskId + " | in " + browser
-    );
+    console.log(`TEST-PASS | ${taskType} test ${taskId} | in ${session.name}`);
   }
 }
 
-function checkFBF(task, results, browser, masterMode) {
+function checkFBF(task, results, session, masterMode) {
   var numFBFFailures = 0;
   var round0 = results[0],
     round1 = results[1];
@@ -524,34 +516,23 @@ function checkFBF(task, results, browser, masterMode) {
       //       https://github.com/mozilla/pdf.js/issues/12371
       if (masterMode) {
         console.log(
-          "TEST-SKIPPED | forward-back-forward test " +
-            task.id +
-            " | in " +
-            browser +
-            " | page" +
-            (page + 1)
+          `TEST-SKIPPED | forward-back-forward test ${task.id} | in ${session.name} | page${page + 1}`
         );
         continue;
       }
 
       console.log(
-        "TEST-UNEXPECTED-FAIL | forward-back-forward test " +
-          task.id +
-          " | in " +
-          browser +
-          " | first rendering of page " +
-          (page + 1) +
-          " != second"
+        `TEST-UNEXPECTED-FAIL | forward-back-forward test ${task.id} | in ${session.name} | first rendering of page ${page + 1} != second`
       );
       numFBFFailures++;
     }
   }
 
   if (numFBFFailures > 0) {
-    getSession(browser).numFBFFailures += numFBFFailures;
+    session.numFBFFailures += numFBFFailures;
   } else {
     console.log(
-      "TEST-PASS | forward-back-forward test " + task.id + " | in " + browser
+      `TEST-PASS | forward-back-forward test ${task.id} | in ${session.name}`
     );
   }
 }
@@ -559,7 +540,7 @@ function checkFBF(task, results, browser, masterMode) {
 function checkLoad(task, results, browser) {
   // Load just checks for absence of failure, so if we got here the
   // test has passed
-  console.log("TEST-PASS | load test " + task.id + " | in " + browser);
+  console.log(`TEST-PASS | load test ${task.id} | in ${browser}`);
 }
 
 function checkRefTestResults(browser, id, results) {
@@ -624,13 +605,13 @@ function checkRefTestResults(browser, id, results) {
     case "text":
     case "highlight":
     case "extract":
-      checkEq(task, results, browser, session.masterMode);
+      checkEq(task, results, session, session.masterMode);
       break;
     case "fbf":
-      checkFBF(task, results, browser, session.masterMode);
+      checkFBF(task, results, session, session.masterMode);
       break;
     case "load":
-      checkLoad(task, results, browser);
+      checkLoad(task, results, session.name);
       break;
     default:
       throw new Error("Unknown test type");
@@ -945,7 +926,7 @@ async function startBrowser({
   return browser;
 }
 
-async function startBrowsers({ baseUrl, initializeSession }) {
+async function startBrowsers({ baseUrl, initializeSession, numSessions = 1 }) {
   // Remove old browser revisions from Puppeteer's cache. Updating Puppeteer can
   // cause new browser revisions to be downloaded, so trimming the cache will
   // prevent the disk from filling up over time.
@@ -959,43 +940,56 @@ async function startBrowsers({ baseUrl, initializeSession }) {
     browserNames.splice(0, 1);
   }
   for (const browserName of browserNames) {
-    // The session must be pushed first and augmented with the browser once
-    // it's initialized. The reason for this is that browser initialization
-    // takes more time when the browser is not found locally yet and we don't
-    // want `onAllSessionsClosed` to trigger if one of the browsers is done
-    // and the other one is still initializing, since that would mean that
-    // once the browser is initialized the server would have stopped already.
-    // Pushing the session first ensures that `onAllSessionsClosed` will
-    // only trigger once all browsers are initialized and done.
-    const session = {
-      name: browserName,
-      browser: undefined,
-      closed: false,
-    };
-    sessions.push(session);
+    for (let i = 0; i < numSessions; i++) {
+      // When running multiple sessions per browser, append an index suffix to
+      // keep session names unique. With a single session, use the plain browser
+      // name for backward compatibility.
+      const sessionName =
+        numSessions === 1 ? browserName : `${browserName}-${i}`;
 
-    // Construct the start URL from the base URL by appending query parameters
-    // for the runner if necessary.
-    let startUrl = "";
-    if (baseUrl) {
-      const queryParameters =
-        `?browser=${encodeURIComponent(browserName)}` +
-        `&manifestFile=${encodeURIComponent("/test/" + options.manifestFile)}` +
-        `&testFilter=${JSON.stringify(options.testfilter)}` +
-        `&delay=${options.statsDelay}` +
-        `&masterMode=${options.masterMode}`;
-      startUrl = baseUrl + queryParameters;
+      // The session must be pushed first and augmented with the browser once
+      // it's initialized. The reason for this is that browser initialization
+      // takes more time when the browser is not found locally yet and we don't
+      // want `onAllSessionsClosed` to trigger if one of the browsers is done
+      // and the other one is still initializing, since that would mean that
+      // once the browser is initialized the server would have stopped already.
+      // Pushing the session first ensures that `onAllSessionsClosed` will
+      // only trigger once all browsers are initialized and done.
+      const session = {
+        name: sessionName,
+        browserType: browserName,
+        sessionIndex: i,
+        sessionCount: numSessions,
+        browser: undefined,
+        page: undefined,
+        closed: false,
+      };
+      sessions.push(session);
+
+      let startUrl = "";
+      if (baseUrl) {
+        startUrl =
+          `${baseUrl}?browser=${encodeURIComponent(sessionName)}` +
+          `&manifestFile=${encodeURIComponent(`/test/${options.manifestFile}`)}` +
+          `&testFilter=${JSON.stringify(options.testfilter)}` +
+          `&delay=${options.statsDelay}&masterMode=${options.masterMode}` +
+          (numSessions > 1
+            ? `&sessionIndex=${i}&sessionCount=${numSessions}`
+            : "");
+      }
+
+      await startBrowser({ browserName, startUrl })
+        .then(async function (browser) {
+          session.browser = browser;
+          const pages = await browser.pages();
+          session.page = pages[0];
+          initializeSession(session);
+        })
+        .catch(function (ex) {
+          console.log(`Error while starting ${browserName}: ${ex.message}`);
+          closeSession(sessionName);
+        });
     }
-
-    await startBrowser({ browserName, startUrl })
-      .then(function (browser) {
-        session.browser = browser;
-        initializeSession(session);
-      })
-      .catch(function (ex) {
-        console.log(`Error while starting ${browserName}: ${ex.message}`);
-        closeSession(browserName);
-      });
   }
 }
 
@@ -1056,22 +1050,19 @@ async function closeSession(browser) {
     }
     if (session.browser !== undefined) {
       // Collect coverage before closing (works with both Chrome and Firefox)
-      if (global.coverageEnabled) {
+      if (global.coverageEnabled && session.page !== undefined) {
         try {
-          const pages = await session.browser.pages();
-          if (pages.length > 0) {
-            const page = pages[0];
+          // Extract window.__coverage__ which is populated by
+          // babel-plugin-istanbul
+          const coverage = await session.page.evaluate(
+            () => window.__coverage__
+          );
 
-            // Extract window.__coverage__ which is populated by
-            // babel-plugin-istanbul
-            const coverage = await page.evaluate(() => window.__coverage__);
-
-            if (coverage && Object.keys(coverage).length > 0) {
-              session.coverage = coverage;
-              console.log(
-                `Collected coverage from ${browser}: ${Object.keys(coverage).length} files`
-              );
-            }
+          if (coverage && Object.keys(coverage).length > 0) {
+            session.coverage = coverage;
+            console.log(
+              `Collected coverage from ${browser}: ${Object.keys(coverage).length} files`
+            );
           }
         } catch (err) {
           console.warn(

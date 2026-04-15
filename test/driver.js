@@ -506,6 +506,8 @@ class Driver {
     this.inFlightRequests = 0;
     this.testFilter = JSON.parse(params.get("testfilter") || "[]");
     this.masterMode = params.get("mastermode") === "true";
+    this.sessionIndex = parseInt(params.get("sessionindex") || "0", 10);
+    this.sessionCount = parseInt(params.get("sessioncount") || "1", 10);
 
     // Create a working canvas
     this.canvas = document.createElement("canvas");
@@ -550,6 +552,16 @@ class Driver {
           }
           return false;
         });
+      }
+      if (this.sessionCount > 1) {
+        const { sessionIndex, sessionCount } = this;
+        const start = Math.floor(
+          (this.manifest.length * sessionIndex) / sessionCount
+        );
+        const end = Math.floor(
+          (this.manifest.length * (sessionIndex + 1)) / sessionCount
+        );
+        this.manifest = this.manifest.slice(start, end);
       }
       this.currentTask = 0;
       this._nextTask();

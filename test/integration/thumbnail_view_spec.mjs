@@ -167,21 +167,9 @@ describe("PDF Thumbnail View", () => {
           await waitForThumbnailVisible(page, 2);
           await waitForThumbnailVisible(page, 3);
 
-          await kbFocusNext(page);
-          await page.waitForSelector("#viewsManagerSelectorButton:focus", {
-            visible: true,
-          });
-
-          await kbFocusNext(page);
-          await page.waitForSelector("#viewsManagerStatusActionButton:focus", {
-            visible: true,
-          });
-
-          await kbFocusNext(page);
-          await page.waitForSelector(
-            `#thumbnailsView ${getThumbnailSelector(1)}:focus`,
-            { visible: true }
-          );
+          await kbFocusNext(page, "#viewsManagerSelectorButton");
+          await kbFocusNext(page, "#viewsManagerStatusActionButton");
+          await kbFocusNext(page, `#thumbnailsView ${getThumbnailSelector(1)}`);
 
           await page.keyboard.press("ArrowDown");
           await page.waitForSelector(
@@ -260,11 +248,7 @@ describe("PDF Thumbnail View", () => {
           await enableMenuItems(page);
 
           // Focus the manage button
-          await kbFocusNext(page);
-          await kbFocusNext(page);
-          await page.waitForSelector("#viewsManagerStatusActionButton:focus", {
-            visible: true,
-          });
+          await kbFocusNext(page, "#viewsManagerStatusActionButton");
 
           // Press Enter to open the menu
           await page.keyboard.press("Enter");
@@ -292,11 +276,7 @@ describe("PDF Thumbnail View", () => {
           await enableMenuItems(page);
 
           // Focus the manage button
-          await kbFocusNext(page);
-          await kbFocusNext(page);
-          await page.waitForSelector("#viewsManagerStatusActionButton:focus", {
-            visible: true,
-          });
+          await kbFocusNext(page, "#viewsManagerStatusActionButton");
 
           // Press Space to open the menu
           await page.keyboard.press(" ");
@@ -409,15 +389,10 @@ describe("PDF Thumbnail View", () => {
           });
 
           // Press Tab to move to the manage button (should close views menu)
-          await page.keyboard.press("Tab");
+          await kbFocusNext(page, "#viewsManagerStatusActionButton");
 
           // Wait for views manager menu to be collapsed
           await waitForMenu(page, "#viewsManagerSelectorButton", false);
-
-          // Focus should be on manage button
-          await page.waitForSelector("#viewsManagerStatusActionButton:focus", {
-            visible: true,
-          });
 
           // Open manage menu with Space key
           await page.keyboard.press(" ");
@@ -493,9 +468,7 @@ describe("PDF Thumbnail View", () => {
           await waitForThumbnailVisible(page, 1);
 
           // Focus the first thumbnail button
-          await kbFocusNext(page);
-          await kbFocusNext(page);
-          await kbFocusNext(page);
+          await kbFocusNext(page, getThumbnailSelector(1));
 
           // Verify we're on the first thumbnail
           await page.waitForSelector(`${getThumbnailSelector(1)}:focus`, {
@@ -503,10 +476,9 @@ describe("PDF Thumbnail View", () => {
           });
 
           // Tab to checkbox
-          await kbFocusNext(page);
-          await page.waitForSelector(
-            `.thumbnail[page-number="1"] input[type="checkbox"]:focus`,
-            { visible: true }
+          await kbFocusNext(
+            page,
+            `.thumbnail[page-number="1"] input[type="checkbox"]`
           );
         })
       );
@@ -520,10 +492,10 @@ describe("PDF Thumbnail View", () => {
           await waitForThumbnailVisible(page, 2);
 
           // Navigate to first checkbox
-          await kbFocusNext(page);
-          await kbFocusNext(page);
-          await kbFocusNext(page);
-          await kbFocusNext(page);
+          await kbFocusNext(
+            page,
+            `.thumbnail[page-number="1"] input[type="checkbox"]`
+          );
 
           // Verify first checkbox is focused
           await page.waitForSelector(

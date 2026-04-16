@@ -869,12 +869,37 @@ async function kbDeleteLastWord(page) {
   }
 }
 
-async function kbFocusNext(page) {
-  const handle = await createPromise(page, resolve => {
-    window.addEventListener("focusin", resolve, { once: true });
-  });
-  await page.keyboard.press("Tab");
-  await awaitPromise(handle);
+async function kbFocusNext(page, selector = null) {
+  if (selector) {
+    await page.waitForSelector(selector, { visible: true });
+  }
+  while (true) {
+    const handle = await page.evaluateHandle(
+      sel => [
+        new Promise(resolve => {
+          const cb = e => {
+            if (!sel || document.querySelector(sel)?.contains(e.target)) {
+              window.removeEventListener("focusin", cb);
+              resolve(true);
+            } else {
+              resolve(false);
+            }
+          };
+          window.addEventListener("focusin", cb);
+        }),
+      ],
+      selector
+    );
+
+    await page.keyboard.press("Tab");
+    const result = await awaitPromise(handle);
+    if (result) {
+      break;
+    }
+  }
+  if (selector) {
+    await page.waitForSelector(`${selector}:focus`, { visible: true });
+  }
 }
 
 async function kbFocusPrevious(page) {

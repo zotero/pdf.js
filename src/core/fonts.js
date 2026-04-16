@@ -702,21 +702,18 @@ function createCmapTable(glyphs, toUnicodeExtraMap, numGlyphs) {
   const searchParams = OpenTypeFileBuilder.getSearchParams(segCount, 2);
 
   // Fill up the 4 parallel arrays describing the segments.
-  const startCount = new TrueTypeTableBuilder({}),
-    endCount = new TrueTypeTableBuilder({}),
-    idDeltas = new TrueTypeTableBuilder({}),
-    idRangeOffsets = new TrueTypeTableBuilder({}),
+  const segmentsLength = bmpLength * 2 + trailingRangesCount * 2;
+  const startCount = new TrueTypeTableBuilder({ exactLength: segmentsLength }),
+    endCount = new TrueTypeTableBuilder({ exactLength: segmentsLength }),
+    idDeltas = new TrueTypeTableBuilder({ exactLength: segmentsLength }),
+    idRangeOffsets = new TrueTypeTableBuilder({ exactLength: segmentsLength }),
     glyphsIds = new TrueTypeTableBuilder({});
   let bias = 0;
 
-  let range, start, end, codes;
   for (i = 0, ii = bmpLength; i < ii; i++) {
-    range = ranges[i];
-    start = range[0];
-    end = range[1];
+    const [start, end, codes] = ranges[i];
     startCount.setInt16(start);
     endCount.setInt16(end);
-    codes = range[2];
     let contiguous = true;
     for (j = 1, jj = codes.length; j < jj; ++j) {
       if (codes[j] !== codes[j - 1] + 1) {
@@ -780,14 +777,13 @@ function createCmapTable(glyphs, toUnicodeExtraMap, numGlyphs) {
     cmap31012.setInt32(4 + numTables * 8 + 4 + format314.length); // start of the table record
 
     format31012 = new TrueTypeTableBuilder({});
-    for (i = 0, ii = ranges.length; i < ii; i++) {
-      range = ranges[i];
-      start = range[0];
-      codes = range[2];
+    for (const range of ranges) {
+      let start = range[0];
+      const codes = range[2];
       let code = codes[0];
       for (j = 1, jj = codes.length; j < jj; ++j) {
         if (codes[j] !== codes[j - 1] + 1) {
-          end = range[0] + j - 1;
+          const end = range[0] + j - 1;
           format31012.setInt32(start); // startCharCode
           format31012.setInt32(end); // endCharCode
           format31012.setInt32(code); // startGlyphID

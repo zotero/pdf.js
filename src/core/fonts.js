@@ -20,7 +20,6 @@ import {
   FormatError,
   info,
   shadow,
-  string32,
   stringToBytes,
   warn,
 } from "../shared/util.js";
@@ -313,43 +312,110 @@ function string16(value) {
   return String.fromCharCode((value >> 8) & 0xff, value & 0xff);
 }
 
-function setArray(data, pos, arr) {
-  data.set(arr, pos);
-  return pos + arr.length;
-}
+class TrueTypeTableBuilder {
+  #buf;
 
-function setInt16(view, pos, val) {
-  if (typeof PDFJSDev === "undefined" || PDFJSDev.test("TESTING")) {
-    assert(
-      typeof val === "number" && Math.abs(val) < 2 ** 16,
-      `setInt16: Unexpected input "${val}".`
-    );
-  }
-  view.setInt16(pos, val);
-  return pos + 2;
-}
+  #bufLength = 1024;
 
-function setSafeInt16(view, pos, val) {
-  if (typeof PDFJSDev === "undefined" || PDFJSDev.test("TESTING")) {
-    assert(
-      typeof val === "number" && !Number.isNaN(val),
-      `safeString16: Unexpected input "${val}".`
-    );
-  }
-  // clamp value to the 16-bit int range
-  view.setInt16(pos, MathClamp(val, -0x8000, 0x7fff));
-  return pos + 2;
-}
+  #hasExactLength = false;
 
-function setInt32(view, pos, val) {
-  if (typeof PDFJSDev === "undefined" || PDFJSDev.test("TESTING")) {
-    assert(
-      typeof val === "number" && Math.abs(val) < 2 ** 32,
-      `setInt32: Unexpected input "${val}".`
-    );
+  #pos = 0;
+
+  #view;
+
+  constructor({ exactLength, minLength }) {
+    this.#hasExactLength = !!exactLength;
+    this.#initBuf(exactLength || minLength);
   }
-  view.setInt32(pos, val);
-  return pos + 4;
+
+  #initBuf(minLength) {
+    if (this.#hasExactLength) {
+      this.#bufLength = minLength;
+    } else {
+      // Compute the first power of two that is as big as the `minLength`.
+      while (this.#bufLength < minLength) {
+        this.#bufLength *= 2;
+      }
+    }
+    const newBuf = new Uint8Array(this.#bufLength);
+
+    if (this.#buf) {
+      newBuf.set(this.#buf, 0);
+    }
+    this.#buf = newBuf;
+    this.#view = new DataView(newBuf.buffer);
+  }
+
+  get data() {
+    return this.#buf.subarray(0, this.#pos);
+  }
+
+  get length() {
+    return this.#pos;
+  }
+
+  skip(n) {
+    this.#pos += n;
+  }
+
+  setArray(arr) {
+    const newPos = this.#pos + arr.length;
+
+    if (!this.#hasExactLength && newPos > this.#bufLength) {
+      this.#initBuf(newPos);
+    }
+    this.#buf.set(arr, this.#pos);
+    this.#pos = newPos;
+  }
+
+  setInt16(val) {
+    if (typeof PDFJSDev === "undefined" || PDFJSDev.test("TESTING")) {
+      assert(
+        typeof val === "number" && Math.abs(val) < 2 ** 16,
+        `setInt16: Unexpected input "${val}".`
+      );
+    }
+    const newPos = this.#pos + 2;
+
+    if (!this.#hasExactLength && newPos > this.#bufLength) {
+      this.#initBuf(newPos);
+    }
+    this.#view.setInt16(this.#pos, val);
+    this.#pos = newPos;
+  }
+
+  setSafeInt16(val) {
+    if (typeof PDFJSDev === "undefined" || PDFJSDev.test("TESTING")) {
+      assert(
+        typeof val === "number" && !Number.isNaN(val),
+        `safeString16: Unexpected input "${val}".`
+      );
+    }
+    const newPos = this.#pos + 2;
+
+    if (!this.#hasExactLength && newPos > this.#bufLength) {
+      this.#initBuf(newPos);
+    }
+    // clamp value to the 16-bit int range
+    this.#view.setInt16(this.#pos, MathClamp(val, -0x8000, 0x7fff));
+    this.#pos = newPos;
+  }
+
+  setInt32(val) {
+    if (typeof PDFJSDev === "undefined" || PDFJSDev.test("TESTING")) {
+      assert(
+        typeof val === "number" && Math.abs(val) < 2 ** 32,
+        `setInt32: Unexpected input "${val}".`
+      );
+    }
+    const newPos = this.#pos + 4;
+
+    if (!this.#hasExactLength && newPos > this.#bufLength) {
+      this.#initBuf(newPos);
+    }
+    this.#view.setInt32(this.#pos, val);
+    this.#pos = newPos;
+  }
 }
 
 function isTrueTypeFile(file) {
@@ -622,12 +688,13 @@ function getRanges(glyphs, toUnicodeExtraMap, numGlyphs) {
 function createCmapTable(glyphs, toUnicodeExtraMap, numGlyphs) {
   const ranges = getRanges(glyphs, toUnicodeExtraMap, numGlyphs);
   const numTables = ranges.at(-1)[1] > 0xffff ? 2 : 1;
-  let cmap =
-    "\x00\x00" + // version
-    string16(numTables) + // numTables
-    "\x00\x03" + // platformID
-    "\x00\x01" + // encodingID
-    string32(4 + numTables * 8); // start of the table record
+
+  const cmap = new TrueTypeTableBuilder({ exactLength: 12 });
+  cmap.skip(2); // version, skip redundant "\x00\x00"
+  cmap.setInt16(numTables); // numTables
+  cmap.setArray([0x00, 0x03]); // platformID
+  cmap.setArray([0x00, 0x01]); // encodingID
+  cmap.setInt32(4 + numTables * 8); // start of the table record
 
   let i, ii, j, jj;
   for (i = ranges.length - 1; i >= 0; --i) {
@@ -645,11 +712,11 @@ function createCmapTable(glyphs, toUnicodeExtraMap, numGlyphs) {
   const searchParams = OpenTypeFileBuilder.getSearchParams(segCount, 2);
 
   // Fill up the 4 parallel arrays describing the segments.
-  let startCount = "";
-  let endCount = "";
-  let idDeltas = "";
-  let idRangeOffsets = "";
-  let glyphsIds = "";
+  const startCount = new TrueTypeTableBuilder({}),
+    endCount = new TrueTypeTableBuilder({}),
+    idDeltas = new TrueTypeTableBuilder({}),
+    idRangeOffsets = new TrueTypeTableBuilder({}),
+    glyphsIds = new TrueTypeTableBuilder({});
   let bias = 0;
 
   let range, start, end, codes;
@@ -657,8 +724,8 @@ function createCmapTable(glyphs, toUnicodeExtraMap, numGlyphs) {
     range = ranges[i];
     start = range[0];
     end = range[1];
-    startCount += string16(start);
-    endCount += string16(end);
+    startCount.setInt16(start);
+    endCount.setInt16(end);
     codes = range[2];
     let contiguous = true;
     for (j = 1, jj = codes.length; j < jj; ++j) {
@@ -671,48 +738,58 @@ function createCmapTable(glyphs, toUnicodeExtraMap, numGlyphs) {
       const offset = (segCount - i) * 2 + bias * 2;
       bias += end - start + 1;
 
-      idDeltas += string16(0);
-      idRangeOffsets += string16(offset);
+      idDeltas.skip(2); // Skip redundant "\x00\x00"
+      idRangeOffsets.setInt16(offset);
 
       for (j = 0, jj = codes.length; j < jj; ++j) {
-        glyphsIds += string16(codes[j]);
+        glyphsIds.setInt16(codes[j]);
       }
     } else {
       const startCode = codes[0];
 
-      idDeltas += string16((startCode - start) & 0xffff);
-      idRangeOffsets += string16(0);
+      idDeltas.setInt16((startCode - start) & 0xffff);
+      idRangeOffsets.skip(2); // Skip redundant "\x00\x00"
     }
   }
 
   if (trailingRangesCount > 0) {
-    endCount += "\xFF\xFF";
-    startCount += "\xFF\xFF";
-    idDeltas += "\x00\x01";
-    idRangeOffsets += "\x00\x00";
+    endCount.setArray([0xff, 0xff]);
+    startCount.setArray([0xff, 0xff]);
+    idDeltas.setArray([0x00, 0x01]);
+    idRangeOffsets.skip(2); // Skip redundant "\x00\x00"
   }
 
-  const format314 =
-    "\x00\x00" + // language
-    string16(2 * segCount) +
-    string16(searchParams.range) +
-    string16(searchParams.entry) +
-    string16(searchParams.rangeShift) +
-    endCount +
-    "\x00\x00" +
-    startCount +
-    idDeltas +
-    idRangeOffsets +
-    glyphsIds;
+  const format314 = new TrueTypeTableBuilder({
+    exactLength:
+      12 +
+      startCount.length +
+      endCount.length +
+      idDeltas.length +
+      idRangeOffsets.length +
+      glyphsIds.length,
+  });
+  format314.skip(2); // language, skip redundant "\x00\x00"
+  format314.setInt16(2 * segCount);
+  format314.setInt16(searchParams.range);
+  format314.setInt16(searchParams.entry);
+  format314.setInt16(searchParams.rangeShift);
+  format314.setArray(endCount.data);
+  format314.skip(2); // Skip redundant "\x00\x00"
+  format314.setArray(startCount.data);
+  format314.setArray(idDeltas.data);
+  format314.setArray(idRangeOffsets.data);
+  format314.setArray(glyphsIds.data);
 
-  let format31012 = "";
-  let header31012 = "";
+  let cmap31012 = null,
+    format31012 = null,
+    header31012 = null;
   if (numTables > 1) {
-    cmap +=
-      "\x00\x03" + // platformID
-      "\x00\x0A" + // encodingID
-      string32(4 + numTables * 8 + 4 + format314.length); // start of the table record
-    format31012 = "";
+    cmap31012 = new TrueTypeTableBuilder({ exactLength: 8 });
+    cmap31012.setArray([0x00, 0x03]); // platformID
+    cmap31012.setArray([0x00, 0x0a]); // encodingID
+    cmap31012.setInt32(4 + numTables * 8 + 4 + format314.length); // start of the table record
+
+    format31012 = new TrueTypeTableBuilder({});
     for (i = 0, ii = ranges.length; i < ii; i++) {
       range = ranges[i];
       start = range[0];
@@ -721,35 +798,43 @@ function createCmapTable(glyphs, toUnicodeExtraMap, numGlyphs) {
       for (j = 1, jj = codes.length; j < jj; ++j) {
         if (codes[j] !== codes[j - 1] + 1) {
           end = range[0] + j - 1;
-          format31012 +=
-            string32(start) + // startCharCode
-            string32(end) + // endCharCode
-            string32(code); // startGlyphID
+          format31012.setInt32(start); // startCharCode
+          format31012.setInt32(end); // endCharCode
+          format31012.setInt32(code); // startGlyphID
           start = end + 1;
           code = codes[j];
         }
       }
-      format31012 +=
-        string32(start) + // startCharCode
-        string32(range[1]) + // endCharCode
-        string32(code); // startGlyphID
+      format31012.setInt32(start); // startCharCode
+      format31012.setInt32(range[1]); // endCharCode
+      format31012.setInt32(code); // startGlyphID
     }
-    header31012 =
-      "\x00\x0C" + // format
-      "\x00\x00" + // reserved
-      string32(format31012.length + 16) + // length
-      "\x00\x00\x00\x00" + // language
-      string32(format31012.length / 12); // nGroups
+
+    header31012 = new TrueTypeTableBuilder({ exactLength: 16 });
+    header31012.setArray([0x00, 0x0c]); // format
+    header31012.skip(2); // reserved, skip redundant "\x00\x00"
+    header31012.setInt32(format31012.length + 16); // length
+    header31012.skip(4); // language, skip redundant "\x00\x00\x00\x00"
+    header31012.setInt32(format31012.length / 12); // nGroups
   }
 
-  return stringToBytes(
-    cmap +
-      "\x00\x04" + // format
-      string16(format314.length + 4) + // length
-      format314 +
-      header31012 +
-      format31012
-  );
+  const table = new TrueTypeTableBuilder({
+    exactLength:
+      4 +
+      cmap.length +
+      (cmap31012?.length ?? 0) +
+      format314.length +
+      (header31012?.length ?? 0) +
+      (format31012?.length ?? 0),
+  });
+  table.setArray(cmap.data);
+  table.setArray(cmap31012?.data ?? []);
+  table.setArray([0x00, 0x04]); // format
+  table.setInt16(format314.length + 4); // length
+  table.setArray(format314.data);
+  table.setArray(header31012?.data ?? []);
+  table.setArray(format31012?.data ?? []);
+  return table.data;
 }
 
 function validateOS2Table(os2, file) {
@@ -856,27 +941,24 @@ function createOS2Table(properties, charstrings, override) {
   const winAscent = override.yMax || typoAscent;
   const winDescent = -override.yMin || -typoDescent;
 
-  const data = new Uint8Array(96),
-    view = new DataView(data.buffer);
-  let pos = 0;
-
-  pos = setArray(data, pos, [0x00, 0x03]); // version
-  pos = setArray(data, pos, [0x02, 0x24]); // xAvgCharWidth
-  pos = setArray(data, pos, [0x01, 0xf4]); // usWeightClass
-  pos = setArray(data, pos, [0x00, 0x05]); // usWidthClass
-  pos += 2; // fstype (0 to improve browser compatibility), skip redundant "\x00\x00"
-  pos = setArray(data, pos, [0x02, 0x8a]); // ySubscriptXSize
-  pos = setArray(data, pos, [0x02, 0xbb]); // ySubscriptYSize
-  pos += 2; // ySubscriptXOffset, skip redundant "\x00\x00"
-  pos = setArray(data, pos, [0x00, 0x8c]); // ySubscriptYOffset
-  pos = setArray(data, pos, [0x02, 0x8a]); // ySuperScriptXSize
-  pos = setArray(data, pos, [0x02, 0xbb]); // ySuperScriptYSize
-  pos += 2; // ySuperScriptXOffset, skip redundant "\x00\x00"
-  pos = setArray(data, pos, [0x01, 0xdf]); // ySuperScriptYOffset
-  pos = setArray(data, pos, [0x00, 0x31]); // yStrikeOutSize
-  pos = setArray(data, pos, [0x01, 0x02]); // yStrikeOutPosition
-  pos += 2; // sFamilyClass, skip redundant "\x00\x00"
-  pos = setArray(data, pos, [
+  const os2 = new TrueTypeTableBuilder({ exactLength: 96 });
+  os2.setArray([0x00, 0x03]); // version
+  os2.setArray([0x02, 0x24]); // xAvgCharWidth
+  os2.setArray([0x01, 0xf4]); // usWeightClass
+  os2.setArray([0x00, 0x05]); // usWidthClass
+  os2.skip(2); // fstype (0 to improve browser compatibility), skip redundant "\x00\x00"
+  os2.setArray([0x02, 0x8a]); // ySubscriptXSize
+  os2.setArray([0x02, 0xbb]); // ySubscriptYSize
+  os2.skip(2); // ySubscriptXOffset, skip redundant "\x00\x00"
+  os2.setArray([0x00, 0x8c]); // ySubscriptYOffset
+  os2.setArray([0x02, 0x8a]); // ySuperScriptXSize
+  os2.setArray([0x02, 0xbb]); // ySuperScriptYSize
+  os2.skip(2); // ySuperScriptXOffset, skip redundant "\x00\x00"
+  os2.setArray([0x01, 0xdf]); // ySuperScriptYOffset
+  os2.setArray([0x00, 0x31]); // yStrikeOutSize
+  os2.setArray([0x01, 0x02]); // yStrikeOutPosition
+  os2.skip(2); // sFamilyClass, skip redundant "\x00\x00"
+  os2.setArray([
     0x00,
     0x00,
     0x06,
@@ -888,46 +970,47 @@ function createOS2Table(properties, charstrings, override) {
     0x00,
     0x00,
   ]); // Panose
-  pos = setInt32(view, pos, ulUnicodeRange1); // ulUnicodeRange1 (Bits 0-31)
-  pos = setInt32(view, pos, ulUnicodeRange2); // ulUnicodeRange2 (Bits 32-63)
-  pos = setInt32(view, pos, ulUnicodeRange3); // ulUnicodeRange3 (Bits 64-95)
-  pos = setInt32(view, pos, ulUnicodeRange4); // ulUnicodeRange4 (Bits 96-127)
-  pos = setArray(data, pos, [0x2a, 0x32, 0x31, 0x2a]); // achVendID
-  pos = setInt16(view, pos, properties.italicAngle ? 1 : 0); // fsSelection
-  pos = setInt16(view, pos, firstCharIndex || properties.firstChar); // usFirstCharIndex
-  pos = setInt16(view, pos, lastCharIndex || properties.lastChar); // usLastCharIndex
-  pos = setInt16(view, pos, typoAscent); // sTypoAscender
-  pos = setInt16(view, pos, typoDescent); // sTypoDescender
-  pos = setArray(data, pos, [0x00, 0x64]); // sTypoLineGap (7%-10% of the unitsPerEM value)
-  pos = setInt16(view, pos, winAscent); // usWinAscent
-  pos = setInt16(view, pos, winDescent); // usWinDescent
-  pos += 4; // ulCodePageRange1 (Bits 0-31), skip redundant "\x00\x00\x00\x00"
-  pos += 4; // ulCodePageRange2 (Bits 32-63), skip redundant "\x00\x00\x00\x00"
-  pos = setInt16(view, pos, properties.xHeight); // sxHeight
-  pos = setInt16(view, pos, properties.capHeight); // sCapHeight
-  pos += 2; // usDefaultChar, skip redundant "\x00\x00"
-  pos = setInt16(view, pos, firstCharIndex || properties.firstChar); // usBreakChar
-  setArray(data, pos, [0x00, 0x03]); // usMaxContext
-
-  return data;
+  os2.setInt32(ulUnicodeRange1); // ulUnicodeRange1 (Bits 0-31)
+  os2.setInt32(ulUnicodeRange2); // ulUnicodeRange2 (Bits 32-63)
+  os2.setInt32(ulUnicodeRange3); // ulUnicodeRange3 (Bits 64-95)
+  os2.setInt32(ulUnicodeRange4); // ulUnicodeRange4 (Bits 96-127)
+  os2.setArray([0x2a, 0x32, 0x31, 0x2a]); // achVendID
+  os2.setInt16(properties.italicAngle ? 1 : 0); // fsSelection
+  os2.setInt16(firstCharIndex || properties.firstChar); // usFirstCharIndex
+  os2.setInt16(lastCharIndex || properties.lastChar); // usLastCharIndex
+  os2.setInt16(typoAscent); // sTypoAscender
+  os2.setInt16(typoDescent); // sTypoDescender
+  os2.setArray([0x00, 0x64]); // sTypoLineGap (7%-10% of the unitsPerEM value)
+  os2.setInt16(winAscent); // usWinAscent
+  os2.setInt16(winDescent); // usWinDescent
+  os2.skip(
+    4 + // ulCodePageRange1 (Bits 0-31), skip redundant "\x00\x00\x00\x00"
+      4 // ulCodePageRange2 (Bits 32-63), skip redundant "\x00\x00\x00\x00"
+  );
+  os2.setInt16(properties.xHeight); // sxHeight
+  os2.setInt16(properties.capHeight); // sCapHeight
+  os2.skip(2); // usDefaultChar, skip redundant "\x00\x00"
+  os2.setInt16(firstCharIndex || properties.firstChar); // usBreakChar
+  os2.setArray([0x00, 0x03]); // usMaxContext
+  return os2.data;
 }
 
 function createPostTable(properties) {
-  const data = new Uint8Array(32),
-    view = new DataView(data.buffer);
-  let pos = 0;
-
-  pos = setArray(data, pos, [0x00, 0x03, 0x00, 0x00]); // Version number
-  pos = setInt32(view, pos, Math.floor(properties.italicAngle * 2 ** 16)); // italicAngle
-  pos += 2; // underlinePosition, skip redundant "\x00\x00"
-  pos += 2; // underlineThickness, skip redundant "\x00\x00"
-  setInt32(view, pos, properties.fixedPitch ? 1 : 0); // isFixedPitch
-  // minMemType42, skip redundant "\x00\x00\x00\x00"
-  // maxMemType42, skip redundant "\x00\x00\x00\x00"
-  // minMemType1, skip redundant "\x00\x00\x00\x00"
-  // maxMemType1, skip redundant "\x00\x00\x00\x00"
-
-  return data;
+  const post = new TrueTypeTableBuilder({ exactLength: 32 });
+  post.setArray([0x00, 0x03, 0x00, 0x00]); // Version number
+  post.setInt32(Math.floor(properties.italicAngle * 2 ** 16)); // italicAngle
+  post.skip(
+    2 + // underlinePosition, skip redundant "\x00\x00"
+      2 // underlineThickness, skip redundant "\x00\x00"
+  );
+  post.setInt32(properties.fixedPitch ? 1 : 0); // isFixedPitch
+  post.skip(
+    4 + // minMemType42, skip redundant "\x00\x00\x00\x00"
+      4 + // maxMemType42, skip redundant "\x00\x00\x00\x00"
+      4 + // minMemType1, skip redundant "\x00\x00\x00\x00"
+      4 // maxMemType1, skip redundant "\x00\x00\x00\x00"
+  );
+  return post.data;
 }
 
 function createPostscriptName(name) {
@@ -3299,29 +3382,28 @@ class Font {
       "head",
       (function fontTableHead() {
         const dateArr = [0x00, 0x00, 0x00, 0x00, 0x9e, 0x0b, 0x7e, 0x27];
-        const data = new Uint8Array(54),
-          view = new DataView(data.buffer);
-        let pos = 0;
 
-        pos = setArray(data, pos, [0x00, 0x01, 0x00, 0x00]); // Version number
-        pos = setArray(data, pos, [0x00, 0x00, 0x10, 0x00]); // fontRevision
-        pos += 4; // checksumAdjustement, skip redundant "\x00\x00\x00\x00"
-        pos = setArray(data, pos, [0x5f, 0x0f, 0x3c, 0xf5]); // magicNumber
-        pos += 2; // Flags, skip redundant "\x00\x00"
-        pos = setSafeInt16(view, pos, unitsPerEm); // unitsPerEM
-        pos = setArray(data, pos, dateArr); // creation date
-        pos = setArray(data, pos, dateArr); // modifification date
-        pos += 2; // xMin, skip redundant "\x00\x00"
-        pos = setSafeInt16(view, pos, properties.descent); // yMin
-        pos = setArray(data, pos, [0x0f, 0xff]); // xMax
-        pos = setSafeInt16(view, pos, properties.ascent); // yMax
-        pos = setInt16(view, pos, properties.italicAngle ? 2 : 0); // macStyle
-        setArray(data, pos, [0x00, 0x11]); // lowestRecPPEM
-        // fontDirectionHint, skip redundant "\x00\x00"
-        // indexToLocFormat, skip redundant "\x00\x00"
-        // glyphDataFormat, skip redundant "\x00\x00"
-
-        return data;
+        const head = new TrueTypeTableBuilder({ exactLength: 54 });
+        head.setArray([0x00, 0x01, 0x00, 0x00]); // Version number
+        head.setArray([0x00, 0x00, 0x10, 0x00]); // fontRevision
+        head.skip(4); // checksumAdjustement, skip redundant "\x00\x00\x00\x00"
+        head.setArray([0x5f, 0x0f, 0x3c, 0xf5]); // magicNumber
+        head.skip(2); // Flags, skip redundant "\x00\x00"
+        head.setSafeInt16(unitsPerEm); // unitsPerEM
+        head.setArray(dateArr); // creation date
+        head.setArray(dateArr); // modifification date
+        head.skip(2); // xMin, skip redundant "\x00\x00"
+        head.setSafeInt16(properties.descent); // yMin
+        head.setArray([0x0f, 0xff]); // xMax
+        head.setSafeInt16(properties.ascent); // yMax
+        head.setInt16(properties.italicAngle ? 2 : 0); // macStyle
+        head.setArray([0x00, 0x11]); // lowestRecPPEM
+        head.skip(
+          2 + // fontDirectionHint, skip redundant "\x00\x00"
+            2 + // indexToLocFormat, skip redundant "\x00\x00"
+            2 // glyphDataFormat, skip redundant "\x00\x00"
+        );
+        return head.data;
       })()
     );
 
@@ -3329,33 +3411,31 @@ class Font {
     builder.addTable(
       "hhea",
       (function fontTableHhea() {
-        const data = new Uint8Array(36),
-          view = new DataView(data.buffer);
-        let pos = 0;
-
-        pos = setArray(data, pos, [0x00, 0x01, 0x00, 0x00]); // Version number
-        pos = setSafeInt16(view, pos, properties.ascent); // Typographic Ascent
-        pos = setSafeInt16(view, pos, properties.descent); // Typographic Descent
-        pos += 2; // Line Gap, skip redundant "\x00\x00"
-        pos = setArray(data, pos, [0xff, 0xff]); // advanceWidthMax
-        pos += 2; // minLeftSidebearing, skip redundant "\x00\x00"
-        pos += 2; // minRightSidebearing, skip redundant "\x00\x00"
-        pos += 2; // xMaxExtent, skip redundant "\x00\x00"
-        pos = setSafeInt16(view, pos, properties.capHeight); // caretSlopeRise
-        pos = setSafeInt16(
-          view,
-          pos,
+        const hhea = new TrueTypeTableBuilder({ exactLength: 36 });
+        hhea.setArray([0x00, 0x01, 0x00, 0x00]); // Version number
+        hhea.setSafeInt16(properties.ascent); // Typographic Ascent
+        hhea.setSafeInt16(properties.descent); // Typographic Descent
+        hhea.skip(2); // Line Gap, skip redundant "\x00\x00"
+        hhea.setArray([0xff, 0xff]); // advanceWidthMax
+        hhea.skip(
+          2 + // minLeftSidebearing, skip redundant "\x00\x00"
+            2 + // minRightSidebearing, skip redundant "\x00\x00"
+            2 // xMaxExtent, skip redundant "\x00\x00"
+        );
+        hhea.setSafeInt16(properties.capHeight); // caretSlopeRise
+        hhea.setSafeInt16(
           Math.tan(properties.italicAngle) * properties.xHeight
         ); // caretSlopeRun
-        pos += 2; // caretOffset, skip redundant "\x00\x00"
-        pos += 2; // -reserved-, skip redundant "\x00\x00"
-        pos += 2; // -reserved-, skip redundant "\x00\x00"
-        pos += 2; // -reserved-, skip redundant "\x00\x00"
-        pos += 2; // -reserved-, skip redundant "\x00\x00"
-        pos += 2; // metricDataFormat, skip redundant "\x00\x00"
-        setInt16(view, pos, numGlyphs); // Number of HMetrics
-
-        return data;
+        hhea.skip(
+          2 + // caretOffset, skip redundant "\x00\x00"
+            2 + // -reserved-, skip redundant "\x00\x00"
+            2 + // -reserved-, skip redundant "\x00\x00"
+            2 + // -reserved-, skip redundant "\x00\x00"
+            2 + // -reserved-, skip redundant "\x00\x00"
+            2 // metricDataFormat, skip redundant "\x00\x00"
+        );
+        hhea.setInt16(numGlyphs); // Number of HMetrics
+        return hhea.data;
       })()
     );
 
@@ -3366,10 +3446,9 @@ class Font {
         const charstrings = font.charstrings;
         const cffWidths = font.cff?.widths ?? null;
 
-        const data = new Uint8Array(numGlyphs * 4),
-          view = new DataView(data.buffer);
+        const hmtx = new TrueTypeTableBuilder({ exactLength: numGlyphs * 4 });
         // Fake .notdef (width=0 and lsb=0) first, skip redundant assignment.
-        let pos = 4;
+        hmtx.skip(4);
 
         for (let i = 1, ii = numGlyphs; i < ii; i++) {
           let width = 0;
@@ -3378,10 +3457,10 @@ class Font {
           } else if (cffWidths) {
             width = Math.ceil(cffWidths[i] || 0);
           }
-          pos = setInt16(view, pos, width);
-          pos += 2; // Use lsb=0, skip redundant assignment.
+          hmtx.setInt16(width);
+          hmtx.skip(2); // Use lsb=0, skip redundant assignment.
         }
-        return data;
+        return hmtx.data;
       })()
     );
 
@@ -3389,13 +3468,10 @@ class Font {
     builder.addTable(
       "maxp",
       (function fontTableMaxp() {
-        const data = new Uint8Array(6),
-          view = new DataView(data.buffer);
-
-        setArray(data, 0, [0x00, 0x00, 0x50, 0x00]); // Version number
-        setInt16(view, 4, numGlyphs); // Num of glyphs
-
-        return data;
+        const maxp = new TrueTypeTableBuilder({ exactLength: 6 });
+        maxp.setArray([0x00, 0x00, 0x50, 0x00]); // Version number
+        maxp.setInt16(numGlyphs); // Num of glyphs
+        return maxp.data;
       })()
     );
 

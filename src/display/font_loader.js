@@ -18,7 +18,6 @@ import {
   FeatureTest,
   isNodeJS,
   shadow,
-  string32,
   unreachable,
   warn,
 } from "../shared/util.js";
@@ -268,6 +267,14 @@ class FontLoader {
         (data.charCodeAt(offset + 1) << 16) |
         (data.charCodeAt(offset + 2) << 8) |
         (data.charCodeAt(offset + 3) & 0xff)
+      );
+    }
+    function string32(value) {
+      return String.fromCharCode(
+        (value >> 24) & 0xff,
+        (value >> 16) & 0xff,
+        (value >> 8) & 0xff,
+        value & 0xff
       );
     }
     function spliceString(s, offset, remove, insert) {

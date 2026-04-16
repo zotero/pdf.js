@@ -685,10 +685,10 @@ function runTests(testsName, { bot = false } = {}) {
         }
         args.push("--manifestFile=" + PDF_TEST);
         collectArgs(
-          {
-            names: ["-t", "--testfilter"],
-            hasValue: true,
-          },
+          [
+            { names: ["-t", "--testfilter"], hasValue: true },
+            { names: ["-j", "--jobs"], hasValue: true },
+          ],
           args
         );
         break;
@@ -743,18 +743,49 @@ function collectArgs(options, args) {
   }
   for (let i = 0, ii = process.argv.length; i < ii; i++) {
     const arg = process.argv[i];
-    const option = options.find(opt => opt.names.includes(arg));
-    if (!option) {
+
+    // Exact name match (flag only, or flag with space-separated value).
+    const exactOption = options.find(opt => opt.names.includes(arg));
+    if (exactOption) {
+      if (!exactOption.hasValue) {
+        args.push(arg);
+        continue;
+      }
+      const next = process.argv[i + 1];
+      if (next && !next.startsWith("-")) {
+        args.push(arg, next);
+        i += 1;
+      }
       continue;
     }
-    if (!option.hasValue) {
-      args.push(arg);
-      continue;
-    }
-    const next = process.argv[i + 1];
-    if (next && !next.startsWith("-")) {
-      args.push(arg, next);
-      i += 1;
+
+    // Also handle --flag=value and -fvalue (concatenated short) forms.
+    for (const option of options) {
+      if (!option.hasValue) {
+        continue;
+      }
+      let matched = false;
+      for (const name of option.names) {
+        if (name.startsWith("--") && arg.startsWith(name + "=")) {
+          // --flag=value
+          args.push(name, arg.slice(name.length + 1));
+          matched = true;
+          break;
+        }
+        if (
+          !name.startsWith("--") &&
+          arg.startsWith(name) &&
+          arg.length > name.length
+        ) {
+          // -fvalue (short option with concatenated value)
+          args.push(name, arg.slice(name.length));
+          matched = true;
+          break;
+        }
+      }
+      if (matched) {
+        break;
+      }
     }
   }
 }
@@ -781,10 +812,10 @@ function makeRef(done, bot) {
     args.push("--headless");
   }
   collectArgs(
-    {
-      names: ["-t", "--testfilter"],
-      hasValue: true,
-    },
+    [
+      { names: ["-t", "--testfilter"], hasValue: true },
+      { names: ["-j", "--jobs"], hasValue: true },
+    ],
     args
   );
 

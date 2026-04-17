@@ -207,10 +207,6 @@ pdfjs-thumb-page-checkbox1 =
     .title = حدّد الصفحة { $page }
 # Variables:
 #   $page (Number) - the page number
-pdfjs-thumb-page-checkbox =
-    .aria-label = حدّد الصفحة { $page }
-# Variables:
-#   $page (Number) - the page number
 #   $total (Number) - the number of pages
 pdfjs-thumb-page-title1 =
     .title = الصفحة { $page } من { $total }
@@ -395,6 +391,18 @@ pdfjs-editor-add-saved-signature-button =
 pdfjs-free-text2 =
     .aria-label = محرِّر النص
     .default-content = ابدأ في كتابة…
+# Used to show how many comments are present in the pdf file.
+# Variables:
+#   $count (Number) - the number of comments.
+pdfjs-editor-comments-sidebar-title =
+    { $count ->
+        [zero] تعليق
+        [one] تعليق
+        [two] تعليقات
+        [few] تعليقات
+        [many] تعليقات
+       *[other] تعليقات
+    }
 pdfjs-editor-comments-sidebar-close-button =
     .title = أغلِق الشريط الجانبي
     .aria-label = أغلِق الشريط الجانبي
@@ -569,7 +577,7 @@ pdfjs-editor-undo-bar-close-button-label = أغلق
 ## Add a signature dialog
 
 pdfjs-editor-add-signature-dialog-label = يتيح هذا النموذج للمستخدم إنشاء توقيع لإضافته إلى مستند PDF. ويمكن للمستخدم تحرير الاسم (الذي يعمل أيضًا كنص بديل)، وحفظ التوقيع بشكل اختياري للاستخدام المتكرر.
-pdfjs-editor-add-signature-dialog-title = أضِف توقيعا
+pdfjs-editor-add-signature-dialog-title = أضِف توقيعًا
 
 ## Tab names
 
@@ -658,10 +666,9 @@ pdfjs-editor-add-comment-button =
 ##  - layers.
 ## The thumbnails view is used to edit the pdf: remove/insert pages, ...
 
-pdfjs-toggle-views-manager-button =
-    .title = بدّل ظهور الشريط الجانبي
+pdfjs-toggle-views-manager-notification-button =
+    .title = تبديل الشريط الجانبي (يحتوي المستند على صور مصغرة/مخطط تفصيلي/مرفقات/طبقات)
 pdfjs-toggle-views-manager-button1-label = أدِر الصفحات
-pdfjs-toggle-views-manager-button-label = بدّل ظهور الشريط الجانبي
 pdfjs-views-manager-sidebar =
     .aria-label = الشريط الجانبي
 pdfjs-views-manager-sidebar-resizer =
@@ -670,9 +677,11 @@ pdfjs-views-manager-view-selector-button =
     .title = المناظير
 pdfjs-views-manager-view-selector-button-label = المناظير
 pdfjs-views-manager-pages-title = الصفحات
-pdfjs-views-manager-outlines-title = مخطط المستند
+pdfjs-views-manager-outlines-title1 = مخطط المستند
+    .title = مخطط المستند (انقر نقرًا مزدوجًا لتوسيع/طي كافة العناصر)
 pdfjs-views-manager-attachments-title = المرفقات
-pdfjs-views-manager-layers-title = ‏‏الطبقات
+pdfjs-views-manager-layers-title1 = ‏‏طبقات
+    .title = الطبقات (انقر نقرًا مزدوجًا لإعادة تعيين كافة الطبقات إلى الحالة المبدئية)
 pdfjs-views-manager-pages-option-label = الصفحات
 pdfjs-views-manager-outlines-option-label = مخطط المستند
 pdfjs-views-manager-attachments-option-label = المرفقات
@@ -680,9 +689,79 @@ pdfjs-views-manager-layers-option-label = ‏‏الطبقات
 pdfjs-views-manager-add-file-button =
     .title = أضف ملف
 pdfjs-views-manager-add-file-button-label = أضف ملف
+# Variables:
+#   $count (Number) - the number of selected pages.
+pdfjs-views-manager-pages-status-action-label =
+    { $count ->
+        [zero] { $count } محدّد
+        [one] { $count } محدّد
+        [two] { $count } محدّدان
+        [few] { $count } محدّد
+        [many] { $count } محدّد
+       *[other] { $count } محدّد
+    }
 pdfjs-views-manager-pages-status-none-action-label = حدّد الصفحات
+pdfjs-views-manager-pages-status-action-button-label = أدِر
+pdfjs-views-manager-pages-status-copy-button-label = انسخ
+pdfjs-views-manager-pages-status-cut-button-label = قصّ
 pdfjs-views-manager-pages-status-delete-button-label = احذف
+pdfjs-views-manager-pages-status-export-selected-button-label = حُدِّد التصدير…
+# Variables:
+#   $count (Number) - the number of selected pages to be cut.
+pdfjs-views-manager-status-undo-cut-label =
+    { $count ->
+        [zero] لا صفحات قُصت
+        [one] صفحة قُصت
+        [two] { $count } صفحتان قُصت
+        [few] { $count } صفحات قُصت
+        [many] { $count } صفحةً قُصت
+       *[other] { $count } صفحة قُصت
+    }
+# Variables:
+#   $count (Number) - the number of selected pages to be copied.
+pdfjs-views-manager-pages-status-undo-copy-label =
+    { $count ->
+        [zero] لا صفحة منسوخة
+        [one] صفحة منسوخة
+        [two] صفحتان منسوختان
+        [few] { $count } صفحات منسوخة
+        [many] { $count } صفحةً منسوخةً
+       *[other] { $count } صفحة منسوخة
+    }
+# Variables:
+#   $count (Number) - the number of selected pages to be deleted.
+pdfjs-views-manager-pages-status-undo-delete-label =
+    { $count ->
+        [zero] لا صفحات محذوفة
+        [one] حُذف صفحة
+        [two] حُذف صفحتان
+        [few] حُذف { $count } صفحات
+        [many] حُذف { $count } صفحةً
+       *[other] حُذف { $count } صفحة
+    }
+pdfjs-views-manager-pages-status-waiting-ready-label = يجهز ملفك…
+pdfjs-views-manager-pages-status-waiting-uploading-label = يرفع ملف…
+pdfjs-views-manager-status-warning-cut-label = تعذّر القص. أنعش الصفحة وحاول مجددًا.
+pdfjs-views-manager-status-warning-copy-label = تعذّر النسخ. أنعش الصفحة وحاول مجددًا.
 pdfjs-views-manager-status-warning-delete-label = تعذّر الحذف. حدِّث الصفحة وحاول مجددًا.
+pdfjs-views-manager-status-warning-save-label = تعذّر الحفظ. أنعش الصفحة وحاول مجددًا.
+pdfjs-views-manager-status-undo-button-label = تراجع
+pdfjs-views-manager-status-done-button-label = تمّ
+pdfjs-views-manager-status-close-button =
+    .title = أغلق
+pdfjs-views-manager-status-close-button-label = أغلق
+pdfjs-views-manager-paste-button-label = ألصق
+pdfjs-views-manager-paste-button-before =
+    .title = ألصق قبل الصفحة الأولى
+# Variables:
+#   $page (Number) - the page number after which the paste button is.
+pdfjs-views-manager-paste-button-after =
+    .title = ألصق بعد الصفحة { $page }
+# Badge used to promote a new feature in the UI, keep it as short as possible.
+# It's spelled uppercase for English, but it can be translated as usual.
+pdfjs-new-badge-content = جديد
+pdfjs-toggle-views-manager-button1 =
+    .title = أدِر الصفحات
 
 ## Main menu for adding/removing signatures
 

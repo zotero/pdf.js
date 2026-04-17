@@ -22,6 +22,7 @@ import fsPromises from "fs/promises";
 import http from "http";
 import path from "path";
 import { pathToFileURL } from "url";
+import { WebSocketServer } from "ws";
 
 const MIME_TYPES = {
   ".css": "text/css",
@@ -49,6 +50,7 @@ class WebServer {
     this.host = host || "localhost";
     this.port = port || 0;
     this.server = null;
+    this.wss = null;
     this.verbose = false;
     this.cacheExpirationTime = cacheExpirationTime || 0;
     this.disableRangeRequests = false;
@@ -56,6 +58,7 @@ class WebServer {
     this.hooks = {
       GET: [crossOriginHandler, redirectHandler],
       POST: [],
+      WS: [],
     };
   }
 
@@ -63,10 +66,18 @@ class WebServer {
     this.#ensureNonZeroPort();
     this.server = http.createServer(this.#handler.bind(this));
     this.server.listen(this.port, this.host, callback);
+    this.wss = new WebSocketServer({ server: this.server });
+    this.wss.on("connection", ws => {
+      for (const handler of this.hooks.WS) {
+        handler(ws);
+      }
+    });
     console.log(`Server running at http://${this.host}:${this.port}/`);
   }
 
   stop(callback) {
+    this.wss.close();
+    this.wss = null;
     this.server.close(callback);
     this.server = null;
   }

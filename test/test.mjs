@@ -290,6 +290,33 @@ async function startRefTest(masterMode, showRefImages) {
     startTime = Date.now();
     startServer();
     server.hooks.POST.push(refTestPostHandler);
+    server.hooks.WS.push(ws => {
+      let pendingOps = 0;
+      let pendingQuit = null;
+      ws.on("message", (data, isBinary) => {
+        if (isBinary) {
+          pendingOps++;
+          handleWsBinaryResult(data).finally(() => {
+            if (--pendingOps === 0 && pendingQuit) {
+              pendingQuit();
+              pendingQuit = null;
+            }
+          });
+        } else {
+          const msg = JSON.parse(data.toString());
+          if (msg.type === "quit") {
+            const session = getSession(msg.browser);
+            monitorBrowserTimeout(session, null);
+            const doQuit = () => closeSession(session.name);
+            if (pendingOps === 0) {
+              doQuit();
+            } else {
+              pendingQuit = doQuit;
+            }
+          }
+        }
+      });
+    });
     onAllSessionsClosed = finalize;
 
     await startBrowsers({
@@ -400,68 +427,94 @@ function getSessionManifest(manifest, sessionIndex, sessionCount) {
   return manifest.slice(start, end);
 }
 
-function checkEq(task, results, session, masterMode) {
-  var taskId = task.id;
+async function checkEq(task, results, session, masterMode) {
+  const taskId = task.id;
   const browserType = session.browserType ?? session.name;
-  var refSnapshotDir = path.join(refsDir, os.platform(), browserType, taskId);
-  var testSnapshotDir = path.join(
+  const refSnapshotDir = path.join(refsDir, os.platform(), browserType, taskId);
+  const testSnapshotDir = path.join(
     testResultDir,
     os.platform(),
     browserType,
     taskId
   );
+  const tmpSnapshotDir = masterMode
+    ? path.join(refsTmpDir, os.platform(), browserType, taskId)
+    : null;
 
-  var pageResults = results[0];
-  var taskType = task.type;
-  var numEqNoSnapshot = 0;
-  var numEqFailures = 0;
-  for (var page = 0; page < pageResults.length; page++) {
-    if (!pageResults[page]) {
+  const pageResults = results[0];
+  const taskType = task.type;
+  let numEqNoSnapshot = 0;
+  let numEqFailures = 0;
+
+  // Read all reference PNGs in parallel, skipping pages with no valid snapshot.
+  const refSnapshots = await Promise.all(
+    pageResults.map((pageResult, page) => {
+      if (!pageResult || !(pageResult.snapshot instanceof Buffer)) {
+        return null;
+      }
+      return fs.promises
+        .readFile(path.join(refSnapshotDir, `${page + 1}.png`))
+        .catch(err => {
+          if (err.code === "ENOENT") {
+            return null;
+          }
+          throw err;
+        });
+    })
+  );
+
+  // Compare all pages (in-memory) and collect all I/O writes to fire together.
+  const writePromises = [];
+  const logEntries = [];
+  let testDirCreated = false;
+  let tmpDirCreated = false;
+
+  for (let page = 0; page < pageResults.length; page++) {
+    const pageResult = pageResults[page];
+    if (!pageResult) {
       continue;
     }
-    const pageResult = pageResults[page];
-    let testSnapshot = pageResult.snapshot;
-    if (testSnapshot?.startsWith("data:image/png;base64,")) {
-      testSnapshot = Buffer.from(testSnapshot.substring(22), "base64");
-    } else {
+    const testSnapshot = pageResult.snapshot;
+    if (!(testSnapshot instanceof Buffer)) {
       console.error("Valid snapshot was not found.");
+      continue;
     }
-    let unoptimizedSnapshot = pageResult.baselineSnapshot;
-    if (unoptimizedSnapshot?.startsWith("data:image/png;base64,")) {
-      unoptimizedSnapshot = Buffer.from(
-        unoptimizedSnapshot.substring(22),
-        "base64"
-      );
-    }
+    const unoptimizedSnapshot = pageResult.baselineSnapshot ?? null;
+    const refSnapshot = refSnapshots[page];
 
-    var refSnapshot = null;
-    var eq = false;
-    var refPath = path.join(refSnapshotDir, `${page + 1}.png`);
-    if (!fs.existsSync(refPath)) {
+    let eq = false;
+    if (!refSnapshot) {
       numEqNoSnapshot++;
       if (!masterMode) {
-        console.log(`WARNING: no reference snapshot ${refPath}`);
+        console.log(
+          `WARNING: no reference snapshot ${path.join(refSnapshotDir, `${page + 1}.png`)}`
+        );
       }
     } else {
-      refSnapshot = fs.readFileSync(refPath);
       eq =
-        stripPrivatePngChunks(refSnapshot).toString("hex") ===
-        stripPrivatePngChunks(testSnapshot).toString("hex");
+        Buffer.compare(
+          stripPrivatePngChunks(refSnapshot),
+          stripPrivatePngChunks(testSnapshot)
+        ) === 0;
       if (!eq) {
         console.log(
           `TEST-UNEXPECTED-FAIL | ${taskType} ${taskId} | in ${session.name} | rendering of page ${page + 1} != reference rendering`
         );
 
-        ensureDirSync(testSnapshotDir);
+        if (!testDirCreated) {
+          ensureDirSync(testSnapshotDir);
+          testDirCreated = true;
+        }
         const testPng = path.join(testSnapshotDir, `${page + 1}.png`);
         const refPng = path.join(testSnapshotDir, `${page + 1}_ref.png`);
-        fs.writeFileSync(testPng, testSnapshot);
-        fs.writeFileSync(refPng, refSnapshot);
+        writePromises.push(
+          fs.promises.writeFile(testPng, testSnapshot),
+          fs.promises.writeFile(refPng, refSnapshot)
+        );
 
         // This no longer follows the format of Mozilla reftest output.
         const viewportString = `(${pageResult.viewportWidth}x${pageResult.viewportHeight}x${pageResult.outputScale})`;
-        fs.appendFileSync(
-          eqLog,
+        logEntries.push(
           `REFTEST TEST-UNEXPECTED-FAIL | ${session.name}-${taskId}-page${page + 1} | image comparison (==)\n` +
             `REFTEST   IMAGE 1 (TEST)${viewportString}: ${testPng}\n` +
             `REFTEST   IMAGE 2 (REFERENCE)${viewportString}: ${refPng}\n`
@@ -470,19 +523,23 @@ function checkEq(task, results, session, masterMode) {
       }
     }
     if (masterMode && (!refSnapshot || !eq)) {
-      var tmpSnapshotDir = path.join(
-        refsTmpDir,
-        os.platform(),
-        browserType,
-        taskId
-      );
-      ensureDirSync(tmpSnapshotDir);
-      fs.writeFileSync(
-        path.join(tmpSnapshotDir, `${page + 1}.png`),
-        unoptimizedSnapshot ?? testSnapshot
+      if (!tmpDirCreated) {
+        ensureDirSync(tmpSnapshotDir);
+        tmpDirCreated = true;
+      }
+      writePromises.push(
+        fs.promises.writeFile(
+          path.join(tmpSnapshotDir, `${page + 1}.png`),
+          unoptimizedSnapshot ?? testSnapshot
+        )
       );
     }
   }
+
+  if (logEntries.length) {
+    writePromises.push(fs.promises.appendFile(eqLog, logEntries.join("")));
+  }
+  await Promise.all(writePromises);
 
   session.numEqNoSnapshot += numEqNoSnapshot;
   if (numEqFailures > 0) {
@@ -506,7 +563,7 @@ function checkFBF(task, results, session, masterMode) {
     if (!r0Page) {
       continue;
     }
-    if (r0Page.snapshot !== r1Page.snapshot) {
+    if (Buffer.compare(r0Page.snapshot, r1Page.snapshot) !== 0) {
       // The FBF tests fail intermittently in Firefox and Google Chrome when run
       // on the bots, ignoring `makeref` failures for now; see
       //  - https://github.com/mozilla/pdf.js/pull/12368
@@ -543,7 +600,7 @@ function checkLoad(task, results, browser) {
   console.log(`TEST-PASS | load test ${task.id} | in ${browser}`);
 }
 
-function checkRefTestResults(browser, id, results) {
+async function checkRefTestResults(browser, id, results) {
   var failed = false;
   var session = getSession(browser);
   var task = session.tasks[id];
@@ -605,7 +662,7 @@ function checkRefTestResults(browser, id, results) {
     case "text":
     case "highlight":
     case "extract":
-      checkEq(task, results, session, session.masterMode);
+      await checkEq(task, results, session, session.masterMode);
       break;
     case "fbf":
       checkFBF(task, results, session, session.masterMode);
@@ -624,16 +681,61 @@ function checkRefTestResults(browser, id, results) {
   });
 }
 
-function refTestPostHandler(parsedUrl, req, res) {
-  var pathname = parsedUrl.pathname;
-  if (
-    pathname !== "/tellMeToQuit" &&
-    pathname !== "/info" &&
-    pathname !== "/submit_task_results"
-  ) {
-    return false;
+async function handleWsBinaryResult(data) {
+  // Binary frame layout:
+  //   [4 bytes BE: meta_len][meta JSON][4 bytes BE: snapshot_len]
+  //   [snapshot PNG][baseline PNG (rest)]
+  const metaLen = data.readUInt32BE(0);
+  const meta = JSON.parse(data.subarray(4, 4 + metaLen).toString("utf8"));
+  const snapshotLen = data.readUInt32BE(4 + metaLen);
+  const snapshotOffset = 8 + metaLen;
+  const snapshot = data.subarray(snapshotOffset, snapshotOffset + snapshotLen);
+  const baseline =
+    data.length > snapshotOffset + snapshotLen
+      ? data.subarray(snapshotOffset + snapshotLen)
+      : null;
+
+  const { browser, id, round, page, failure, lastPageNum, numberOfTasks } =
+    meta;
+  const session = getSession(browser);
+  monitorBrowserTimeout(session, handleSessionTimeout);
+
+  const taskResults = session.taskResults[id];
+  if (!taskResults[round]) {
+    taskResults[round] = [];
+  }
+  if (taskResults[round][page - 1]) {
+    console.error(
+      `Results for ${browser}:${id}:${round}:${page - 1} were already submitted`
+    );
+    // TODO abort testing here?
+  }
+  taskResults[round][page - 1] = {
+    failure,
+    snapshot,
+    baselineSnapshot: baseline,
+    viewportWidth: meta.viewportWidth,
+    viewportHeight: meta.viewportHeight,
+    outputScale: meta.outputScale,
+  };
+  if (stats) {
+    stats.push({ browser, pdf: id, page: page - 1, round, stats: meta.stats });
   }
 
+  const lastTaskResults = taskResults.at(-1);
+  const isDone =
+    lastTaskResults?.[lastPageNum - 1] ||
+    lastTaskResults?.filter(result => !!result).length === numberOfTasks;
+  if (isDone) {
+    await checkRefTestResults(browser, id, taskResults);
+    session.remaining--;
+  }
+}
+
+function refTestPostHandler(parsedUrl, req, res) {
+  if (parsedUrl.pathname !== "/info") {
+    return false;
+  }
   var body = "";
   req.on("data", function (data) {
     body += data;
@@ -641,80 +743,7 @@ function refTestPostHandler(parsedUrl, req, res) {
   req.on("end", function () {
     res.writeHead(200, { "Content-Type": "text/plain" });
     res.end();
-
-    var session;
-    if (pathname === "/tellMeToQuit") {
-      session = getSession(parsedUrl.searchParams.get("browser"));
-      monitorBrowserTimeout(session, null);
-      closeSession(session.name);
-      return;
-    }
-
-    var data = JSON.parse(body);
-    if (pathname === "/info") {
-      console.log(data.message);
-      return;
-    }
-
-    var browser = data.browser;
-    var round = data.round;
-    var id = data.id;
-    var page = data.page - 1;
-    var failure = data.failure;
-    var snapshot = data.snapshot;
-    var baselineSnapshot = data.baselineSnapshot;
-    var lastPageNum = data.lastPageNum;
-    var numberOfTasks = data.numberOfTasks;
-
-    session = getSession(browser);
-    monitorBrowserTimeout(session, handleSessionTimeout);
-
-    var taskResults = session.taskResults[id];
-    if (!taskResults[round]) {
-      taskResults[round] = [];
-    }
-
-    if (taskResults[round][page]) {
-      console.error(
-        "Results for " +
-          browser +
-          ":" +
-          id +
-          ":" +
-          round +
-          ":" +
-          page +
-          " were already submitted"
-      );
-      // TODO abort testing here?
-    }
-
-    taskResults[round][page] = {
-      failure,
-      snapshot,
-      baselineSnapshot,
-      viewportWidth: data.viewportWidth,
-      viewportHeight: data.viewportHeight,
-      outputScale: data.outputScale,
-    };
-    if (stats) {
-      stats.push({
-        browser,
-        pdf: id,
-        page,
-        round,
-        stats: data.stats,
-      });
-    }
-
-    const lastTaskResults = taskResults.at(-1);
-    const isDone =
-      lastTaskResults?.[lastPageNum - 1] ||
-      lastTaskResults?.filter(result => !!result).length === numberOfTasks;
-    if (isDone) {
-      checkRefTestResults(browser, id, taskResults);
-      session.remaining--;
-    }
+    console.log(JSON.parse(body).message);
   });
   return true;
 }
@@ -911,6 +940,10 @@ async function startBrowser({
       // Disable AI/ML functionality.
       "browser.ai.control.default": "blocked",
       "privacy.baselineFingerprintingProtection": false,
+      // Disable bounce tracking protection to avoid creating a SQLite database
+      // file that Firefox keeps locked briefly after shutdown, causing EBUSY
+      // errors in Puppeteer's profile cleanup on Windows.
+      "privacy.bounceTrackingProtection.mode": 0,
       ...extraPrefsFirefox,
     };
   }

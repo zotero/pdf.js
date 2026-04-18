@@ -549,7 +549,6 @@ class Driver {
     };
     this._info("User agent: " + navigator.userAgent);
     this._log(`Harness thinks this browser is ${this.browser}\n`);
-    this._log('Fetching manifest "' + this.manifestFile + '"... ');
 
     if (this.delay > 0) {
       this._log("\nDelaying for " + this.delay + " ms...\n");
@@ -562,32 +561,39 @@ class Driver {
           this.ws.addEventListener("open", resolve, { once: true });
         });
       }
-      const response = await fetch(this.manifestFile);
-      if (!response.ok) {
-        throw new Error(response.statusText);
-      }
-      this._log("done\n");
-      this.manifest = await response.json();
 
-      if (this.testFilter?.length) {
-        this.manifest = this.manifest.filter(item => {
-          if (this.testFilter.includes(item.id)) {
-            return true;
+      // Dynamic task queue: server sends tasks on demand.
+      this.taskQueue = [];
+      this.serverDone = false;
+      this.pendingTaskResolve = null;
+      this.currentTask = null;
+      this.tasksDone = 0;
+
+      this.ws.addEventListener("message", event => {
+        if (typeof event.data !== "string") {
+          return;
+        }
+        const msg = JSON.parse(event.data);
+        if (msg.type === "task") {
+          if (this.pendingTaskResolve) {
+            this.pendingTaskResolve(msg.task);
+            this.pendingTaskResolve = null;
+          } else {
+            this.taskQueue.push(msg.task);
+            // Prefetch PDF for this task if it's now first in queue.
+            if (this.taskQueue.length === 1) {
+              this._prefetchNextTask();
+            }
           }
-          return false;
-        });
-      }
-      if (this.sessionCount > 1) {
-        const { sessionIndex, sessionCount } = this;
-        const start = Math.floor(
-          (this.manifest.length * sessionIndex) / sessionCount
-        );
-        const end = Math.floor(
-          (this.manifest.length * (sessionIndex + 1)) / sessionCount
-        );
-        this.manifest = this.manifest.slice(start, end);
-      }
-      this.currentTask = 0;
+        } else if (msg.type === "done") {
+          this.serverDone = true;
+          if (this.pendingTaskResolve) {
+            this.pendingTaskResolve(null);
+            this.pendingTaskResolve = null;
+          }
+        }
+      });
+
       this._nextTask();
     }, this.delay);
   }
@@ -602,23 +608,38 @@ class Driver {
    */
   log(msg) {
     let id = this.browser;
-    const task = this.manifest[this.currentTask];
-    if (task) {
-      id += `-${task.id}`;
+    if (this.currentTask) {
+      id += `-${this.currentTask.id}`;
     }
-
     this._info(`${id}: ${msg}`);
+  }
+
+  _waitForNextTask() {
+    if (this.taskQueue.length > 0) {
+      return Promise.resolve(this.taskQueue.shift());
+    }
+    if (this.serverDone) {
+      return Promise.resolve(null);
+    }
+    this.ws.send(
+      JSON.stringify({ type: "requestTask", browser: this.browser })
+    );
+    return new Promise(resolve => {
+      this.pendingTaskResolve = resolve;
+    });
   }
 
   _nextTask() {
     let failure = "";
 
-    this._cleanup().then(() => {
-      if (this.currentTask === this.manifest.length) {
+    this._cleanup().then(async () => {
+      const task = await this._waitForNextTask();
+      if (!task) {
         this._done();
         return;
       }
-      const task = this.manifest[this.currentTask];
+      this.currentTask = task;
+
       task.round = 0;
       task.pageNum = task.firstPage || 1;
       task.stats = { times: [] };
@@ -658,13 +679,10 @@ class Driver {
         md5FileMap.set(task.md5, task.file);
       }
 
-      this._log(
-        `[${this.currentTask + 1}/${this.manifest.length}] ${task.id}:\n`
-      );
+      this._log(`[${++this.tasksDone}] ${task.id}:\n`);
 
       if (task.type === "skip-because-failing") {
         this._log(`  Skipping file "${task.file} because it's failing"\n`);
-        this.currentTask++;
         this._nextTask();
         return;
       }
@@ -678,7 +696,6 @@ class Driver {
           this._nextPage(task, 'Expected "other" test-case to be linked.');
           return;
         }
-        this.currentTask++;
         this._nextTask();
         return;
       }
@@ -885,11 +902,10 @@ class Driver {
   }
 
   _prefetchNextTask() {
-    const nextIdx = this.currentTask + 1;
-    if (nextIdx >= this.manifest.length) {
+    const task = this.taskQueue[0];
+    if (!task) {
       return;
     }
-    const task = this.manifest[nextIdx];
     // Skip tasks that do not load a PDF or that need DOM setup (XFA style
     // element injection) to happen synchronously before getDocument.
     if (
@@ -899,7 +915,9 @@ class Driver {
     ) {
       return;
     }
-    task._prefetchedLoadingTask = getDocument(this._getDocumentOptions(task));
+    if (!task._prefetchedLoadingTask) {
+      task._prefetchedLoadingTask = getDocument(this._getDocumentOptions(task));
+    }
   }
 
   _cleanup() {
@@ -918,10 +936,10 @@ class Driver {
 
     const destroyedPromises = [];
     // Wipe out the link to the pdfdoc so it can be GC'ed.
-    for (let i = 0; i < this.manifest.length; i++) {
-      if (this.manifest[i].pdfDoc) {
-        destroyedPromises.push(this.manifest[i].pdfDoc.destroy());
-        delete this.manifest[i].pdfDoc;
+    for (const task of [this.currentTask, ...this.taskQueue]) {
+      if (task?.pdfDoc) {
+        destroyedPromises.push(task.pdfDoc.destroy());
+        delete task.pdfDoc;
       }
     }
     return Promise.all(destroyedPromises);
@@ -955,7 +973,6 @@ class Driver {
         .then(blob => this._sendResult(blob, task, failure))
         .then(() => {
           this._log(`done${failure ? ` (failed !: ${failure})` : ""}\n`);
-          this.currentTask++;
           this._nextTask();
         });
       return;
@@ -966,7 +983,6 @@ class Driver {
         this._log(`  Round ${1 + task.round}\n`);
         task.pageNum = task.firstPage || 1;
       } else {
-        this.currentTask++;
         this._nextTask();
         return;
       }

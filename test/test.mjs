@@ -290,6 +290,9 @@ async function startRefTest(masterMode, showRefImages) {
     startTime = Date.now();
     startServer();
     server.hooks.POST.push(refTestPostHandler);
+    taskQueue = new Map();
+    refPngCache = new Map();
+
     server.hooks.WS.push(ws => {
       let pendingOps = 0;
       let pendingQuit = null;
@@ -304,7 +307,29 @@ async function startRefTest(masterMode, showRefImages) {
           });
         } else {
           const msg = JSON.parse(data.toString());
-          if (msg.type === "quit") {
+          if (msg.type === "requestTask") {
+            const session = getSession(msg.browser);
+            session.taskResults ??= {};
+            session.tasks ??= {};
+            session.remaining ??= 0;
+            const browserType = session.browserType ?? session.name;
+            if (!taskQueue.has(browserType)) {
+              taskQueue.set(browserType, [...manifest]);
+            }
+            const task = taskQueue.get(browserType).shift();
+            if (task) {
+              const rounds = task.rounds || 1;
+              const roundsResults = [];
+              roundsResults.length = rounds;
+              session.taskResults[task.id] = roundsResults;
+              session.tasks[task.id] = task;
+              session.remaining++;
+              ws.send(JSON.stringify({ type: "task", task }));
+              prefetchRefPngs(browserType, task);
+            } else {
+              ws.send(JSON.stringify({ type: "done" }));
+            }
+          } else if (msg.type === "quit") {
             const session = getSession(msg.browser);
             monitorBrowserTimeout(session, null);
             const doQuit = () => closeSession(session.name);
@@ -324,21 +349,9 @@ async function startRefTest(masterMode, showRefImages) {
       numSessions: options.jobs,
       initializeSession: session => {
         session.masterMode = masterMode;
-        session.taskResults = {};
-        session.tasks = {};
-        const sessionManifest = getSessionManifest(
-          manifest,
-          session.sessionIndex,
-          session.sessionCount
-        );
-        session.remaining = sessionManifest.length;
-        sessionManifest.forEach(function (item) {
-          var rounds = item.rounds || 1;
-          var roundsResults = [];
-          roundsResults.length = rounds;
-          session.taskResults[item.id] = roundsResults;
-          session.tasks[item.id] = item;
-        });
+        session.taskResults ??= {};
+        session.tasks ??= {};
+        session.remaining ??= 0;
         session.numRuns = 0;
         session.numErrors = 0;
         session.numFBFFailures = 0;
@@ -379,6 +392,7 @@ async function startRefTest(masterMode, showRefImages) {
   if (!manifest) {
     return;
   }
+
   if (!options.noDownload) {
     await ensurePDFsDownloaded();
   }
@@ -418,13 +432,32 @@ function getTestManifest() {
   return manifest;
 }
 
-function getSessionManifest(manifest, sessionIndex, sessionCount) {
-  if (sessionCount <= 1) {
-    return manifest;
+function prefetchRefPngs(browserType, task) {
+  if (
+    task.type !== "eq" &&
+    task.type !== "partial" &&
+    task.type !== "text" &&
+    task.type !== "highlight" &&
+    task.type !== "extract"
+  ) {
+    return;
   }
-  const start = Math.floor((manifest.length * sessionIndex) / sessionCount);
-  const end = Math.floor((manifest.length * (sessionIndex + 1)) / sessionCount);
-  return manifest.slice(start, end);
+  const refSnapshotDir = path.join(
+    refsDir,
+    os.platform(),
+    browserType,
+    task.id
+  );
+  const firstPage = task.firstPage || 1;
+  const lastPage = task.lastPage;
+  // 0-indexed so pages[p-1] = promise for `${p}.png`, matching checkEq's loop.
+  const pages = [];
+  for (let p = firstPage; p <= lastPage; p++) {
+    pages[p - 1] = fs.promises
+      .readFile(path.join(refSnapshotDir, `${p}.png`))
+      .catch(err => (err.code === "ENOENT" ? null : Promise.reject(err)));
+  }
+  refPngCache.set(`${browserType}/${task.id}`, pages);
 }
 
 async function checkEq(task, results, session, masterMode) {
@@ -446,20 +479,28 @@ async function checkEq(task, results, session, masterMode) {
   let numEqNoSnapshot = 0;
   let numEqFailures = 0;
 
-  // Read all reference PNGs in parallel, skipping pages with no valid snapshot.
+  const cacheKey = `${browserType}/${taskId}`;
+  const cachedPages = refPngCache.get(cacheKey);
+  refPngCache.delete(cacheKey);
+
+  // Consume pre-started ref PNG reads (started when the task was dispatched),
+  // falling back to a fresh read if the cache entry is missing.
   const refSnapshots = await Promise.all(
     pageResults.map((pageResult, page) => {
       if (!pageResult || !(pageResult.snapshot instanceof Buffer)) {
         return null;
       }
-      return fs.promises
-        .readFile(path.join(refSnapshotDir, `${page + 1}.png`))
-        .catch(err => {
-          if (err.code === "ENOENT") {
-            return null;
-          }
-          throw err;
-        });
+      return (
+        cachedPages?.[page] ??
+        fs.promises
+          .readFile(path.join(refSnapshotDir, `${page + 1}.png`))
+          .catch(err => {
+            if (err.code === "ENOENT") {
+              return null;
+            }
+            throw err;
+          })
+      );
     })
   );
 
@@ -653,32 +694,39 @@ async function checkRefTestResults(browser, id, results) {
       }
     });
   });
+  const browserType = session.browserType ?? session.name;
   if (failed) {
-    return;
+    refPngCache.delete(`${browserType}/${id}`);
+  } else {
+    switch (task.type) {
+      case "eq":
+      case "partial":
+      case "text":
+      case "highlight":
+      case "extract":
+        await checkEq(task, results, session, session.masterMode);
+        break;
+      case "fbf":
+        checkFBF(task, results, session, session.masterMode);
+        break;
+      case "load":
+        checkLoad(task, results, session.name);
+        break;
+      default:
+        throw new Error("Unknown test type");
+    }
   }
-  switch (task.type) {
-    case "eq":
-    case "partial":
-    case "text":
-    case "highlight":
-    case "extract":
-      await checkEq(task, results, session, session.masterMode);
-      break;
-    case "fbf":
-      checkFBF(task, results, session, session.masterMode);
-      break;
-    case "load":
-      checkLoad(task, results, session.name);
-      break;
-    default:
-      throw new Error("Unknown test type");
-  }
-  // clear memory
-  results.forEach(function (roundResults, round) {
-    roundResults.forEach(function (pageResult, page) {
-      pageResult.snapshot = null;
+  // Clear snapshot buffers and drop the task entry from the session.
+  results.forEach(function (roundResults) {
+    roundResults.forEach(function (pageResult) {
+      if (pageResult) {
+        pageResult.snapshot = null;
+        pageResult.baselineSnapshot = null;
+      }
     });
   });
+  delete session.taskResults[id];
+  delete session.tasks[id];
 }
 
 async function handleWsBinaryResult(data) {
@@ -689,10 +737,13 @@ async function handleWsBinaryResult(data) {
   const meta = JSON.parse(data.subarray(4, 4 + metaLen).toString("utf8"));
   const snapshotLen = data.readUInt32BE(4 + metaLen);
   const snapshotOffset = 8 + metaLen;
-  const snapshot = data.subarray(snapshotOffset, snapshotOffset + snapshotLen);
+  // Copy slices so the original WS frame buffer can be GC'd immediately.
+  const snapshot = Buffer.from(
+    data.subarray(snapshotOffset, snapshotOffset + snapshotLen)
+  );
   const baseline =
     data.length > snapshotOffset + snapshotLen
-      ? data.subarray(snapshotOffset + snapshotLen)
+      ? Buffer.from(data.subarray(snapshotOffset + snapshotLen))
       : null;
 
   const { browser, id, round, page, failure, lastPageNum, numberOfTasks } =
@@ -724,8 +775,8 @@ async function handleWsBinaryResult(data) {
 
   const lastTaskResults = taskResults.at(-1);
   const isDone =
-    lastTaskResults?.[lastPageNum - 1] ||
-    lastTaskResults?.filter(result => !!result).length === numberOfTasks;
+    !!lastTaskResults?.[lastPageNum - 1] ||
+    lastTaskResults?.filter(Boolean).length === numberOfTasks;
   if (isDone) {
     await checkRefTestResults(browser, id, taskResults);
     session.remaining--;
@@ -1003,14 +1054,9 @@ async function startBrowsers({ baseUrl, initializeSession, numSessions = 1 }) {
       if (baseUrl) {
         startUrl =
           `${baseUrl}?browser=${encodeURIComponent(sessionName)}` +
-          `&manifestFile=${encodeURIComponent(`/test/${options.manifestFile}`)}` +
           `&testFilter=${JSON.stringify(options.testfilter)}` +
-          `&delay=${options.statsDelay}&masterMode=${options.masterMode}` +
-          (numSessions > 1
-            ? `&sessionIndex=${i}&sessionCount=${numSessions}`
-            : "");
+          `&delay=${options.statsDelay}&masterMode=${options.masterMode}`;
       }
-
       await startBrowser({ browserName, startUrl })
         .then(async function (browser) {
           session.browser = browser;
@@ -1189,6 +1235,8 @@ var host = "127.0.0.1";
 var options = parseOptions();
 var stats;
 var tempDir = null;
+var taskQueue = new Map();
+var refPngCache = new Map();
 
 main();
 

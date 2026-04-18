@@ -359,9 +359,8 @@ class Type1Font {
 
     const count = glyphs.length;
     const charsetArray = [".notdef"];
-    let i, ii;
-    for (i = 0; i < count; i++) {
-      const glyphName = charstrings[i].glyphName;
+    for (let i = 0; i < count; i++) {
+      const { glyphName } = charstrings[i];
       const index = CFFStandardStrings.indexOf(glyphName);
       if (index === -1) {
         strings.add(glyphName);
@@ -372,7 +371,7 @@ class Type1Font {
 
     const charStringsIndex = new CFFIndex();
     charStringsIndex.add([0x8b, 0x0e]); // .notdef
-    for (i = 0; i < count; i++) {
+    for (let i = 0; i < count; i++) {
       charStringsIndex.add(glyphs[i]);
     }
     cff.charStrings = charStringsIndex;
@@ -395,12 +394,11 @@ class Type1Font {
       "StdHW",
       "StdVW",
     ];
-    for (i = 0, ii = fields.length; i < ii; i++) {
-      const field = fields[i];
-      if (!(field in properties.privateData)) {
+    for (const field of fields) {
+      if (!properties.privateData.has(field)) {
         continue;
       }
-      const value = properties.privateData[field];
+      const value = properties.privateData.get(field);
       if (Array.isArray(value)) {
         // All of the private dictionary array data in CFF must be stored as
         // "delta-encoded" numbers.
@@ -413,8 +411,8 @@ class Type1Font {
     cff.topDict.privateDict = privateDict;
 
     const subrIndex = new CFFIndex();
-    for (i = 0, ii = subrs.length; i < ii; i++) {
-      subrIndex.add(subrs[i]);
+    for (const subr of subrs) {
+      subrIndex.add(subr);
     }
     privateDict.subrsIndex = subrIndex;
 

@@ -557,8 +557,7 @@ class Type1Parser {
 
     const subrs = [],
       charstrings = [];
-    const privateData = Object.create(null);
-    privateData.lenIV = 4;
+    const privateData = new Map([["lenIV", 4]]);
     const program = {
       subrs: [],
       charstrings: [],
@@ -593,7 +592,7 @@ class Type1Parser {
             length = this.readInt();
             this.getToken(); // read in 'RD' or '-|'
             data = length > 0 ? stream.getBytes(length) : new Uint8Array(0);
-            lenIV = program.properties.privateData.lenIV;
+            lenIV = privateData.get("lenIV");
             const encoded = this.readCharStrings(data, lenIV);
             this.nextChar();
             token = this.getToken(); // read in 'ND' or '|-'
@@ -618,7 +617,7 @@ class Type1Parser {
             length = this.readInt();
             this.getToken(); // read in 'RD' or '-|'
             data = length > 0 ? stream.getBytes(length) : new Uint8Array(0);
-            lenIV = program.properties.privateData.lenIV;
+            lenIV = privateData.get("lenIV");
             const encoded = this.readCharStrings(data, lenIV);
             this.nextChar();
             token = this.getToken(); // read in 'NP' or '|'
@@ -640,32 +639,32 @@ class Type1Parser {
             blueArray.length % 2 === 0 &&
             HINTING_ENABLED
           ) {
-            program.properties.privateData[token] = blueArray;
+            privateData.set(token, blueArray);
           }
           break;
         case "StemSnapH":
         case "StemSnapV":
-          program.properties.privateData[token] = this.readNumberArray();
+          privateData.set(token, this.readNumberArray());
           break;
         case "StdHW":
         case "StdVW":
-          program.properties.privateData[token] = this.readNumberArray()[0];
+          privateData.set(token, this.readNumberArray()[0]);
           break;
         case "BlueShift":
         case "lenIV":
         case "BlueFuzz":
         case "BlueScale":
         case "LanguageGroup":
-          program.properties.privateData[token] = this.readNumber();
+          privateData.set(token, this.readNumber());
           break;
         case "ExpansionFactor":
           // Firefox doesn't render correctly a font with a null factor on
           // Windows (see issue 15289), hence we just reset it to its default
           // value (0.06).
-          program.properties.privateData[token] = this.readNumber() || 0.06;
+          privateData.set(token, this.readNumber() || 0.06);
           break;
         case "ForceBold":
-          program.properties.privateData[token] = this.readBoolean();
+          privateData.set(token, this.readBoolean());
           break;
       }
     }

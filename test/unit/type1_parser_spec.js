@@ -94,7 +94,7 @@ describe("Type1Parser", function () {
     const parser = new Type1Parser(stream, false, SEAC_ANALYSIS_ENABLED);
     const program = parser.extractFontProgram({});
     expect(program.charstrings.length).toEqual(1);
-    expect(program.properties.privateData.ExpansionFactor).toEqual(99);
+    expect(program.properties.privateData.get("ExpansionFactor")).toEqual(99);
   });
 
   it("parses font header font matrix", function () {

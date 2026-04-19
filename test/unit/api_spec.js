@@ -3723,9 +3723,25 @@ page 1 / 3`);
         vertical: false,
       });
 
-      // Wait for font data to be loaded so we can check that the font names
-      // match.
-      await pdfPage.getOperatorList();
+      // Render the page to make sure that the font data is loaded so we can
+      // check that the font name in `commonObjs` matches.
+      const { canvasFactory } = pdfDoc;
+      const viewport = pdfPage.getViewport({ scale: 1 });
+
+      const canvasAndCtx = canvasFactory.create(
+        viewport.width,
+        viewport.height
+      );
+      const renderTask = pdfPage.render({
+        canvas: canvasAndCtx.canvas,
+        viewport,
+      });
+
+      await renderTask.promise;
+      // The canvas is no longer necessary, since we only care about the
+      // `commonObjs` property being populated below.
+      canvasFactory.destroy(canvasAndCtx);
+
       expect(pdfPage.commonObjs.has(fontName)).toEqual(true);
 
       await loadingTask.destroy();

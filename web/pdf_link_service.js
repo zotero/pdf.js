@@ -266,11 +266,21 @@ class PDFLinkService {
     const target = newWindow ? LinkTarget.BLANK : this.externalLinkTarget,
       rel = this.externalLinkRel;
 
+    // Strip userinfo (user:password@) from URLs used for display, to prevent
+    // phishing via hostname-spoofing (e.g. https://trusted.example@attacker.example/).
+    let displayUrl = url;
+    const parsedUrl = URL.parse(url);
+    if (parsedUrl?.username || parsedUrl?.password) {
+      parsedUrl.username = parsedUrl.password = "";
+      displayUrl = parsedUrl.href;
+    }
+
     if (this.externalLinkEnabled) {
-      link.href = link.title = url;
+      link.href = url;
+      link.title = displayUrl;
     } else {
       link.href = "";
-      link.title = `Disabled: ${url}`;
+      link.title = `Disabled: ${displayUrl}`;
       link.onclick = () => false;
     }
 

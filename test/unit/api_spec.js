@@ -6971,6 +6971,41 @@ small scripts as well as for`);
 
         await newLoadingTask.destroy();
       });
+
+      it("should handle parent items whose dest was cleared but rawDict still holds a GoTo action (bug 2033603)", async function () {
+        // outline_goto_action.pdf has 2 pages and this outline:
+        //   "Parent"  /A << /S /GoTo /D [page1Ref /FitH 842] >>
+        //     "Child"  /Dest [page2Ref /FitH 0]
+        const loadingTask = getDocument(
+          buildGetDocumentParams("outline_goto_action.pdf")
+        );
+        const pdfDoc = await loadingTask.promise;
+        const data = await pdfDoc.extractPages([
+          { document: null, includePages: [1] },
+        ]);
+        await loadingTask.destroy();
+
+        const newLoadingTask = getDocument(data);
+        const newPdfDoc = await newLoadingTask.promise;
+        expect(newPdfDoc.numPages).toEqual(1);
+
+        const outline = await newPdfDoc.getOutline();
+        expect(Array.isArray(outline)).toEqual(true);
+        expect(outline.length).toEqual(1);
+
+        // "Parent" is kept as a plain container (dest cleared, no action).
+        const parent = outline[0];
+        expect(parent.title).toEqual("Parent");
+        expect(parent.dest).toEqual(null);
+        expect(parent.items.length).toEqual(1);
+
+        // "Child" keeps its explicit dest pointing to the (only) kept page.
+        const child = parent.items[0];
+        expect(child.title).toEqual("Child");
+        expect(Array.isArray(child.dest)).toEqual(true);
+
+        await newLoadingTask.destroy();
+      });
     });
 
     describe("extract pages with null values in arrays", function () {

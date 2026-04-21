@@ -1452,9 +1452,12 @@ class PDFEditor {
         result.push({
           ...item,
           // When the item's own destination is invalid (but it has surviving
-          // children), clear the destination so the output item is a plain
-          // container rather than a broken link.
+          // children), clear the destination and rawDict so the output item is
+          // a plain container rather than a broken link. Clearing rawDict
+          // prevents #setOutlineItemDest from cloning a GoTo action that
+          // references a deleted page via its D array.
           dest: hasValidOwnDest ? item.dest : null,
+          rawDict: hasValidOwnDest ? item.rawDict : null,
           items: filteredChildren,
           _documentData: documentData,
         });

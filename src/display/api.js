@@ -2794,7 +2794,11 @@ class WorkerTransport {
               if (!data.dataLen) {
                 return null;
               }
-              this.commonObjs.resolve(id, structuredClone(data));
+              const copy = structuredClone(data);
+              if (typeof PDFJSDev === "undefined" || PDFJSDev.test("TESTING")) {
+                copy.CopyLocalImage = true;
+              }
+              this.commonObjs.resolve(id, copy);
               return data.dataLen;
             }
           }

@@ -4883,8 +4883,7 @@ have written that much by now. So, here’s to squashing bugs.`);
       const pdfDoc = await loadingTask.promise;
       const { canvasFactory } = pdfDoc;
       let checkedCopyLocalImage = false,
-        firstImgData = null,
-        firstStatsOverall = null;
+        firstImgData = null;
 
       for (let i = 1; i <= pdfDoc.numPages; i++) {
         const pdfPage = await pdfDoc.getPage(i);
@@ -4904,10 +4903,6 @@ have written that much by now. So, here’s to squashing bugs.`);
         // The canvas is no longer necessary, since we only care about
         // the image-data below.
         canvasFactory.destroy(canvasAndCtx);
-
-        const [statsOverall] = pdfPage.stats.times
-          .filter(time => time.name === "Overall")
-          .map(time => time.end - time.start);
 
         const { commonObjs, objs } = pdfPage;
         const imgIndex = opList.fnArray.indexOf(OPS.paintImageXObject);
@@ -4932,7 +4927,6 @@ have written that much by now. So, here’s to squashing bugs.`);
         // Ensure that the actual image data is identical for all pages.
         if (i === 1) {
           firstImgData = objs.get(objId);
-          firstStatsOverall = statsOverall;
 
           expect(firstImgData.width).toEqual(EXPECTED_WIDTH);
           expect(firstImgData.height).toEqual(EXPECTED_HEIGHT);
@@ -4958,10 +4952,9 @@ have written that much by now. So, here’s to squashing bugs.`);
           ).toEqual(true);
 
           if (i === NUM_PAGES_THRESHOLD) {
-            checkedCopyLocalImage = true;
-            // Ensure that the image was copied in the main-thread, rather
-            // than being re-parsed in the worker-thread (which is slower).
-            expect(statsOverall).toBeLessThan(firstStatsOverall / 2);
+            // Ensure that the image was copied in the main-thread (into
+            // commonObjs), rather than being re-parsed in the worker-thread.
+            checkedCopyLocalImage = currentImgData.CopyLocalImage;
           }
         }
       }
@@ -4969,7 +4962,6 @@ have written that much by now. So, here’s to squashing bugs.`);
 
       await loadingTask.destroy();
       firstImgData = null;
-      firstStatsOverall = null;
     });
 
     it("caches image resources at the document/page level, with main-thread copying of complex images (issue 11518)", async function () {
@@ -5011,11 +5003,13 @@ have written that much by now. So, here’s to squashing bugs.`);
           expect(objs.has(objId)).toEqual(true);
           expect(commonObjs.has(objId)).toEqual(false);
         } else if (i === NUM_PAGES_THRESHOLD) {
-          checkedCopyLocalImage = true;
-          // Ensure that the image was copied in the main-thread (into
-          // commonObjs), rather than being re-parsed in the worker-thread.
           expect(objs.has(objId)).toEqual(false);
           expect(commonObjs.has(objId)).toEqual(true);
+
+          // Ensure that the image was copied in the main-thread (into
+          // commonObjs), rather than being re-parsed in the worker-thread.
+          const imgData = commonObjs.get(objId);
+          checkedCopyLocalImage = imgData.CopyLocalImage;
         } else {
           break;
         }

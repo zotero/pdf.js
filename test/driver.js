@@ -21,6 +21,7 @@ const {
   getDocument,
   GlobalWorkerOptions,
   OutputScale,
+  PDFWorker,
   PixelsPerInch,
   shadow,
   TextLayer,
@@ -495,6 +496,14 @@ function buffersEqual(a, b) {
 }
 
 class Driver {
+  #pdfWorker = null;
+
+  #coveragePerTest = false;
+
+  #prevMainCoverage = null;
+
+  #prevWorkerCoverage = null;
+
   /**
    * @param {DriverOptions} options
    */
@@ -522,6 +531,14 @@ class Driver {
     this.masterMode = params.get("mastermode") === "true";
     this.sessionIndex = parseInt(params.get("sessionindex") || "0", 10);
     this.sessionCount = parseInt(params.get("sessioncount") || "1", 10);
+
+    // When coverage is enabled, share a single persistent worker across all
+    // tasks so that the accumulated self.__coverage__ can be retrieved at the
+    // end before the worker is destroyed.
+    if (window.__coverage__) {
+      this.#pdfWorker = new PDFWorker({ name: "coverage-worker" });
+      this.#coveragePerTest = params.get("coveragepertest") === "true";
+    }
 
     // Open a persistent WebSocket connection to the server for binary result
     // submission.
@@ -631,13 +648,34 @@ class Driver {
 
   _nextTask() {
     let failure = "";
+    const completedTask = this.currentTask;
 
     this._cleanup().then(async () => {
+      if (completedTask && this.#coveragePerTest) {
+        await this._sendPerTestCoverage(completedTask.id);
+      }
+
       const task = await this._waitForNextTask();
       if (!task) {
         this._done();
         return;
       }
+
+      if (this.#coveragePerTest) {
+        this.#prevMainCoverage = structuredClone(window.__coverage__ ?? {});
+        if (this.#pdfWorker) {
+          try {
+            this.#prevWorkerCoverage =
+              await this.#pdfWorker.messageHandler.sendWithPromise(
+                "GetWorkerCoverage",
+                null
+              );
+          } catch {
+            this.#prevWorkerCoverage = {};
+          }
+        }
+      }
+
       this.currentTask = task;
 
       task.round = 0;
@@ -898,6 +936,7 @@ class Driver {
       isOffscreenCanvasSupported:
         task.isOffscreenCanvasSupported === false ? false : undefined,
       disableFontFace: task.disableFontFace === true,
+      ...(this.#pdfWorker ? { worker: this.#pdfWorker } : {}),
     };
   }
 
@@ -1410,9 +1449,133 @@ class Driver {
     if (this.inFlightRequests > 0) {
       this.inflight.textContent = this.inFlightRequests;
       setTimeout(this._done.bind(this), WAITING_TIME);
+    } else if (this.#pdfWorker) {
+      this._collectWorkerCoverage().then(() => {
+        setTimeout(this._quit.bind(this), WAITING_TIME);
+      });
     } else {
       setTimeout(this._quit.bind(this), WAITING_TIME);
     }
+  }
+
+  #computeCoverageDelta(afterCoverage, beforeCoverage) {
+    const delta = {};
+    for (const [key, afterFile] of Object.entries(afterCoverage)) {
+      const beforeFile = beforeCoverage?.[key];
+      const lines = new Set();
+      const funcs = new Set();
+
+      for (const [id, count] of Object.entries(afterFile.s)) {
+        if (count - (beforeFile?.s[id] ?? 0) > 0) {
+          const line = afterFile.statementMap?.[id]?.start?.line;
+          if (line !== undefined) {
+            lines.add(line);
+          }
+        }
+      }
+      for (const [id, count] of Object.entries(afterFile.f)) {
+        if (count - (beforeFile?.f[id] ?? 0) > 0) {
+          const name = afterFile.fnMap?.[id]?.name;
+          if (name) {
+            funcs.add(name);
+          }
+        }
+      }
+      if (lines.size > 0 || funcs.size > 0) {
+        const fstarts = Object.create(null);
+        for (const fn of Object.values(afterFile.fnMap ?? {})) {
+          const startLine = fn.decl?.start?.line;
+          if (startLine !== undefined && fn.name) {
+            fstarts[startLine] = fn.name;
+          }
+        }
+        delta[key] = { fstarts, lines: [...lines], funcs: [...funcs] };
+      }
+    }
+    return delta;
+  }
+
+  async _sendPerTestCoverage(taskId) {
+    if (!window.__coverage__) {
+      return;
+    }
+    const delta = this.#computeCoverageDelta(
+      window.__coverage__,
+      this.#prevMainCoverage
+    );
+    if (this.#pdfWorker) {
+      try {
+        const afterWorker =
+          await this.#pdfWorker.messageHandler.sendWithPromise(
+            "GetWorkerCoverage",
+            null
+          );
+        for (const [key, entry] of Object.entries(
+          this.#computeCoverageDelta(afterWorker, this.#prevWorkerCoverage)
+        )) {
+          if (delta[key]) {
+            Object.assign(delta[key].fstarts, entry.fstarts);
+            const lineSet = new Set(delta[key].lines);
+            for (const l of entry.lines) {
+              lineSet.add(l);
+            }
+            delta[key].lines = [...lineSet];
+            const funcSet = new Set(delta[key].funcs);
+            for (const f of entry.funcs) {
+              funcSet.add(f);
+            }
+            delta[key].funcs = [...funcSet];
+          } else {
+            delta[key] = entry;
+          }
+        }
+      } catch {
+        // ignore
+      }
+    }
+    if (Object.keys(delta).length > 0) {
+      this.ws.send(
+        JSON.stringify({ type: "coverage", id: taskId, counts: delta })
+      );
+    }
+  }
+
+  async _collectWorkerCoverage() {
+    try {
+      const workerCoverage =
+        await this.#pdfWorker.messageHandler.sendWithPromise(
+          "GetWorkerCoverage",
+          null
+        );
+      if (workerCoverage && Object.keys(workerCoverage).length > 0) {
+        window.__coverage__ ??= {};
+        for (const [key, fileCoverage] of Object.entries(workerCoverage)) {
+          if (window.__coverage__[key]) {
+            // Istanbul coverage objects use s (statements), b (branches), and
+            // f (functions) as shorthand keys for the hit-count maps.
+            for (const id of Object.keys(fileCoverage.s)) {
+              window.__coverage__[key].s[id] =
+                (window.__coverage__[key].s[id] ?? 0) + fileCoverage.s[id];
+            }
+            for (const id of Object.keys(fileCoverage.b)) {
+              window.__coverage__[key].b[id] = fileCoverage.b[id].map(
+                (c, i) => (window.__coverage__[key].b[id]?.[i] ?? 0) + c
+              );
+            }
+            for (const id of Object.keys(fileCoverage.f)) {
+              window.__coverage__[key].f[id] =
+                (window.__coverage__[key].f[id] ?? 0) + fileCoverage.f[id];
+            }
+          } else {
+            window.__coverage__[key] = fileCoverage;
+          }
+        }
+      }
+    } catch (e) {
+      console.warn(`Failed to collect worker coverage: ${e}`);
+    }
+    this.#pdfWorker.destroy();
+    this.#pdfWorker = null;
   }
 
   async _sendResult(snapshotBlob, task, failure, baselineBlob = null) {

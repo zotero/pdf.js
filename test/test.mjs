@@ -66,11 +66,19 @@ function stripPrivatePngChunks(buf) {
 }
 
 function parseOptions() {
+  // Expand `-X=value` short-option forms into `["-X", "value"]` since
+  // parseArgs only strips the `=` separator for long options (--foo=bar).
+  const args = process.argv.slice(2).flatMap(arg => {
+    const m = arg.match(/^(-[a-zA-Z])=(.*)/s);
+    return m ? [m[1], m[2]] : [arg];
+  });
   const { values } = parseArgs({
-    args: process.argv.slice(2),
+    args,
     options: {
       coverage: { type: "boolean", default: false },
+      coverageFormats: { type: "string", default: "info" },
       coverageOutput: { type: "string", default: "build/coverage" },
+      coveragePerTest: { type: "boolean", default: false },
       downloadOnly: { type: "boolean", default: false },
       fontTest: { type: "boolean", default: false },
       headless: { type: "boolean", default: false },
@@ -97,7 +105,9 @@ function parseOptions() {
     console.log(
       "Usage: test.mjs\n\n" +
         "  --coverage          Enable code coverage collection.\n" +
+        "  --coverageFormats   Comma-separated list of coverage output formats: info,html,json,text,cobertura,clover. [info]\n" +
         "  --coverageOutput    Directory for code coverage data. [build/coverage]\n" +
+        "  --coveragePerTest   Generate individual coverage reports per test.\n" +
         "  --downloadOnly      Download test PDFs without running the tests.\n" +
         "  --fontTest          Run the font tests.\n" +
         "  --headless          Run tests without visible browser windows.\n" +
@@ -328,6 +338,11 @@ async function startRefTest(masterMode, showRefImages) {
               prefetchRefPngs(browserType, task);
             } else {
               ws.send(JSON.stringify({ type: "done" }));
+            }
+          } else if (msg.type === "coverage") {
+            if (global.coveragePerTest) {
+              const { id, counts } = msg;
+              accumulatePerTestCoverage(id, counts);
             }
           } else if (msg.type === "quit") {
             const session = getSession(msg.browser);
@@ -1055,7 +1070,8 @@ async function startBrowsers({ baseUrl, initializeSession, numSessions = 1 }) {
         startUrl =
           `${baseUrl}?browser=${encodeURIComponent(sessionName)}` +
           `&testFilter=${JSON.stringify(options.testfilter)}` +
-          `&delay=${options.statsDelay}&masterMode=${options.masterMode}`;
+          `&delay=${options.statsDelay}&masterMode=${options.masterMode}` +
+          `&coveragePerTest=${global.coveragePerTest || false}`;
       }
       await startBrowser({ browserName, startUrl })
         .then(async function (browser) {
@@ -1091,6 +1107,69 @@ function getSession(browser) {
   return sessions.find(session => session.name === browser);
 }
 
+const COVERAGE_FORMAT_TO_REPORTER = {
+  info: "lcovonly",
+  html: "html",
+  json: "json",
+  text: "text",
+  cobertura: "cobertura",
+  clover: "clover",
+};
+
+function parseCoverageFormats(str) {
+  const formats = new Set();
+  for (const fmt of str.split(",")) {
+    const name = fmt.trim();
+    if (name && COVERAGE_FORMAT_TO_REPORTER[name]) {
+      formats.add(name);
+    } else if (name) {
+      console.warn(
+        `### Unknown coverage format "${name}", valid values: ${Object.keys(COVERAGE_FORMAT_TO_REPORTER).join(", ")}`
+      );
+    }
+  }
+  return formats.size > 0 ? formats : new Set(["info"]);
+}
+
+function accumulatePerTestCoverage(testId, counts) {
+  let testIdx = perTestIdMap.get(testId);
+  if (testIdx === undefined) {
+    testIdx = perTestIds.length;
+    perTestIds.push(testId);
+    perTestIdMap.set(testId, testIdx);
+  }
+  for (const [fileKey, { fstarts, lines, funcs }] of Object.entries(counts)) {
+    let entry = perTestFileIndex.get(fileKey);
+    if (!entry) {
+      entry = {
+        fstarts: Object.create(null),
+        lineMap: new Map(),
+        funcMap: new Map(),
+      };
+      perTestFileIndex.set(fileKey, entry);
+    }
+    if (fstarts && Object.keys(entry.fstarts).length === 0) {
+      Object.assign(entry.fstarts, fstarts);
+    }
+    for (const line of lines) {
+      let set = entry.lineMap.get(line);
+      if (!set) {
+        set = new Set();
+        entry.lineMap.set(line, set);
+      }
+      set.add(testIdx);
+    }
+    for (const func of funcs) {
+      let set = entry.funcMap.get(func);
+      if (!set) {
+        set = new Set();
+        entry.funcMap.set(func, set);
+      }
+      set.add(testIdx);
+    }
+  }
+}
+
 async function writeCoverageData(outputDirectory) {
   try {
     console.log("\n### Writing code coverage data");
@@ -1105,18 +1184,56 @@ async function writeCoverageData(outputDirectory) {
       }
     }
 
+    const projectRoot = path.join(__dirname, "..");
+
     // create a context for report generation
     const context = libReport.createContext({
       dir: path.join(__dirname, "..", outputDirectory),
       coverageMap: mergedCoverage,
     });
 
-    const report = istanbulReportGenerator.create("lcovonly", {
-      projectRoot: path.join(__dirname, ".."),
-    });
-    report.execute(context);
+    for (const fmt of global.coverageFormats ?? ["info"]) {
+      istanbulReportGenerator
+        .create(COVERAGE_FORMAT_TO_REPORTER[fmt], { projectRoot })
+        .execute(context);
+    }
 
-    console.log(`Total files covered: ${Object.keys(mergedCoverage).length}`);
+    console.log(`Total files covered: ${mergedCoverage.files().length}`);
+
+    if (global.coveragePerTest && perTestIds.length > 0) {
+      const files = Object.create(null);
+      for (const [fileKey, { fstarts, lineMap, funcMap }] of perTestFileIndex) {
+        const fileObj = Object.create(null);
+        if (Object.keys(fstarts).length > 0) {
+          fileObj.fstarts = fstarts;
+        }
+        if (lineMap.size > 0) {
+          const l = Object.create(null);
+          for (const [line, tests] of lineMap) {
+            l[line] = [...tests].sort((a, b) => a - b);
+          }
+          fileObj.l = l;
+        }
+        if (funcMap.size > 0) {
+          const f = Object.create(null);
+          for (const [name, tests] of funcMap) {
+            f[name] = [...tests].sort((a, b) => a - b);
+          }
+          fileObj.f = f;
+        }
+        files[fileKey] = fileObj;
+      }
+      const indexPath = path.join(
+        __dirname,
+        "..",
+        outputDirectory,
+        "per-test-index.json"
+      );
+      fs.writeFileSync(indexPath, JSON.stringify({ ids: perTestIds, files }));
+      console.log(
+        `Per-test index written to ${outputDirectory}/per-test-index.json`
+      );
+    }
   } catch (err) {
     console.error("Failed to write coverage data:", err);
   }
@@ -1133,9 +1250,10 @@ async function closeSession(browser) {
         try {
           // Extract window.__coverage__ which is populated by
           // babel-plugin-istanbul
-          const coverage = await session.page.evaluate(
-            () => window.__coverage__
+          const coverageJson = await session.page.evaluate(() =>
+            JSON.stringify(window.__coverage__)
           );
+          const coverage = coverageJson ? JSON.parse(coverageJson) : null;
 
           if (coverage && Object.keys(coverage).length > 0) {
             session.coverage = coverage;
@@ -1194,12 +1312,22 @@ async function main() {
     stats = [];
   }
 
-  if (options.coverage) {
+  if (options.coverage || options.coveragePerTest) {
     global.coverageEnabled = true;
     console.log("\n### Code coverage enabled for browser tests");
     if (options.coverageOutput) {
       global.coverageOutput = options.coverageOutput;
-      console.log(`### Code coverage output file: ${options.coverageOutput}`);
+      console.log(
+        `### Code coverage output directory: ${options.coverageOutput}`
+      );
+    }
+    global.coverageFormats = parseCoverageFormats(options.coverageFormats);
+    console.log(
+      `### Coverage formats: ${[...global.coverageFormats].join(", ")}`
+    );
+    if (options.coveragePerTest) {
+      global.coveragePerTest = true;
+      console.log("### Per-test coverage reports enabled");
     }
   }
 
@@ -1237,6 +1365,9 @@ var stats;
 var tempDir = null;
 var taskQueue = new Map();
 var refPngCache = new Map();
+const perTestIds = [];
+const perTestIdMap = new Map();
+const perTestFileIndex = new Map();
 
 main();
 

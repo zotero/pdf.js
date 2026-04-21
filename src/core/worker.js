@@ -98,6 +98,12 @@ class WorkerMessageHandler {
     });
 
     handler.on("GetDocRequest", data => this.createDocumentHandler(data, port));
+
+    if (typeof PDFJSDev === "undefined" || PDFJSDev.test("TESTING")) {
+      handler.on("GetWorkerCoverage", function () {
+        return globalThis.__coverage__ ?? {};
+      });
+    }
   }
 
   static createDocumentHandler(docParams, port) {

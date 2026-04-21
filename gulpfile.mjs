@@ -110,6 +110,7 @@ const BABEL_PRESET_ENV_OPTS = Object.freeze({
 const DEFINES = Object.freeze({
   SKIP_BABEL: true,
   TESTING: undefined,
+  COVERAGE: undefined,
   // The main build targets:
   GENERIC: false,
   MOZCENTRAL: false,
@@ -288,6 +289,10 @@ function createWebpackConfig(
     BUNDLE_VERSION: versionInfo.version,
     BUNDLE_BUILD: versionInfo.commit,
     TESTING: defines.TESTING ?? process.env.TESTING === "true",
+    COVERAGE:
+      defines.COVERAGE ??
+      (process.argv.includes("--coverage") ||
+        process.argv.includes("--coverage-per-test")),
     DEFAULT_FTL: defines.GENERIC ? getDefaultFtl() : "",
   };
   const licenseHeaderLibre = fs
@@ -304,7 +309,7 @@ function createWebpackConfig(
     !bundleDefines.CHROME &&
     !bundleDefines.LIB &&
     !bundleDefines.MINIFIED &&
-    !bundleDefines.TESTING &&
+    (!bundleDefines.TESTING || bundleDefines.COVERAGE) &&
     !disableSourceMaps;
   const isModule = output.library?.type === "module";
   const isMinified = bundleDefines.MINIFIED;
@@ -328,6 +333,9 @@ function createWebpackConfig(
       },
     ],
   ];
+  if (bundleDefines.COVERAGE) {
+    babelPlugins.push("babel-plugin-istanbul");
+  }
 
   const plugins = [];
   if (!disableLicenseHeader) {
@@ -669,6 +677,18 @@ function getTempFile(prefix, suffix) {
   return filePath;
 }
 
+function getArgValue(name) {
+  for (let i = 0; i < process.argv.length; i++) {
+    if (process.argv[i] === name && i + 1 < process.argv.length) {
+      return process.argv[i + 1];
+    }
+    if (process.argv[i].startsWith(name + "=")) {
+      return process.argv[i].slice(name.length + 1);
+    }
+  }
+  return null;
+}
+
 function runTests(testsName, { bot = false } = {}) {
   return new Promise((resolve, reject) => {
     console.log("\n### Running " + testsName + " tests");
@@ -719,7 +739,10 @@ function runTests(testsName, { bot = false } = {}) {
     if (process.argv.includes("--headless")) {
       args.push("--headless");
     }
-    if (process.argv.includes("--coverage")) {
+    if (
+      process.argv.includes("--coverage") ||
+      process.argv.includes("--coverage-per-test")
+    ) {
       args.push("--coverage");
     }
     if (process.argv.includes("--coverage-output")) {
@@ -727,6 +750,45 @@ function runTests(testsName, { bot = false } = {}) {
         "--coverageOutput",
         process.argv[process.argv.indexOf("--coverage-output") + 1]
       );
+    }
+    const coverageFormatsArg = getArgValue("--coverage-formats");
+    if (coverageFormatsArg) {
+      args.push("--coverageFormats", coverageFormatsArg);
+    }
+    if (process.argv.includes("--coverage-per-test")) {
+      args.push("--coveragePerTest");
+    }
+
+    const codeArg = testsName === "browser" ? getArgValue("--code") : null;
+    if (codeArg) {
+      const coverageDir =
+        getArgValue("--coverage-output") || BUILD_DIR + "coverage";
+      const result = spawnSync(
+        "node",
+        [
+          path.join(__dirname, "external/coverage_search/coverage_search.mjs"),
+          `--code=${codeArg}`,
+          `--coverage-dir=${coverageDir}`,
+        ],
+        { encoding: "utf8" }
+      );
+      if (result.status !== 0) {
+        reject(new Error(result.stderr?.trim() || "coverage_search failed"));
+        return;
+      }
+      const testIds = result.stdout.trim().split("\n").filter(Boolean);
+      if (testIds.length === 0) {
+        console.log(`\n### No tests found covering "${codeArg}"`);
+        resolve();
+        return;
+      }
+      console.log(
+        `\n### Found ${testIds.length} test(s) covering "${codeArg}":\n` +
+          testIds.map(id => `  ${id}`).join("\n")
+      );
+      for (const id of testIds) {
+        args.push(`-t=${id}`);
+      }
     }
 
     const testProcess = startNode(args, { cwd: TEST_DIR, stdio: "inherit" });
@@ -813,6 +875,25 @@ function makeRef(done, bot) {
   if (process.argv.includes("--headless")) {
     args.push("--headless");
   }
+  if (
+    process.argv.includes("--coverage") ||
+    process.argv.includes("--coverage-per-test")
+  ) {
+    args.push("--coverage");
+  }
+  if (process.argv.includes("--coverage-output")) {
+    args.push(
+      "--coverageOutput",
+      process.argv[process.argv.indexOf("--coverage-output") + 1]
+    );
+  }
+  const coverageFormatsArg = getArgValue("--coverage-formats");
+  if (coverageFormatsArg) {
+    args.push("--coverageFormats", coverageFormatsArg);
+  }
+  if (process.argv.includes("--coverage-per-test")) {
+    args.push("--coveragePerTest");
+  }
   collectArgs(
     [
       { names: ["-t", "--testfilter"], hasValue: true },
@@ -830,6 +911,39 @@ function makeRef(done, bot) {
     done();
   });
 }
+
+// Queries the per-test coverage index built by --coverage-per-test and prints
+// the IDs of tests that exercised a given source file location. Run with
+// --code=<file>::<line|function>, e.g. --code=canvas.js::205
+gulp.task("coverage_search", function (done) {
+  const codeArg = getArgValue("--code");
+  if (!codeArg) {
+    done(new Error('Missing --code argument, e.g. --code="canvas.js::205"'));
+    return;
+  }
+  const coverageDir =
+    getArgValue("--coverage-output") || BUILD_DIR + "coverage";
+  const result = spawnSync(
+    "node",
+    [
+      path.join(__dirname, "external/coverage_search/coverage_search.mjs"),
+      `--code=${codeArg}`,
+      `--coverage-dir=${coverageDir}`,
+    ],
+    { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }
+  );
+  if (result.stderr) {
+    process.stderr.write(result.stderr);
+  }
+  if (result.stdout) {
+    process.stdout.write(result.stdout);
+  }
+  if (result.status !== 0) {
+    done(new Error("coverage_search failed"));
+    return;
+  }
+  done();
+});
 
 gulp.task("default", function (done) {
   console.log("Available tasks:");

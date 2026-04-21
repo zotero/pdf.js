@@ -1,0 +1,77 @@
+name: Notify PDF sync
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - "test/pdfs/*.pdf"
+      - "test/pdfs/*.pdf.link"
+permissions:
+  contents: read
+
+jobs:
+  notify:
+    runs-on: ubuntu-latest
+    environment: sync_pdfs
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Check for added PDF files
+        id: check
+        run: |
+          git fetch --no-tags --depth=1 origin ${{ github.event.before }}
+
+          mapfile -t added < <(
+            git diff --diff-filter=A --name-only \
+              ${{ github.event.before }} \
+              ${{ github.sha }} \
+              -- \
+              ':(glob)test/pdfs/*.pdf' \
+              ':(glob)test/pdfs/*.pdf.link'
+          )
+
+          if [ "${#added[@]}" -gt 0 ]; then
+            echo "has_added=true" >> "$GITHUB_OUTPUT"
+            printf 'files_json=%s\n' "$(printf '%s\n' "${added[@]}" | jq -Rsc 'split("\n")[:-1]')" >> "$GITHUB_OUTPUT"
+          else
+            echo "has_added=false" >> "$GITHUB_OUTPUT"
+            echo 'files_json=[]' >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Generate app token
+        if: steps.check.outputs.has_added == 'true'
+        id: app-token
+        uses: actions/create-github-app-token@1b10c78c7865c340bc4f6099eb2f838309f1e8c3 # v3.1.1
+        with:
+          client-id: ${{ secrets.CLIENT_ID }}
+          private-key: ${{ secrets.APP_PRIVATE_KEY }}
+          owner: mozilla
+          repositories: pdf.js.pdfs
+
+      - name: Trigger sync
+        if: steps.check.outputs.has_added == 'true'
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          FILES_JSON: ${{ steps.check.outputs.files_json }}
+        run: |
+          payload=$(jq -nc \
+            --arg before "${{ github.event.before }}" \
+            --arg after "${{ github.sha }}" \
+            --argjson files "$FILES_JSON" \
+            '{
+              event_type: "pdf-added",
+              client_payload: {
+                before: $before,
+                after: $after,
+                files: $files
+              }
+            }')
+
+          gh api repos/mozilla/pdf.js.pdfs/dispatches \
+            --method POST \
+            --input - <<< "$payload"

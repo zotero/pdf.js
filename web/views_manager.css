@@ -366,6 +366,7 @@
         &::before {
           mask-repeat: no-repeat;
           mask-image: var(--views-manager-add-file-button-icon);
+          background-color: var(--button-fg);
         }
 
         > input {
@@ -385,6 +386,7 @@
         &::before {
           mask-repeat: no-repeat;
           mask-image: var(--current-outline-button-icon);
+          background-color: var(--button-fg);
         }
       }
     }

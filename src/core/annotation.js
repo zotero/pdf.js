@@ -1970,11 +1970,12 @@ class WidgetAnnotation extends Annotation {
    */
   _decodeFormValue(formValue) {
     if (Array.isArray(formValue)) {
-      return formValue
-        .filter(item => typeof item === "string")
-        .map(item => stringToPDFString(item));
+      const arr = formValue
+        .map(item => this._decodeFormValue(item))
+        .filter(item => item !== null);
+      return arr.length > 0 ? arr : null;
     } else if (formValue instanceof Name) {
-      return stringToPDFString(formValue.name);
+      return formValue.name;
     } else if (typeof formValue === "string") {
       return stringToPDFString(formValue);
     }
@@ -3419,7 +3420,8 @@ class ButtonWidgetAnnotation extends WidgetAnnotation {
         ? this.data.fieldValue
         : "Yes";
 
-    const exportValues = this._decodeFormValue([...normalAppearance.getKeys()]);
+    // Don't decode the keys which are names.
+    const exportValues = [...normalAppearance.getKeys()];
     if (exportValues.length === 0) {
       exportValues.push("Off", yes);
     } else if (exportValues.length === 1) {
@@ -3491,7 +3493,7 @@ class ButtonWidgetAnnotation extends WidgetAnnotation {
     }
     for (const key of normalAppearance.getKeys()) {
       if (key !== "Off") {
-        this.data.buttonValue = this._decodeFormValue(key);
+        this.data.buttonValue = key;
         break;
       }
     }

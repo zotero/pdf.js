@@ -18,7 +18,10 @@ import {
   setVerbosityLevel,
   VerbosityLevel,
 } from "../../src/shared/util.js";
-import { Jbig2Error, Jbig2Image } from "../../src/core/jbig2.js";
+import {
+  Jbig2Error,
+  JBig2CCITTFaxImage as Jbig2Image,
+} from "../../src/core/jbig2_ccittFax.js";
 import { JpegError, JpegImage } from "../../src/core/jpg.js";
 import { JpxError, JpxImage } from "../../src/core/jpx.js";
 

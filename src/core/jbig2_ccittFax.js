@@ -13,12 +13,17 @@
  * limitations under the License.
  */
 
+import { BaseException, warn } from "../shared/util.js";
 import { fetchBinaryData } from "./core_utils.js";
 import JBig2 from "../../external/jbig2/jbig2.js";
-import { Jbig2Error } from "./jbig2.js";
-import { warn } from "../shared/util.js";
 
-class JBig2CCITTFaxWasmImage {
+class Jbig2Error extends BaseException {
+  constructor(msg) {
+    super(msg, "Jbig2Error");
+  }
+}
+
+class JBig2CCITTFaxImage {
   static #buffer = null;
 
   static #handler = null;
@@ -41,6 +46,24 @@ class JBig2CCITTFaxWasmImage {
     }
   }
 
+  static async #getJsModule(fallbackCallback) {
+    const path =
+      typeof PDFJSDev === "undefined"
+        ? `../${this.#wasmUrl}jbig2_nowasm_fallback.js`
+        : `${this.#wasmUrl}jbig2_nowasm_fallback.js`;
+
+    let instance = null;
+    try {
+      const mod = await (typeof PDFJSDev === "undefined"
+        ? import(path) // eslint-disable-line no-unsanitized/method
+        : __raw_import__(path));
+      instance = mod.default();
+    } catch (e) {
+      warn(`JBig2CCITTFaxImage#getJsModule: ${e}`);
+    }
+    fallbackCallback(instance);
+  }
+
   static async #instantiateWasm(fallbackCallback, imports, successCallback) {
     const filename = "jbig2.wasm";
     try {
@@ -60,8 +83,10 @@ class JBig2CCITTFaxWasmImage {
       const results = await WebAssembly.instantiate(this.#buffer, imports);
       return successCallback(results.instance);
     } catch (reason) {
-      warn(`JBig2Image#instantiateWasm: ${reason}`);
-      return fallbackCallback(null);
+      warn(`JBig2CCITTFaxImage#instantiateWasm: ${reason}`);
+
+      this.#getJsModule(fallbackCallback);
+      return null;
     } finally {
       this.#handler = null;
     }
@@ -71,19 +96,20 @@ class JBig2CCITTFaxWasmImage {
     if (!this.#modulePromise) {
       const { promise, resolve } = Promise.withResolvers();
       const promises = [promise];
-      if (this.#useWasm) {
+      if (!this.#useWasm) {
+        this.#getJsModule(resolve);
+      } else {
         promises.push(
           JBig2({
             warn,
             instantiateWasm: this.#instantiateWasm.bind(this, resolve),
           })
         );
-      } else {
-        resolve(null);
       }
       this.#modulePromise = Promise.race(promises);
     }
     const module = await this.#modulePromise;
+
     if (!module) {
       throw new Jbig2Error("JBig2 failed to initialize");
     }
@@ -137,4 +163,4 @@ class JBig2CCITTFaxWasmImage {
   }
 }
 
-export { JBig2CCITTFaxWasmImage };
+export { JBig2CCITTFaxImage, Jbig2Error };

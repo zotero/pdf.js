@@ -268,13 +268,6 @@ function toRomanNumerals(number, lowerCase = false) {
   return lowerCase ? roman.toLowerCase() : roman;
 }
 
-// Calculate the base 2 logarithm of the number `x`. This differs from the
-// native function in the sense that it returns the ceiling value and that it
-// returns 0 instead of `Infinity`/`NaN` for `x` values smaller than/equal to 0.
-function log2(x) {
-  return x > 0 ? Math.ceil(Math.log2(x)) : 0;
-}
-
 // Checks if ch is one of the following characters: SPACE, TAB, CR or LF.
 function isWhiteSpace(ch) {
   return ch === 0x20 || ch === 0x09 || ch === 0x0d || ch === 0x0a;
@@ -771,7 +764,6 @@ export {
   isBooleanArray,
   isNumberArray,
   isWhiteSpace,
-  log2,
   lookupMatrix,
   lookupNormalRect,
   lookupRect,

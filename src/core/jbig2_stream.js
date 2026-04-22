@@ -13,12 +13,11 @@
  * limitations under the License.
  */
 
-import { shadow, warn } from "../shared/util.js";
+import { shadow, unreachable } from "../shared/util.js";
 import { BaseStream } from "./base_stream.js";
 import { DecodeStream } from "./decode_stream.js";
 import { Dict } from "./primitives.js";
-import { JBig2CCITTFaxWasmImage } from "./jbig2_ccittFax_wasm.js";
-import { Jbig2Image } from "./jbig2.js";
+import { JBig2CCITTFaxImage } from "./jbig2_ccittFax.js";
 
 /**
  * For JBIG2's we use a library to decode these images and
@@ -45,7 +44,7 @@ class Jbig2Stream extends DecodeStream {
   }
 
   readBlock() {
-    this.decodeImageFallback();
+    unreachable("Jbig2Stream.readBlock");
   }
 
   get isAsyncDecoder() {
@@ -61,55 +60,21 @@ class Jbig2Stream extends DecodeStream {
       return this.buffer;
     }
     bytes ||= this.bytes;
-    try {
-      let globals = null;
-      if (this.params instanceof Dict) {
-        const globalsStream = this.params.get("JBIG2Globals");
-        if (globalsStream instanceof BaseStream) {
-          globals = globalsStream.getBytes();
-        }
-      }
-      this.buffer = await JBig2CCITTFaxWasmImage.decode(
-        bytes,
-        this.dict.get("Width"),
-        this.dict.get("Height"),
-        globals
-      );
-    } catch {
-      warn("Jbig2Stream: Falling back to JS JBIG2 decoder.");
-      return this.decodeImageFallback(bytes, length);
-    }
-    this.bufferLength = this.buffer.length;
-    this.eof = true;
 
-    return this.buffer;
-  }
-
-  decodeImageFallback(bytes, _length) {
-    if (this.eof) {
-      return this.buffer;
-    }
-    bytes ||= this.bytes;
-    const jbig2Image = new Jbig2Image();
-
-    const chunks = [];
+    let globals = null;
     if (this.params instanceof Dict) {
       const globalsStream = this.params.get("JBIG2Globals");
       if (globalsStream instanceof BaseStream) {
-        const globals = globalsStream.getBytes();
-        chunks.push({ data: globals, start: 0, end: globals.length });
+        globals = globalsStream.getBytes();
       }
     }
-    chunks.push({ data: bytes, start: 0, end: bytes.length });
-    const data = jbig2Image.parseChunks(chunks);
-    const dataLength = data.length;
-
-    // JBIG2 had black as 1 and white as 0, inverting the colors
-    for (let i = 0; i < dataLength; i++) {
-      data[i] ^= 0xff;
-    }
-    this.buffer = data;
-    this.bufferLength = dataLength;
+    this.buffer = await JBig2CCITTFaxImage.decode(
+      bytes,
+      this.dict.get("Width"),
+      this.dict.get("Height"),
+      globals
+    );
+    this.bufferLength = this.buffer.length;
     this.eof = true;
 
     return this.buffer;

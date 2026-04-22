@@ -719,12 +719,6 @@ class Driver {
 
       this._log(`[${++this.tasksDone}] ${task.id}:\n`);
 
-      if (task.type === "skip-because-failing") {
-        this._log(`  Skipping file "${task.file} because it's failing"\n`);
-        this._nextTask();
-        return;
-      }
-
       // Support *linked* test-cases for the other suites, e.g. unit- and
       // integration-tests, without needing to run them as reference-tests.
       if (task.type === "other") {
@@ -947,11 +941,7 @@ class Driver {
     }
     // Skip tasks that do not load a PDF or that need DOM setup (XFA style
     // element injection) to happen synchronously before getDocument.
-    if (
-      task.type === "skip-because-failing" ||
-      task.type === "other" ||
-      task.enableXfa
-    ) {
+    if (task.type === "other" || task.enableXfa) {
       return;
     }
     if (!task._prefetchedLoadingTask) {

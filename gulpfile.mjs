@@ -638,10 +638,17 @@ function createWasmBundle() {
       base: "external/qcms",
       encoding: false,
     }),
-    gulp.src(["external/jbig2/*.wasm", "external/jbig2/LICENSE_*"], {
-      base: "external/jbig2",
-      encoding: false,
-    }),
+    gulp.src(
+      [
+        "external/jbig2/*.wasm",
+        "external/jbig2/jbig2_nowasm_fallback.js",
+        "external/jbig2/LICENSE_*",
+      ],
+      {
+        base: "external/jbig2",
+        encoding: false,
+      }
+    ),
   ]);
 }
 

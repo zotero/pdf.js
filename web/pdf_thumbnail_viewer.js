@@ -339,6 +339,11 @@ class PDFThumbnailViewer {
           this.eventBus._on(
             "thumbnailsloaded",
             () => {
+              // Clear any pre-merge selection: thumbnails are rebuilt fresh
+              // (all unchecked), so the old set would cause a label/visual
+              // mismatch.
+              this.#selectedPages = null;
+              this.#updateMenuEntries();
               this.#toggleBar("status");
               const newPagesCount = this.#pagesMapper.pagesNumber;
               const insertedPagesCount = newPagesCount - pagesCount;
@@ -350,6 +355,9 @@ class PDFThumbnailViewer {
               ) {
                 this._thumbnails[i].checkbox.checked = true;
                 this.#selectPage(i + 1, true);
+              }
+              if (insertedPagesCount) {
+                this.#updateCurrentPage(currentPageIndex + 2);
               }
             },
             { once: true }

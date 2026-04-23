@@ -18,7 +18,7 @@ import { EventBus } from "../../web/event_utils.js";
 import { GenericL10n } from "../../web/genericl10n.js";
 import { PDFFindController } from "../../web/pdf_find_controller.js";
 import { PDFLinkService } from "../../web/pdf_link_service.js";
-import { PDFScriptingManager } from "../../web/pdf_scripting_manager.js";
+import { PDFScriptingManager } from "../../web/pdf_scripting_manager.component.js";
 import { PDFViewer } from "../../web/pdf_viewer.js";
 
 // The workerSrc property shall be specified.
@@ -42,10 +42,15 @@ const SEARCH_FOR = ""; // try "Mozilla";
 
 const SANDBOX_BUNDLE_SRC = new URL(
   typeof PDFJSDev === "undefined"
-    ? "../../src/pdf.sandbox.js"
+    ? "../../build/generic/build/pdf.sandbox.mjs"
     : "../../build/pdf.sandbox.mjs",
   window.location
 );
+
+const WASM_URL =
+  typeof PDFJSDev === "undefined"
+    ? "../../build/generic/web/wasm/"
+    : "../../build/wasm/";
 
 const fileUrl = new URLSearchParams(location.search).get("file") ?? DEFAULT_URL;
 
@@ -68,6 +73,7 @@ const pdfFindController = new PDFFindController({
 const pdfScriptingManager = new PDFScriptingManager({
   eventBus,
   sandboxBundleSrc: SANDBOX_BUNDLE_SRC,
+  wasmUrl: WASM_URL,
 });
 
 const pdfViewer = new PDFViewer({
@@ -80,6 +86,7 @@ const pdfViewer = new PDFViewer({
 });
 pdfLinkService.setViewer(pdfViewer);
 pdfScriptingManager.setViewer(pdfViewer);
+window.pdfScriptingManager = pdfScriptingManager;
 
 eventBus.on("pagesinit", function () {
   // We can use pdfViewer now, e.g. let's change default scale.

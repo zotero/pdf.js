@@ -15,6 +15,14 @@
 
 // Integration tests for the simple viewer (test/components/).
 
+function getSelector(id) {
+  return `[data-element-id="${id}"]`;
+}
+
+function getAnnotationSelector(id) {
+  return `[data-annotation-id="${id}"]`;
+}
+
 describe("Simple viewer", () => {
   describe("TextLayerBuilder without abortSignal", () => {
     let pages;
@@ -51,6 +59,47 @@ describe("Simple viewer", () => {
             () => document.querySelectorAll(".textLayer span").length
           );
           expect(count).withContext(`In ${browserName}`).toBeGreaterThan(0);
+        })
+      );
+    });
+  });
+
+  describe("Scripting support with evaljs.pdf", () => {
+    let pages;
+
+    beforeEach(async () => {
+      const origin = new URL(global.integrationBaseUrl).origin;
+      pages = await Promise.all(
+        global.integrationSessions.map(async session => {
+          const page = await session.browser.newPage();
+          await page.goto(
+            `${origin}/test/components/simple-viewer.html` +
+              `?file=/test/pdfs/evaljs.pdf`
+          );
+          await page.bringToFront();
+          await page.waitForSelector(getSelector("55R"));
+          await page.waitForFunction(
+            "window.pdfScriptingManager?.ready === true"
+          );
+          return [session.name, page];
+        })
+      );
+    });
+
+    afterEach(async () => {
+      await Promise.all(pages.map(([, page]) => page.close()));
+    });
+
+    it("must evaluate JavaScript entered in the input field", async () => {
+      await Promise.all(
+        pages.map(async ([browserName, page]) => {
+          await page.type(getSelector("55R"), "1 + 1");
+          await page.click(getAnnotationSelector("57R"));
+          await page.waitForFunction(
+            `document.querySelector('${getSelector("56R")}').value !== ""`
+          );
+          const text = await page.$eval(getSelector("56R"), el => el.value);
+          expect(text).withContext(`In ${browserName}`).toEqual("2");
         })
       );
     });

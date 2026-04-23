@@ -1084,11 +1084,13 @@
 
   &::-moz-color-swatch {
     border-radius: 100%;
+    margin: 0;
   }
 
   /*#if !MOZCENTRAL*/
   &::-webkit-color-swatch {
     border-radius: 100%;
+    margin: 0;
   }
   /*#endif*/
 }

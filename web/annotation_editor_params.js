@@ -15,7 +15,12 @@
 
 /** @typedef {import("./event_utils.js").EventBus} EventBus */
 
-import { AnnotationEditorParamsType } from "pdfjs-lib";
+import {
+  AnnotationEditorParamsType,
+  FeatureTest,
+  getRGBA,
+  Util,
+} from "pdfjs-lib";
 
 /**
  * @typedef {Object} AnnotationEditorParamsOptions
@@ -69,14 +74,67 @@ class AnnotationEditorParams {
     editorFreeTextColor.addEventListener("input", function () {
       dispatchEvent("FREETEXT_COLOR", this.value);
     });
-    editorInkColor.addEventListener("input", function () {
-      dispatchEvent("INK_COLOR", this.value);
-    });
+
+    // Handlers for INK_COLOR and INK_OPACITY sync-back, set up differently
+    // depending on whether alpha is supported.
+    let updateInkColor, updateInkOpacity;
+
+    if (FeatureTest.isAlphaColorInputSupported) {
+      // Enable alpha on the color input and remove the now-redundant opacity
+      // slider from the DOM.
+      editorInkColor.setAttribute("alpha", "");
+      editorInkOpacity.closest(".editorParamsSetter").remove();
+
+      // Track last-known color/opacity so that sync-back events for either
+      // property can reconstruct the full #RRGGBBAA without re-parsing the
+      // input's current (format-varying) value.
+      let currentInkColor = "#000000";
+      let currentInkOpacity = 1;
+
+      const toAlphaHex = opacity =>
+        Math.round(opacity * 255)
+          .toString(16)
+          .padStart(2, "0");
+
+      editorInkColor.addEventListener("input", function () {
+        // The returned value format varies by browser; normalize it.
+        const rgba = getRGBA(this.value);
+        if (!rgba) {
+          return;
+        }
+        const [r, g, b, opacity] = rgba;
+        const hex = Util.makeHexColor(r, g, b);
+        currentInkColor = hex;
+        currentInkOpacity = opacity;
+        dispatchEvent("INK_COLOR_AND_OPACITY", { color: hex, opacity });
+      });
+
+      updateInkColor = value => {
+        currentInkColor = value;
+        editorInkColor.value = currentInkColor + toAlphaHex(currentInkOpacity);
+      };
+      updateInkOpacity = value => {
+        currentInkOpacity = value;
+        editorInkColor.value = currentInkColor + toAlphaHex(currentInkOpacity);
+      };
+    } else {
+      editorInkColor.addEventListener("input", function () {
+        dispatchEvent("INK_COLOR", this.value);
+      });
+      editorInkOpacity.addEventListener("input", function () {
+        dispatchEvent("INK_OPACITY", this.valueAsNumber);
+      });
+
+      updateInkColor = value => {
+        editorInkColor.value = value;
+      };
+      updateInkOpacity = value => {
+        editorInkOpacity.value = value;
+      };
+    }
+
     editorInkThickness.addEventListener("input", function () {
       dispatchEvent("INK_THICKNESS", this.valueAsNumber);
-    });
-    editorInkOpacity.addEventListener("input", function () {
-      dispatchEvent("INK_OPACITY", this.valueAsNumber);
     });
     editorStampAddImage.addEventListener("click", () => {
       eventBus.dispatch("reporttelemetry", {
@@ -110,13 +168,13 @@ class AnnotationEditorParams {
             editorFreeTextColor.value = value;
             break;
           case AnnotationEditorParamsType.INK_COLOR:
-            editorInkColor.value = value;
+            updateInkColor(value);
             break;
           case AnnotationEditorParamsType.INK_THICKNESS:
             editorInkThickness.value = value;
             break;
           case AnnotationEditorParamsType.INK_OPACITY:
-            editorInkOpacity.value = value;
+            updateInkOpacity(value);
             break;
           case AnnotationEditorParamsType.HIGHLIGHT_COLOR:
             eventBus.dispatch("mainhighlightcolorpickerupdatecolor", {

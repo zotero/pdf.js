@@ -579,33 +579,63 @@ function getXfaPageViewport(xfaPage, { scale = 1, rotation = 0 }) {
   });
 }
 
-function getRGB(color) {
+function getRGBA(color) {
   if (color.startsWith("#")) {
-    const colorRGB = parseInt(color.slice(1), 16);
+    // #RRGGBB or #RRGGBBAA
+    const hex = color.slice(1);
     return [
-      (colorRGB & 0xff0000) >> 16,
-      (colorRGB & 0x00ff00) >> 8,
-      colorRGB & 0x0000ff,
+      parseInt(hex.slice(0, 2), 16),
+      parseInt(hex.slice(2, 4), 16),
+      parseInt(hex.slice(4, 6), 16),
+      hex.length >= 8 ? parseInt(hex.slice(6, 8), 16) / 255 : 1,
     ];
   }
 
   if (color.startsWith("rgb(")) {
     // getComputedStyle(...).color returns a `rgb(R, G, B)` color.
-    return color
+    const [r, g, b] = color
       .slice(/* "rgb(".length */ 4, -1) // Strip out "rgb(" and ")".
       .split(",")
       .map(x => parseInt(x));
+    return [r, g, b, 1];
   }
 
   if (color.startsWith("rgba(")) {
-    return color
+    const parts = color
       .slice(/* "rgba(".length */ 5, -1) // Strip out "rgba(" and ")".
-      .split(",", 3)
-      .map(x => parseInt(x));
+      .split(",");
+    return [
+      parseInt(parts[0]),
+      parseInt(parts[1]),
+      parseInt(parts[2]),
+      parseFloat(parts[3]),
+    ];
   }
 
-  warn(`Not a valid color format: "${color}"`);
-  return [0, 0, 0];
+  // color(srgb r g b / a) — CSS Color 4, used e.g. by Firefox alpha inputs.
+  // Components are in [0, 1]; alpha may be "none" (treated as fully opaque).
+  const m = color.match(
+    /^color\(srgb\s+([\d.]+)\s+([\d.]+)\s+([\d.]+)(?:\s*\/\s*([\d.]+|none))?\)$/
+  );
+  if (m) {
+    return [
+      Math.round(parseFloat(m[1]) * 255),
+      Math.round(parseFloat(m[2]) * 255),
+      Math.round(parseFloat(m[3]) * 255),
+      m[4] !== undefined && m[4] !== "none" ? parseFloat(m[4]) : 1,
+    ];
+  }
+
+  return null;
+}
+
+function getRGB(color) {
+  const rgba = getRGBA(color);
+  if (!rgba) {
+    warn(`Not a valid color format: "${color}"`);
+    return [0, 0, 0];
+  }
+  return rgba.slice(0, 3);
 }
 
 function getColorValues(colors) {
@@ -1037,6 +1067,7 @@ export {
   getFilenameFromUrl,
   getPdfFilenameFromUrl,
   getRGB,
+  getRGBA,
   getXfaPageViewport,
   isDataScheme,
   isPdfFile,

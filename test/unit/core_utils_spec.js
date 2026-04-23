@@ -23,7 +23,6 @@ import {
   getSizeInBytes,
   isAscii,
   isWhiteSpace,
-  log2,
   numberToString,
   parseXFAPath,
   recoverJsURL,
@@ -195,20 +194,6 @@ describe("core_utils", function () {
       expect(toRomanNumerals(500, /* lowercase = */ true)).toEqual("d");
       expect(toRomanNumerals(1000, /* lowercase = */ true)).toEqual("m");
       expect(toRomanNumerals(2019, /* lowercase = */ true)).toEqual("mmxix");
-    });
-  });
-
-  describe("log2", function () {
-    it("handles values smaller than/equal to zero", function () {
-      expect(log2(0)).toEqual(0);
-      expect(log2(-1)).toEqual(0);
-    });
-
-    it("handles values larger than zero", function () {
-      expect(log2(1)).toEqual(0);
-      expect(log2(2)).toEqual(1);
-      expect(log2(3)).toEqual(2);
-      expect(log2(3.14)).toEqual(2);
     });
   });
 

@@ -32,7 +32,9 @@ const STANDARD_FONT_DATA_URL = isNodeJS
   ? "./external/standard_fonts/"
   : "../../external/standard_fonts/";
 
-const WASM_URL = isNodeJS ? "./external/openjpeg/" : "../../external/openjpeg/";
+const WASM_URL = isNodeJS
+  ? "./external/openjpeg/"
+  : "../../build/generic/web/wasm/";
 
 class DefaultFileReaderFactory {
   static async fetch(params) {

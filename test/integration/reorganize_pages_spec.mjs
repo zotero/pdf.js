@@ -3123,5 +3123,50 @@ describe("Reorganize Pages View", () => {
         })
       );
     });
+
+    it("should show only merged pages as selected when a page was pre-selected (bug 2034111)", async () => {
+      await Promise.all(
+        pages.map(async ([browserName, page]) => {
+          await waitForThumbnailVisible(page, 1);
+
+          const labelSelector = "#viewsManagerStatusActionLabel";
+
+          // Select page 1 before merging.
+          await waitAndClick(
+            page,
+            `.thumbnail:has(${getThumbnailSelector(1)}) input`
+          );
+          await waitForTextToBe(page, labelSelector, `${FSI}1${PDI} selected`);
+
+          const handleMerged = await createPromise(page, resolve => {
+            window.PDFViewerApplication.eventBus._on(
+              "thumbnailsloaded",
+              resolve,
+              { once: true }
+            );
+          });
+
+          const picker = await page.$("#viewsManagerAddFilePicker");
+          await picker.uploadFile(
+            path.join(__dirname, "../pdfs/three_pages_with_number.pdf")
+          );
+          await awaitPromise(handleMerged);
+
+          // Original 3 pages + 3 merged pages = 6 pages total.
+          await page.waitForFunction(
+            () => parseInt(document.getElementById("pageNumber").max, 10) === 6
+          );
+
+          // Label must show exactly the 3 newly inserted pages — the
+          // pre-merge selection of page 1 must have been cleared.
+          await waitForTextToBe(page, labelSelector, `${FSI}3${PDI} selected`);
+
+          // Focus must move to the first newly inserted page (page 2).
+          await page.waitForFunction(
+            () => window.PDFViewerApplication.page === 2
+          );
+        })
+      );
+    });
   });
 });

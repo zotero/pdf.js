@@ -33,7 +33,7 @@ const STANDARD_FONT_DATA_URL = isNodeJS
   : "../../external/standard_fonts/";
 
 const WASM_URL = isNodeJS
-  ? "./external/openjpeg/"
+  ? "../../generic-legacy/web/wasm/"
   : "../../build/generic/web/wasm/";
 
 class DefaultFileReaderFactory {

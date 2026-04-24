@@ -30,8 +30,24 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Restore cached PDF files
+        uses: actions/cache/restore@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+        with:
+          path: test/pdfs/*.pdf
+          key: cached-pdf-files-${{ hashFiles('test/pdfs/*.pdf') }}
+          restore-keys: |
+            cached-pdf-files-
+          enableCrossOsArchive: true
+
       - name: Run CLI unit tests with code coverage
         run: npx gulp unittestcli --coverage
+
+      - name: Save cached PDF files
+        uses: actions/cache/save@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+        with:
+          path: test/pdfs/*.pdf
+          key: cached-pdf-files-${{ hashFiles('test/pdfs/*.pdf') }}
+          enableCrossOsArchive: true
 
       - name: Upload results to Codecov
         uses: codecov/codecov-action@57e3a136b779b570ffcdbf80b3bdc90e7fab3de2 # v6.0.0

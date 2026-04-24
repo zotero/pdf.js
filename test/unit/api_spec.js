@@ -1368,9 +1368,6 @@ describe("api", function () {
     });
 
     it("gets a destination, from out-of-order /Names (NameTree) dictionary (issue 10272)", async function () {
-      if (isNodeJS) {
-        pending("Linked test-cases are not supported in Node.js.");
-      }
       const loadingTask = getDocument(buildGetDocumentParams("issue10272.pdf"));
       const pdfDoc = await loadingTask.promise;
       const destination = await pdfDoc.getDestination("link_1");
@@ -1417,9 +1414,6 @@ describe("api", function () {
     });
 
     it("gets a destination, from /Dests dictionary with keys using PDFDocEncoding", async function () {
-      if (isNodeJS) {
-        pending("Linked test-cases are not supported in Node.js.");
-      }
       const loadingTask = getDocument(buildGetDocumentParams("issue19835.pdf"));
       const pdfDoc = await loadingTask.promise;
 
@@ -1439,9 +1433,6 @@ describe("api", function () {
     });
 
     it("gets a destination containing Unicode escape sequence (\x1b), from /Dests dictionary with keys using PDFDocEncoding", async function () {
-      if (isNodeJS) {
-        pending("Linked test-cases are not supported in Node.js.");
-      }
       const loadingTask = getDocument(buildGetDocumentParams("issue19835.pdf"));
       const pdfDoc = await loadingTask.promise;
 
@@ -1810,10 +1801,6 @@ describe("api", function () {
     });
 
     it("gets fieldObjects with missing /P-entries", async function () {
-      if (isNodeJS) {
-        pending("Linked test-cases are not supported in Node.js.");
-      }
-
       const loadingTask = getDocument(buildGetDocumentParams("bug1847733.pdf"));
       const pdfDoc = await loadingTask.promise;
       const fieldObjects = await pdfDoc.getFieldObjects();
@@ -1847,10 +1834,6 @@ describe("api", function () {
     });
 
     it("gets fieldObjects and skipping LinkAnnotations", async function () {
-      if (isNodeJS) {
-        pending("Linked test-cases are not supported in Node.js.");
-      }
-
       const loadingTask = getDocument(buildGetDocumentParams("issue19281.pdf"));
       const pdfDoc = await loadingTask.promise;
       const fieldObjects = await pdfDoc.getFieldObjects();
@@ -1866,9 +1849,6 @@ describe("api", function () {
     });
 
     it("gets calculationOrder", async function () {
-      if (isNodeJS) {
-        pending("Linked test-cases are not supported in Node.js.");
-      }
       const loadingTask = getDocument(buildGetDocumentParams("issue13132.pdf"));
       const pdfDoc = await loadingTask.promise;
       const calculationOrder = await pdfDoc.getCalculationOrderIds();
@@ -1951,9 +1931,6 @@ describe("api", function () {
     });
 
     it("gets outline, with missing title (issue 17856)", async function () {
-      if (isNodeJS) {
-        pending("Linked test-cases are not supported in Node.js.");
-      }
       const loadingTask = getDocument(buildGetDocumentParams("issue17856.pdf"));
       const pdfDoc = await loadingTask.promise;
       const outline = await pdfDoc.getOutline();
@@ -1981,9 +1958,6 @@ describe("api", function () {
     });
 
     it("gets outline, with dest-strings using PDFDocEncoding (issue 14864)", async function () {
-      if (isNodeJS) {
-        pending("Linked test-cases are not supported in Node.js.");
-      }
       const loadingTask = getDocument(buildGetDocumentParams("issue14864.pdf"));
       const pdfDoc = await loadingTask.promise;
       const outline = await pdfDoc.getOutline();
@@ -2481,10 +2455,6 @@ describe("api", function () {
     });
 
     it("write a value in an annotation, save the pdf and check the value in xfa datasets (1)", async function () {
-      if (isNodeJS) {
-        pending("Linked test-cases are not supported in Node.js.");
-      }
-
       let loadingTask = getDocument(buildGetDocumentParams("issue16081.pdf"));
       let pdfDoc = await loadingTask.promise;
       const value = "Hello World";
@@ -2520,10 +2490,6 @@ describe("api", function () {
     });
 
     it("write a value in an annotation, save the pdf and check the value in xfa datasets (2)", async function () {
-      if (isNodeJS) {
-        pending("Linked test-cases are not supported in Node.js.");
-      }
-
       // In this file the path to the fields are wrong but the last path element
       // is unique so we can guess what the node is.
       let loadingTask = getDocument(buildGetDocumentParams("f1040_2022.pdf"));
@@ -2555,10 +2521,6 @@ describe("api", function () {
     });
 
     it("write a new annotation, save the pdf and check that the prev entry in xref stream is correct", async function () {
-      if (isNodeJS) {
-        pending("Linked test-cases are not supported in Node.js.");
-      }
-
       let loadingTask = getDocument(buildGetDocumentParams("bug1823296.pdf"));
       let pdfDoc = await loadingTask.promise;
       let page = await pdfDoc.getPage(1);
@@ -3764,10 +3726,6 @@ page 1 / 3`);
     });
 
     it("gets text content, with no extra spaces (issue 16119)", async function () {
-      if (isNodeJS) {
-        pending("Linked test-cases are not supported in Node.js.");
-      }
-
       const loadingTask = getDocument(buildGetDocumentParams("issue16119.pdf"));
       const pdfDoc = await loadingTask.promise;
       const pdfPage = await pdfDoc.getPage(1);
@@ -3895,10 +3853,6 @@ sources, for full support with Dvips.`;
     });
 
     it("gets text content, with negative spaces (bug 931481)", async function () {
-      if (isNodeJS) {
-        pending("Linked test-cases are not supported in Node.js.");
-      }
-
       const loadingTask = getDocument(buildGetDocumentParams("bug931481.pdf"));
       const pdfDoc = await loadingTask.promise;
       const pdfPage = await pdfDoc.getPage(1);
@@ -3925,10 +3879,6 @@ sozialökonomische Gerechtigkeit.`)
     });
 
     it("gets text content, with invisible text marks (issue 9186)", async function () {
-      if (isNodeJS) {
-        pending("Linked test-cases are not supported in Node.js.");
-      }
-
       const loadingTask = getDocument(buildGetDocumentParams("issue9186.pdf"));
       const pdfDoc = await loadingTask.promise;
       const pdfPage = await pdfDoc.getPage(1);
@@ -3983,10 +3933,6 @@ Caron Broadcasting, Inc., an Ohio corporation (“Lessee”).`)
     });
 
     it("gets text content, and check that out-of-page text is not present (bug 1755201)", async function () {
-      if (isNodeJS) {
-        pending("Linked test-cases are not supported in Node.js.");
-      }
-
       const loadingTask = getDocument(buildGetDocumentParams("bug1755201.pdf"));
       const pdfDoc = await loadingTask.promise;
       const pdfPage = await pdfDoc.getPage(6);
@@ -4001,10 +3947,6 @@ Caron Broadcasting, Inc., an Ohio corporation (“Lessee”).`)
     });
 
     it("gets text content with or without includeMarkedContent, and compare (issue 15094)", async function () {
-      if (isNodeJS) {
-        pending("Linked test-cases are not supported in Node.js.");
-      }
-
       const loadingTask = getDocument(buildGetDocumentParams("pdf.pdf"));
       const pdfDoc = await loadingTask.promise;
       const pdfPage = await pdfDoc.getPage(568);
@@ -4233,10 +4175,6 @@ have written that much by now. So, here’s to squashing bugs.`);
     });
 
     it("gets corrupt structure tree with non-dictionary nodes (issue 18503)", async function () {
-      if (isNodeJS) {
-        pending("Linked test-cases are not supported in Node.js.");
-      }
-
       const loadingTask = getDocument(buildGetDocumentParams("issue18503.pdf"));
       const pdfDoc = await loadingTask.promise;
       const pdfPage = await pdfDoc.getPage(1);
@@ -4965,9 +4903,6 @@ have written that much by now. So, here’s to squashing bugs.`);
     });
 
     it("caches image resources at the document/page level, with main-thread copying of complex images (issue 11518)", async function () {
-      if (isNodeJS) {
-        pending("Linked test-cases are not supported in Node.js.");
-      }
       const { NUM_PAGES_THRESHOLD } = GlobalImageCache;
 
       const loadingTask = getDocument(buildGetDocumentParams("issue11518.pdf"));

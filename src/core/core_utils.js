@@ -29,7 +29,6 @@ import { BaseStream } from "./base_stream.js";
 
 const PDF_VERSION_REGEXP = /^[1-9]\.\d$/;
 const MAX_INT_32 = 2 ** 31 - 1;
-const MIN_INT_32 = -(2 ** 31);
 
 const IDENTITY_MATRIX = [1, 0, 0, 1, 0, 0];
 
@@ -768,7 +767,6 @@ export {
   lookupNormalRect,
   lookupRect,
   MAX_INT_32,
-  MIN_INT_32,
   MissingDataException,
   numberToString,
   ParserEOFException,

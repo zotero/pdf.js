@@ -92,6 +92,7 @@ const AnnotationEditorParamsType = {
   INK_COLOR: 21,
   INK_THICKNESS: 22,
   INK_OPACITY: 23,
+  INK_COLOR_AND_OPACITY: 24,
   HIGHLIGHT_COLOR: 31,
   HIGHLIGHT_THICKNESS: 32,
   HIGHLIGHT_FREE: 33,
@@ -664,6 +665,25 @@ class FeatureTest {
       this,
       "isCSSRoundSupported",
       globalThis.CSS?.supports?.("width: round(1.5px, 1px)")
+    );
+  }
+
+  static get isAlphaColorInputSupported() {
+    return shadow(
+      this,
+      "isAlphaColorInputSupported",
+      (() => {
+        if (typeof document === "undefined") {
+          return false;
+        }
+        const input = document.createElement("input");
+        input.type = "color";
+        input.setAttribute("alpha", "");
+        input.value = "#ff000080";
+        // If alpha is supported the color picker retains the alpha channel, so
+        // the value won't be a plain opaque color (7-char #rrggbb).
+        return input.value !== "#ff0000";
+      })()
     );
   }
 }

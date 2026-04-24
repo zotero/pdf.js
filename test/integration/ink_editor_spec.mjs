@@ -1238,6 +1238,77 @@ describe("Ink must update its color", () => {
   });
 });
 
+describe("Ink color and opacity change must be a single undo step", () => {
+  let pages;
+
+  beforeEach(async () => {
+    pages = await loadAndWait("empty.pdf", ".annotationEditorLayer");
+  });
+
+  afterEach(async () => {
+    await closePages(pages);
+  });
+
+  it("must restore both color and opacity with a single undo", async () => {
+    await Promise.all(
+      pages.map(async ([browserName, page]) => {
+        await switchToInk(page);
+
+        const rect = await getRect(page, ".annotationEditorLayer");
+        const x = rect.x + 20;
+        const y = rect.y + 20;
+        await drawLine(page, x, y, x + 50, y + 50);
+        await commit(page);
+
+        const drawSelector = ".canvasWrapper svg.draw";
+        await page.waitForSelector(drawSelector, { visible: true });
+
+        // Dispatch a combined color+opacity update (single undo step).
+        await page.evaluate(
+          value => {
+            window.PDFViewerApplication.eventBus.dispatch(
+              "switchannotationeditorparams",
+              {
+                source: null,
+                type: window.pdfjsLib.AnnotationEditorParamsType
+                  .INK_COLOR_AND_OPACITY,
+                value,
+              }
+            );
+          },
+          { color: "#ff0000", opacity: 0.5 }
+        );
+
+        await page.waitForSelector(`${drawSelector}[stroke='#ff0000']`, {
+          visible: true,
+        });
+        let opacity = await page.evaluate(
+          sel => document.querySelector(sel).getAttribute("stroke-opacity"),
+          drawSelector
+        );
+        expect(opacity).withContext(`In ${browserName}`).toEqual("0.5");
+
+        // One undo must restore both color and opacity atomically.
+        await kbUndo(page);
+
+        await page.waitForSelector(`${drawSelector}[stroke='#000000']`, {
+          visible: true,
+        });
+        opacity = await page.evaluate(
+          sel => document.querySelector(sel).getAttribute("stroke-opacity"),
+          drawSelector
+        );
+        expect(opacity).withContext(`In ${browserName}`).toEqual("1");
+
+        // A second undo removes the draw, proving the color+opacity change
+        // was a single undo step and not two.
+        await kbUndo(page);
+        await waitForNoElement(page, drawSelector);
+      })
+    );
+  });
+});
+
 describe("Ink must committed when leaving the tab", () => {
   let pages;
 

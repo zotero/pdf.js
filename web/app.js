@@ -1352,6 +1352,8 @@ const PDFViewerApplication = {
         ? this.save()
         : this.download());
     }
+    delete this._mergedDocumentNeedsSaving;
+    this.setTitle();
     classList.remove("wait");
   },
 
@@ -1898,7 +1900,8 @@ const PDFViewerApplication = {
   _hasChanges() {
     return (
       this.pdfDocument?.annotationStorage.size > 0 ||
-      this.pdfThumbnailViewer?.hasStructuralChanges()
+      this.pdfThumbnailViewer?.hasStructuralChanges() ||
+      this._mergedDocumentNeedsSaving === true
     );
   },
 
@@ -2436,6 +2439,7 @@ const PDFViewerApplication = {
       );
       return;
     }
+    this._mergedDocumentNeedsSaving = true;
     this.open({
       data: modifiedPdfBytes,
       filename: this._docFilename,

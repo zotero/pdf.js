@@ -3096,5 +3096,32 @@ describe("Reorganize Pages View", () => {
         })
       );
     });
+
+    it("must mark document as needing save after merge (bug 2034461)", async () => {
+      await Promise.all(
+        pages.map(async ([browserName, page]) => {
+          await waitForThumbnailVisible(page, 1);
+
+          const handleMerged = await createPromise(page, resolve => {
+            window.PDFViewerApplication.eventBus._on(
+              "thumbnailsloaded",
+              resolve,
+              { once: true }
+            );
+          });
+
+          const picker = await page.$("#viewsManagerAddFilePicker");
+          await picker.uploadFile(
+            path.join(__dirname, "../pdfs/three_pages_with_number.pdf")
+          );
+          await awaitPromise(handleMerged);
+
+          const hasChanges = await page.evaluate(() =>
+            window.PDFViewerApplication._hasChanges()
+          );
+          expect(hasChanges).withContext(`In ${browserName}`).toBeTrue();
+        })
+      );
+    });
   });
 });

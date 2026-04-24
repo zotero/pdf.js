@@ -7124,6 +7124,183 @@ small scripts as well as for`);
 
         await loadingTask.destroy();
       });
+
+      it("insertAfter works when all base pages have explicit pageIndices", async function () {
+        // Mirrors a post-deletion merge: explicit pages 0 and 2 at pos 0/1,
+        // insert page 1 after pos 0 → "1"·"2"·"3".
+        let loadingTask = getDocument(
+          buildGetDocumentParams("page_with_number.pdf")
+        );
+        let pdfDoc = await loadingTask.promise;
+        const data = await pdfDoc.extractPages([
+          { document: null, includePages: [0, 2], pageIndices: [0, 1] },
+          { document: null, includePages: [1], insertAfter: 0 },
+        ]);
+        await loadingTask.destroy();
+
+        loadingTask = getDocument(data);
+        pdfDoc = await loadingTask.promise;
+        expect(pdfDoc.numPages).toEqual(3);
+
+        for (const [pageNum, expected] of [
+          [1, "1"],
+          [2, "2"],
+          [3, "3"],
+        ]) {
+          const pdfPage = await pdfDoc.getPage(pageNum);
+          const { items } = await pdfPage.getTextContent();
+          expect(mergeText(items))
+            .withContext(`Page ${pageNum}`)
+            .toEqual(expected);
+        }
+
+        await loadingTask.destroy();
+      });
+
+      it("two insertAfter entries at the same position with explicit pageIndices", async function () {
+        // Two insertAfter: 0 entries must land consecutively in entry order,
+        // yielding "1"·"2"·"3"·"4" (explicit pages 0 and 3 around them).
+        let loadingTask = getDocument(
+          buildGetDocumentParams("page_with_number.pdf")
+        );
+        let pdfDoc = await loadingTask.promise;
+        const data = await pdfDoc.extractPages([
+          { document: null, includePages: [0, 3], pageIndices: [0, 1] },
+          { document: null, includePages: [1], insertAfter: 0 },
+          { document: null, includePages: [2], insertAfter: 0 },
+        ]);
+        await loadingTask.destroy();
+
+        loadingTask = getDocument(data);
+        pdfDoc = await loadingTask.promise;
+        expect(pdfDoc.numPages).toEqual(4);
+
+        for (const [pageNum, expected] of [
+          [1, "1"],
+          [2, "2"],
+          [3, "3"],
+          [4, "4"],
+        ]) {
+          const pdfPage = await pdfDoc.getPage(pageNum);
+          const { items } = await pdfPage.getTextContent();
+          expect(mergeText(items))
+            .withContext(`Page ${pageNum}`)
+            .toEqual(expected);
+        }
+
+        await loadingTask.destroy();
+      });
+
+      it("insertAfter: -1 prepends pages when all base pages have explicit pageIndices", async function () {
+        // insertAfter: -1 prepends pages 0 and 1 before the explicit page 2
+        // → "1"·"2"·"3".
+        let loadingTask = getDocument(
+          buildGetDocumentParams("page_with_number.pdf")
+        );
+        let pdfDoc = await loadingTask.promise;
+        const data = await pdfDoc.extractPages([
+          { document: null, includePages: [2], pageIndices: [0] },
+          { document: null, includePages: [0, 1], insertAfter: -1 },
+        ]);
+        await loadingTask.destroy();
+
+        loadingTask = getDocument(data);
+        pdfDoc = await loadingTask.promise;
+        expect(pdfDoc.numPages).toEqual(3);
+
+        for (const [pageNum, expected] of [
+          [1, "1"],
+          [2, "2"],
+          [3, "3"],
+        ]) {
+          const pdfPage = await pdfDoc.getPage(pageNum);
+          const { items } = await pdfPage.getTextContent();
+          expect(mergeText(items))
+            .withContext(`Page ${pageNum}`)
+            .toEqual(expected);
+        }
+
+        await loadingTask.destroy();
+      });
+
+      it("insertAfter beyond the explicit layout appends pages at the end", async function () {
+        // Out-of-range insertAfter (5) must clamp to end rather than leave a
+        // gap → "1"·"2"·"3".
+        let loadingTask = getDocument(
+          buildGetDocumentParams("page_with_number.pdf")
+        );
+        let pdfDoc = await loadingTask.promise;
+        const data = await pdfDoc.extractPages([
+          { document: null, includePages: [0, 1], pageIndices: [0, 1] },
+          { document: null, includePages: [2], insertAfter: 5 },
+        ]);
+        await loadingTask.destroy();
+
+        loadingTask = getDocument(data);
+        pdfDoc = await loadingTask.promise;
+        expect(pdfDoc.numPages).toEqual(3);
+
+        for (const [pageNum, expected] of [
+          [1, "1"],
+          [2, "2"],
+          [3, "3"],
+        ]) {
+          const pdfPage = await pdfDoc.getPage(pageNum);
+          const { items } = await pdfPage.getTextContent();
+          expect(mergeText(items))
+            .withContext(`Page ${pageNum}`)
+            .toEqual(expected);
+        }
+
+        await loadingTask.destroy();
+      });
+
+      it("rejects partial pageIndices combined with insertAfter", async function () {
+        // Partial pageIndices + insertAfter could race over the same slots;
+        // the resolver throws and the worker surfaces it as a null result.
+        const loadingTask = getDocument(
+          buildGetDocumentParams("page_with_number.pdf")
+        );
+        const pdfDoc = await loadingTask.promise;
+        const data = await pdfDoc.extractPages([
+          { document: null, includePages: [0, 2], pageIndices: [0] },
+          { document: null, includePages: [1], insertAfter: 0 },
+        ]);
+        expect(data).toBeNull();
+
+        await loadingTask.destroy();
+      });
+
+      it("insertAfter alone (no base sequential or explicit layout) places pages from position 0", async function () {
+        // With no base layout, insertAfter must still land pages from pos 0
+        // (splice clamps on the empty sequence) → "1"·"2".
+        let loadingTask = getDocument(
+          buildGetDocumentParams("page_with_number.pdf")
+        );
+        let pdfDoc = await loadingTask.promise;
+        const data = await pdfDoc.extractPages([
+          { document: null, includePages: [0], insertAfter: 0 },
+          { document: null, includePages: [1], insertAfter: 0 },
+        ]);
+        await loadingTask.destroy();
+
+        loadingTask = getDocument(data);
+        pdfDoc = await loadingTask.promise;
+        expect(pdfDoc.numPages).toEqual(2);
+
+        for (const [pageNum, expected] of [
+          [1, "1"],
+          [2, "2"],
+        ]) {
+          const pdfPage = await pdfDoc.getPage(pageNum);
+          const { items } = await pdfPage.getTextContent();
+          expect(mergeText(items))
+            .withContext(`Page ${pageNum}`)
+            .toEqual(expected);
+        }
+
+        await loadingTask.destroy();
+      });
     });
   });
 });

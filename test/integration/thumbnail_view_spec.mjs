@@ -210,6 +210,30 @@ describe("PDF Thumbnail View", () => {
         })
       );
     });
+
+    it("must navigate when a synthetic click is dispatched on the thumbnail image (bug 2034568)", async () => {
+      await Promise.all(
+        pages.map(async ([browserName, page]) => {
+          await showViewsManager(page);
+          await waitForThumbnailVisible(page, 3);
+
+          // Simulate a screen reader (e.g. NVDA) firing a synthetic click on
+          // the <img> child rather than the thumbnailImageContainer button.
+          await page.evaluate(() => {
+            const img = document.querySelector(
+              `.thumbnail[page-number="3"] .thumbnailImageContainer img`
+            );
+            img.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+          });
+
+          const currentPage = await page.$eval(
+            "#pageNumber",
+            el => el.valueAsNumber
+          );
+          expect(currentPage).withContext(`In ${browserName}`).toBe(3);
+        })
+      );
+    });
   });
 
   describe("The manage dropdown menu", () => {

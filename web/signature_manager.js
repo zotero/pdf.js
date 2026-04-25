@@ -410,7 +410,7 @@ class SignatureManager {
         this.#drawCurves = {
           width: drawWidth,
           height: drawHeight,
-          thickness: parseInt(this.#drawThickness.value),
+          thickness: parseInt(this.#drawThickness.value, 10),
           curves: [],
         };
         this.#disableButtons(true);

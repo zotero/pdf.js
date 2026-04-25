@@ -3024,7 +3024,7 @@ class PopupElement {
       this.#setPosition();
       this.#container.hidden = false;
       this.#container.style.zIndex =
-        parseInt(this.#container.style.zIndex) + 1000;
+        parseInt(this.#container.style.zIndex, 10) + 1000;
     } else if (this.#pinned) {
       this.#container.classList.add("focused");
     }
@@ -3040,7 +3040,7 @@ class PopupElement {
     }
     this.#container.hidden = true;
     this.#container.style.zIndex =
-      parseInt(this.#container.style.zIndex) - 1000;
+      parseInt(this.#container.style.zIndex, 10) - 1000;
   }
 
   forceHide() {

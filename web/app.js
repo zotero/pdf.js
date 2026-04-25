@@ -366,7 +366,7 @@ const PDFViewerApplication = {
     // Set some specific preferences for tests.
     if (typeof PDFJSDev !== "undefined" && PDFJSDev.test("TESTING")) {
       Object.assign(opts, {
-        capCanvasAreaFactor: x => parseInt(x),
+        capCanvasAreaFactor: x => parseInt(x, 10),
         docBaseUrl: x => x,
         enableAltText: x => x === "true",
         enableAutoLinking: x => x === "true",
@@ -379,15 +379,15 @@ const PDFViewerApplication = {
         enableSplitMerge: x => x === "true",
         enableUpdatedAddImage: x => x === "true",
         highlightEditorColors: x => x,
-        imagesRightClickMinSize: x => parseInt(x),
-        maxCanvasPixels: x => parseInt(x),
-        spreadModeOnLoad: x => parseInt(x),
+        imagesRightClickMinSize: x => parseInt(x, 10),
+        maxCanvasPixels: x => parseInt(x, 10),
+        spreadModeOnLoad: x => parseInt(x, 10),
         supportsCaretBrowsingMode: x => x === "true",
-        viewerCssTheme: x => parseInt(x),
+        viewerCssTheme: x => parseInt(x, 10),
         forcePageColors: x => x === "true",
         pageColorsBackground: x => x,
         pageColorsForeground: x => x,
-        sidebarViewOnLoad: x => parseInt(x),
+        sidebarViewOnLoad: x => parseInt(x, 10),
       });
     }
 

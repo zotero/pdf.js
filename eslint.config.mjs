@@ -269,6 +269,7 @@ export default [
       "prefer-object-has-own": "error",
       "prefer-promise-reject-errors": "error",
       "prefer-spread": "error",
+      radix: "error",
       "wrap-iife": ["error", "any"],
       yoda: ["error", "never", { exceptRange: true }],
 

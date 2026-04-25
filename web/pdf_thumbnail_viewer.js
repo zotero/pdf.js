@@ -287,7 +287,8 @@ class PDFThumbnailViewer {
                 parseInt(
                   e.target
                     .closest(".thumbnailImageContainer")
-                    ?.parentElement.getAttribute("page-number")
+                    ?.parentElement.getAttribute("page-number"),
+                  10
                 ) ?? -1,
               hasSelectedPages: !!this.#selectedPages?.size,
               canDeletePages: this.#canDelete(),

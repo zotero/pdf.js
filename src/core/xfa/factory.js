@@ -74,7 +74,7 @@ class XFAFactory {
       this.pages = await this._createPagesHelper();
       this.dims = this.pages.children.map(c => {
         const { width, height } = c.attributes.style;
-        return [0, 0, parseInt(width), parseInt(height)];
+        return [0, 0, parseInt(width, 10), parseInt(height, 10)];
       });
     } catch (e) {
       warn(`XFA - an error occurred during layout: ${e}`);

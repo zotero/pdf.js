@@ -532,7 +532,7 @@ function getEditors(page, kind) {
     const elements = document.querySelectorAll(`.${aKind}Editor`);
     const results = [];
     for (const { id } of elements) {
-      results.push(parseInt(id.split("_").at(-1)));
+      results.push(parseInt(id.split("_").at(-1), 10));
     }
     results.sort();
     return results;

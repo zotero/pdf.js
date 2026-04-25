@@ -1389,7 +1389,7 @@ describe("Interaction", () => {
                 (sel, b, a) => {
                   const el = document.querySelector(sel);
                   const rotation =
-                    parseInt(el.getAttribute("data-main-rotation")) || 0;
+                    parseInt(el.getAttribute("data-main-rotation"), 10) || 0;
                   return rotation === (360 + ((360 - (b + a)) % 360)) % 360;
                 },
                 {},

@@ -316,8 +316,8 @@ class Ref {
 
     // eslint-disable-next-line no-restricted-syntax
     return (RefCache[str] = new Ref(
-      parseInt(m[1]),
-      !m[2] ? 0 : parseInt(m[2])
+      parseInt(m[1], 10),
+      !m[2] ? 0 : parseInt(m[2], 10)
     ));
   }
 

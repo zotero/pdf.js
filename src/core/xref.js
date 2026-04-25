@@ -687,7 +687,7 @@ class XRef {
         if (!entry) {
           continue;
         }
-        const ref = Ref.get(parseInt(num), entry.gen);
+        const ref = Ref.get(parseInt(num, 10), entry.gen);
         let obj;
 
         try {

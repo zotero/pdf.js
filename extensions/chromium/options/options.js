@@ -168,7 +168,7 @@ function renderEnumPref(shortDescription, prefName) {
   var select = wrapper.querySelector("select");
   select.onchange = function () {
     var pref = {};
-    pref[prefName] = parseInt(this.value);
+    pref[prefName] = parseInt(this.value, 10);
     storageArea.set(pref);
   };
   wrapper.querySelector("span").textContent = shortDescription;

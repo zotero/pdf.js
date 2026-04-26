@@ -2596,7 +2596,7 @@ class PopupElement {
       const button = (this.#commentButton = document.createElement("button"));
       button.className = "annotationCommentButton";
       const parentContainer = this.#firstElement.container;
-      button.style.zIndex = parentContainer.style.zIndex + 1;
+      button.style.zIndex = parseInt(parentContainer.style.zIndex, 10) + 1;
       button.tabIndex = 0;
       button.ariaHasPopup = "dialog";
       button.ariaControls = "commentPopup";
@@ -3778,6 +3778,8 @@ class AnnotationLayer {
 
   #hasAriaAttributesFromStructTree = false;
 
+  zIndex = 0;
+
   constructor({
     div,
     accessibilityManager,
@@ -3798,7 +3800,6 @@ class AnnotationLayer {
     this.#annotationStorage = annotationStorage || new AnnotationStorage();
     this.page = page;
     this.viewport = viewport;
-    this.zIndex = 0;
     this._annotationEditorUIManager = annotationEditorUIManager;
     this._commentManager = commentManager || null;
 

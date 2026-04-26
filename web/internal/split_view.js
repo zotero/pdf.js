@@ -13,7 +13,7 @@
  * limitations under the License.
  */
 
-import { MathClamp } from "pdfjs/shared/math_clamp.js";
+import { MathClamp } from "pdfjs-lib";
 
 /**
  * Wraps two elements with a drag-to-resize handle between them.

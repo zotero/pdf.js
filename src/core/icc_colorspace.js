@@ -157,7 +157,7 @@ class IccColorSpace extends ColorSpace {
           });
           isUsable = !!this._module;
           QCMS._memory = this._module.memory;
-          QCMS._makeHexColor = Util.makeHexColor;
+          QCMS._makeHexColor = Util.makeHexColor.bind(Util);
         } catch (e) {
           warn(`ICCBased color space: "${e}".`);
         }

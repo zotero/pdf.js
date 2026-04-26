@@ -17,7 +17,6 @@ import {
   AnnotationEditorPrefix,
   assert,
   BaseException,
-  hexNumbers,
   makeArr,
   objectSize,
   stringToPDFString,
@@ -697,7 +696,7 @@ function stringToUTF16HexString(str) {
   const buf = [];
   for (let i = 0, ii = str.length; i < ii; i++) {
     const char = str.charCodeAt(i);
-    buf.push(hexNumbers[(char >> 8) & 0xff], hexNumbers[char & 0xff]);
+    buf.push(Util.hexNums[(char >> 8) & 0xff], Util.hexNums[char & 0xff]);
   }
   return buf.join("");
 }

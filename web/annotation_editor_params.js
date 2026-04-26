@@ -91,11 +91,6 @@ class AnnotationEditorParams {
       let currentInkColor = "#000000";
       let currentInkOpacity = 1;
 
-      const toAlphaHex = opacity =>
-        Math.round(opacity * 255)
-          .toString(16)
-          .padStart(2, "0");
-
       editorInkColor.addEventListener("input", function () {
         // The returned value format varies by browser; normalize it.
         const rgba = getRGBA(this.value);
@@ -111,11 +106,13 @@ class AnnotationEditorParams {
 
       updateInkColor = value => {
         currentInkColor = value;
-        editorInkColor.value = currentInkColor + toAlphaHex(currentInkOpacity);
+        const alphaHex = Util.hexNums[Math.round(currentInkOpacity * 255)];
+        editorInkColor.value = currentInkColor + alphaHex;
       };
       updateInkOpacity = value => {
         currentInkOpacity = value;
-        editorInkColor.value = currentInkColor + toAlphaHex(currentInkOpacity);
+        const alphaHex = Util.hexNums[Math.round(currentInkOpacity * 255)];
+        editorInkColor.value = currentInkColor + alphaHex;
       };
     } else {
       editorInkColor.addEventListener("input", function () {

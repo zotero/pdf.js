@@ -355,9 +355,7 @@ class BasicColorPicker {
     input.type = "color";
     if (hasAlpha) {
       input.setAttribute("alpha", "");
-      const alphaHex = Math.round((opacity ?? 1) * 255)
-        .toString(16)
-        .padStart(2, "0");
+      const alphaHex = Util.hexNums[Math.round((opacity ?? 1) * 255)];
       input.value = (color || "#000000") + alphaHex;
     } else {
       input.value = color || "#000000";
@@ -399,9 +397,7 @@ class BasicColorPicker {
     }
     if (this.#hasAlpha) {
       // Reconstruct #RRGGBBAA using the editor's current opacity.
-      const alphaHex = Math.round(this.#editor.opacity * 255)
-        .toString(16)
-        .padStart(2, "0");
+      const alphaHex = Util.hexNums[Math.round(this.#editor.opacity * 255)];
       this.#input.value = value + alphaHex;
     } else {
       this.#input.value = value;
@@ -413,9 +409,7 @@ class BasicColorPicker {
       return;
     }
     // Reconstruct #RRGGBBAA using the editor's current color.
-    const alphaHex = Math.round(value * 255)
-      .toString(16)
-      .padStart(2, "0");
+    const alphaHex = Util.hexNums[Math.round(value * 255)];
     this.#input.value = this.#editor.color + alphaHex;
   }
 

@@ -1258,6 +1258,22 @@ describe("api", function () {
       expect(pageIndex).toEqual(1);
     });
 
+    it("gets page index, for a non-cached page", async function () {
+      const loadingTask = getDocument(
+        buildGetDocumentParams("pdf.pdf", {
+          disableAutoFetch: true,
+          disableStream: true,
+        })
+      );
+      const pdfDoc = await loadingTask.promise;
+
+      const ref = { num: 1427, gen: 0 }; // Reference to 500th page.
+      const pageIndex = await pdfDoc.getPageIndex(ref);
+      expect(pageIndex).toEqual(499);
+
+      await pdfDoc.destroy();
+    });
+
     it("gets invalid page index", async function () {
       const pageRefs = [
         /* fontRef = */ { num: 3, gen: 0 },

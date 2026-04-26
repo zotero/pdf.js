@@ -14151,5 +14151,22 @@
     "md5": "29c23022ab3d983733e1ee37fd0bc785",
     "rounds": 1,
     "type": "eq"
+  },
+  {
+    "id": "bug2022700",
+    "file": "pdfs/bug2022700.pdf",
+    "md5": "27c147191aa76a9f9916b3ede76a9523",
+    "link": true,
+    "rounds": 1,
+    "firstPage": 1,
+    "lastPage": 1,
+    "save": true,
+    "print": true,
+    "annotationStorage": {
+      "35R": {
+        "value": true
+      }
+    },
+    "type": "eq"
   }
 ]

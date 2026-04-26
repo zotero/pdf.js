@@ -2930,10 +2930,11 @@ describe("annotation", function () {
 
     it("should handle radio buttons with a field value that's not an ASCII string", async function () {
       const parentDict = new Dict();
-      parentDict.set("V", Name.get("\x91I=\x91\xf0\x93\xe0\x97e3"));
+      const name = "\x91I=\x91\xf0\x93\xe0\x97e3";
+      parentDict.set("V", Name.get(name));
 
       const normalAppearanceStateDict = new Dict();
-      normalAppearanceStateDict.set("\x91I=\x91\xf0\x93\xe0\x97e3", null);
+      normalAppearanceStateDict.set(name, null);
 
       const appearanceStatesDict = new Dict();
       appearanceStatesDict.set("N", normalAppearanceStateDict);
@@ -2956,8 +2957,8 @@ describe("annotation", function () {
       expect(data.annotationType).toEqual(AnnotationType.WIDGET);
       expect(data.checkBox).toEqual(false);
       expect(data.radioButton).toEqual(true);
-      expect(data.fieldValue).toEqual("‚I=‚ðﬁàŠe3");
-      expect(data.buttonValue).toEqual("‚I=‚ðﬁàŠe3");
+      expect(data.fieldValue).toEqual(name);
+      expect(data.buttonValue).toEqual(name);
     });
 
     it("should handle radio buttons without a field value", async function () {

@@ -1,3 +1,5 @@
+import { applyParagraphBreakAfterCompat } from "./paragraph-break-compat.js";
+
 // NOTE: Do not modify this file as it can affect all other analyzer parts
 
 // *** bidi.js starts here ***
@@ -838,6 +840,7 @@ export function getStructuredChars(chars) {
     }
   }
   let structuredChars = split(chars2);
+  applyParagraphBreakAfterCompat(structuredChars);
 
   // Validate isMonospace flags using actual rendered character widths.
   // PDF.js's heuristic can false-positive when a font subset has uniform glyph widths.

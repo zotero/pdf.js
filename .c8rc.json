@@ -3,7 +3,8 @@
   "include": [
     "build/lib-legacy/core/**/*.js",
     "build/lib-legacy/display/**/*.js",
-    "build/lib-legacy/shared/**/*.js"
+    "build/lib-legacy/shared/**/*.js",
+    "build/lib-legacy/web/**/*.js"
   ],
   "exclude": ["build/lib-legacy/test/**"],
   "all": false,

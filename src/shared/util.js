@@ -688,13 +688,17 @@ class FeatureTest {
   }
 }
 
-const hexNumbers = Array.from(Array(256).keys(), n =>
-  n.toString(16).padStart(2, "0")
-);
-
 class Util {
+  static get hexNums() {
+    return shadow(
+      this,
+      "hexNums",
+      Array.from(Array(256).keys(), n => n.toString(16).padStart(2, "0"))
+    );
+  }
+
   static makeHexColor(r, g, b) {
-    return `#${hexNumbers[r]}${hexNumbers[g]}${hexNumbers[b]}`;
+    return `#${this.hexNums[r]}${this.hexNums[g]}${this.hexNums[b]}`;
   }
 
   static domMatrixToTransform(dm) {
@@ -1316,7 +1320,6 @@ export {
   getModificationDate,
   getUuid,
   getVerbosityLevel,
-  hexNumbers,
   ImageKind,
   info,
   InvalidPDFException,

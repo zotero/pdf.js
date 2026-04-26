@@ -35,6 +35,7 @@ jobs:
         os: [windows-latest, ubuntu-latest]
 
     runs-on: ${{ matrix.os }}
+    environment: code-coverage
 
     steps:
       - name: Checkout repository

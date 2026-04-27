@@ -2000,7 +2000,7 @@ class PDFEditor {
     const resourcesValuesCache = new Map();
     for (const field of drToFix) {
       const ap = field.get("AP");
-      for (const value of ap.getValues()) {
+      for (const [, value] of ap) {
         if (!(value instanceof BaseStream)) {
           continue;
         }

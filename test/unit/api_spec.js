@@ -6586,6 +6586,29 @@ small scripts as well as for`);
 
         await loadingTask.destroy();
       });
+
+      it("merges PDFs with conflicting AcroForm /DR (bug 2035197)", async function () {
+        // Two PDFs with different `AcroForm.DR`.
+        const loadingTask = getDocument(
+          buildGetDocumentParams("bug2035197_1.pdf")
+        );
+        const pdfDoc = await loadingTask.promise;
+        const pdfData2 = await DefaultFileReaderFactory.fetch({
+          path: TEST_PDFS_PATH + "bug2035197_2.pdf",
+        });
+
+        const data = await pdfDoc.extractPages([
+          { document: null },
+          { document: pdfData2 },
+        ]);
+        expect(data).not.toBeNull();
+        await loadingTask.destroy();
+
+        const newLoadingTask = getDocument(data);
+        const newPdfDoc = await newLoadingTask.promise;
+        expect(newPdfDoc.numPages).toEqual(2);
+        await newLoadingTask.destroy();
+      });
     });
 
     describe("Outlines", function () {

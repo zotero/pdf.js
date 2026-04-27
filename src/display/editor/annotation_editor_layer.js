@@ -465,7 +465,8 @@ class AnnotationEditorLayer {
     if (
       target === this.#textLayer.div ||
       ((target.getAttribute("role") === "img" ||
-        target.classList.contains("endOfContent")) &&
+        target.classList.contains("endOfContent") ||
+        target.classList.contains("textLayerImagePlaceholder")) &&
         this.#textLayer.div.contains(target))
     ) {
       const { isMac } = FeatureTest.platform;

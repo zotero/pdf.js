@@ -13,7 +13,17 @@
  * limitations under the License.
  */
 
-import { closePages, loadAndWait } from "./test_utils.mjs";
+import {
+  awaitPromise,
+  closePages,
+  getEditorSelector,
+  getRect,
+  loadAndWait,
+  switchToEditor,
+  waitForPointerUp,
+} from "./test_utils.mjs";
+
+const switchToHighlight = switchToEditor.bind(null, "Highlight");
 
 describe("Text layer images", () => {
   describe("basic", () => {
@@ -282,6 +292,57 @@ describe("Text layer images", () => {
           )
             .withContext(`Image is 75% black, in ${browserName}`)
             .toBeCloseTo(0.75);
+        })
+      );
+    });
+  });
+
+  describe("free-highlighting on top of an image placeholder", () => {
+    let pages;
+
+    beforeEach(async () => {
+      pages = await loadAndWait(
+        "images.pdf",
+        `.page[data-page-number = "1"] .endOfContent`,
+        undefined,
+        {
+          earlySetup: `() => { window.devicePixelRatio = 1 }`,
+        },
+        {
+          imagesRightClickMinSize: 16,
+          highlightEditorColors: "yellow=#FFFF00",
+        },
+        { width: 800, height: 600, devicePixelRatio: 1 }
+      );
+    });
+
+    afterEach(async () => {
+      await closePages(pages);
+    });
+
+    it("must create a free highlight when dragging on an image placeholder (bug 2034980)", async () => {
+      await Promise.all(
+        pages.map(async ([browserName, page]) => {
+          await switchToHighlight(page);
+
+          const rect = await getRect(
+            page,
+            `.page[data-page-number="1"] > .textLayer > .textLayerImages > canvas`
+          );
+
+          const x1 = rect.x + rect.width / 4;
+          const y1 = rect.y + rect.height / 4;
+          const x2 = rect.x + (3 * rect.width) / 4;
+          const y2 = rect.y + (3 * rect.height) / 4;
+
+          const clickHandle = await waitForPointerUp(page);
+          await page.mouse.move(x1, y1);
+          await page.mouse.down();
+          await page.mouse.move(x2, y2);
+          await page.mouse.up();
+          await awaitPromise(clickHandle);
+
+          await page.waitForSelector(getEditorSelector(0));
         })
       );
     });

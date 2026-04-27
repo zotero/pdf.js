@@ -78,9 +78,10 @@ const ensureDebugMetadata = (map, key) =>
 class CanvasBBoxTracker {
   #baseTransformStack = [[1, 0, 0, 1, 0, 0]];
 
+  // minX, minY, maxX, maxY
   #clipBox = [-Infinity, -Infinity, Infinity, Infinity];
 
-  // Float32Array<minX, minY, maxX, maxY>
+  // minX, minY, maxX, maxY
   #pendingBBox = new Float64Array(BBOX_INIT);
 
   _pendingBBoxIdx = -1;

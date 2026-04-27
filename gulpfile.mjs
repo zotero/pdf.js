@@ -2073,7 +2073,7 @@ gulp.task(
   "typestest",
   gulp.series(
     setTestEnv,
-    "generic",
+    createBuildNumber,
     "types",
     function createTypesTest() {
       return ordered([

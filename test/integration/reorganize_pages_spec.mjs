@@ -3097,6 +3097,58 @@ describe("Reorganize Pages View", () => {
       );
     });
 
+    it("should merge a PDF after the current page when first page was deleted (bug 2034804)", async () => {
+      await Promise.all(
+        pages.map(async ([browserName, page]) => {
+          await waitForThumbnailVisible(page, 1);
+
+          // Select page 1 and delete it.
+          await waitAndClick(
+            page,
+            `.thumbnail:has(${getThumbnailSelector(1)}) input`
+          );
+          const handlePagesEdited = await waitForPagesEdited(page);
+          await waitAndClick(page, "#viewsManagerStatusActionButton");
+          await waitAndClick(page, "#viewsManagerStatusActionDelete");
+          await awaitPromise(handlePagesEdited);
+
+          // After deletion page 1 is the former page 2; navigate to it.
+          await page.waitForFunction(
+            () => window.PDFViewerApplication.page === 1
+          );
+          await waitAndClick(page, getThumbnailSelector(1));
+
+          const handleMerged = await createPromise(page, resolve => {
+            window.PDFViewerApplication.eventBus._on(
+              "thumbnailsloaded",
+              resolve,
+              { once: true }
+            );
+          });
+
+          const picker = await page.$("#viewsManagerAddFilePicker");
+          await picker.uploadFile(
+            path.join(__dirname, "../pdfs/three_pages_with_number.pdf")
+          );
+          await awaitPromise(handleMerged);
+
+          // 2 remaining original + 3 merged = 5 pages.
+          await page.waitForFunction(
+            () => parseInt(document.getElementById("pageNumber").max, 10) === 5
+          );
+
+          // Former page 2, the 3 merged pages, then former page 3.
+          await waitForHavingContents(page, [2, 1, 2, 3, 3]);
+
+          await waitForTextToBe(
+            page,
+            "#viewsManagerStatusActionLabel",
+            `${FSI}3${PDI} selected`
+          );
+        })
+      );
+    });
+
     it("must mark document as needing save after merge (bug 2034461)", async () => {
       await Promise.all(
         pages.map(async ([browserName, page]) => {

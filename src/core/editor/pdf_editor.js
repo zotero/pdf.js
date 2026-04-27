@@ -660,11 +660,88 @@ class PDFEditor {
       }
     }
 
-    // Sort by insertAfter value so that each value is interpreted relative to
-    // the same base sequential sequence, then insert into the sequence.
-    // The offset accumulates the number of pages already inserted, converting
-    // base-relative positions to current-sequence positions.
     insertAfterList.sort((a, b) => a.insertAfter - b.insertAfter);
+
+    // Partial pageIndices would auto-fill into free slots at extraction time,
+    // which collides with the positions insertAfter shifts/assigns. Reject.
+    if (insertAfterList.length > 0) {
+      for (const info of pageInfos) {
+        if (!info.document || !info.pageIndices) {
+          continue;
+        }
+        const filteredCount = this.#getFilteredPageIndices(info).length;
+        if (info.pageIndices.length < filteredCount) {
+          throw new Error(
+            "extractPages: partial pageIndices cannot be combined with insertAfter entries."
+          );
+        }
+      }
+    }
+
+    // If the base sequential sequence is empty but some entries carry explicit
+    // pageIndices (e.g. after a deletion), resolve each insertAfter against
+    // that explicit layout: shift existing positions past the insertion point
+    // and fill the gap. Entries without a document are ignored. With no
+    // explicit entries we fall through to the sequential branch, whose
+    // Array.splice already clamps to position 0 on an empty sequence.
+    const hasExplicitLayout =
+      insertAfterList.length > 0 &&
+      pageInfos.some(info => info.document && info.pageIndices);
+    if (sequence.length === 0 && hasExplicitLayout) {
+      const updatedPageInfos = pageInfos.slice();
+      let maxExistingPos = -1;
+      for (const info of pageInfos) {
+        if (info.document && info.pageIndices) {
+          for (const idx of info.pageIndices) {
+            if (idx > maxExistingPos) {
+              maxExistingPos = idx;
+            }
+          }
+        }
+      }
+      let offset = 0;
+      for (const { i, insertAfter, count } of insertAfterList) {
+        // Clamp to [-1, maxExistingPos] so out-of-range values don't produce
+        // negative or gap-creating positions.
+        const threshold = Math.min(
+          Math.max(insertAfter, -1) + offset,
+          maxExistingPos
+        );
+        for (let j = 0; j < updatedPageInfos.length; j++) {
+          const existingInfo = updatedPageInfos[j];
+          if (
+            !existingInfo.document ||
+            !existingInfo.pageIndices ||
+            existingInfo.pageIndices.every(idx => idx <= threshold)
+          ) {
+            continue;
+          }
+          updatedPageInfos[j] = {
+            ...existingInfo,
+            pageIndices: existingInfo.pageIndices.map(idx =>
+              idx > threshold ? idx + count : idx
+            ),
+          };
+        }
+        const insertedIndices = [];
+        for (let k = 0; k < count; k++) {
+          insertedIndices.push(threshold + 1 + k);
+        }
+        const newInfo = {
+          ...updatedPageInfos[i],
+          pageIndices: insertedIndices,
+        };
+        delete newInfo.insertAfter;
+        updatedPageInfos[i] = newInfo;
+        offset += count;
+        maxExistingPos += count;
+      }
+      return updatedPageInfos;
+    }
+
+    // insertAfter values are relative to the base sequential sequence (stable
+    // across entries thanks to the sort above); offset converts them to
+    // current-sequence positions as we splice.
     let offset = 0;
     for (const { i, insertAfter, count } of insertAfterList) {
       const insertPos = insertAfter + 1 + offset;

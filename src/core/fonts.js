@@ -1125,8 +1125,9 @@ class Font {
 
     let isSerifFont = !!(properties.flags & FontFlags.Serif);
     // Fallback to checking the font name, in order to improve text-selection,
-    // since the /Flags-entry is often wrong (fixes issue13845.pdf).
-    if (!isSerifFont && !properties.isSimulatedFlags) {
+    // since the /Flags-entry is often wrong (fixes issue13845.pdf). When the
+    // font file is missing, the family also affects canvas fallback rendering.
+    if (!isSerifFont && (!properties.isSimulatedFlags || !file)) {
       const stdFontMap = getStdFontMap(),
         nonStdFontMap = getNonStdFontMap(),
         serifFonts = getSerifFonts();
@@ -1134,6 +1135,8 @@ class Font {
         let fontName = normalizeFontName(namePart);
         fontName = stdFontMap[fontName] || nonStdFontMap[fontName] || fontName;
         fontName = fontName.split("-", 1)[0];
+        // TeX fonts commonly append the design size, e.g. CMR8.
+        fontName = fontName.replace(/\d+$/, "");
         if (serifFonts[fontName]) {
           isSerifFont = true;
           break;

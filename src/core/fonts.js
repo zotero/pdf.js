@@ -1147,6 +1147,8 @@ class Font {
 
     this.isSymbolicFont = !!(properties.flags & FontFlags.Symbolic);
     this.isMonospace = !!(properties.flags & FontFlags.FixedPitch);
+    this.bold = /bold/gi.test(name) || !!(properties.flags & FontFlags.ForceBold);
+    this.italic = /oblique|italic/gi.test(name) || !!(properties.flags & FontFlags.Italic);
 
     let { type, subtype } = properties;
     this.type = type;

@@ -1237,6 +1237,20 @@ const makeArr = () => [];
 const makeMap = () => new Map();
 const makeObj = () => Object.create(null);
 
+// TODO: Remove this once Firefox 140 is no longer supported.
+if (
+  (typeof PDFJSDev === "undefined" || !PDFJSDev.test("MOZCENTRAL")) &&
+  typeof Map.prototype.getOrInsertComputed !== "function"
+) {
+  // eslint-disable-next-line no-extend-native
+  Map.prototype.getOrInsertComputed = function (key, callbackFn) {
+    if (!this.has(key)) {
+      this.set(key, callbackFn(key));
+    }
+    return this.get(key);
+  };
+}
+
 // See https://developer.mozilla.org/en-US/docs/Web/API/Blob/bytes#browser_compatibility
 if (
   typeof PDFJSDev !== "undefined" &&

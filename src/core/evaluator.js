@@ -115,6 +115,31 @@ const PatternType = {
   SHADING: 2,
 };
 
+const MODULE_NORMALIZED_CHAR_SPECIAL_CASES = {
+  "e\u0301": "é",
+  "a\u0301": "á",
+  "i\u0301": "í",
+  "o\u0301": "ó",
+  "u\u0301": "ú",
+  "e\u0300": "è",
+  "a\u0300": "à",
+  "i\u0300": "ì",
+  "o\u0300": "ò",
+  "u\u0300": "ù",
+  "e\u0302": "ê",
+  "a\u0302": "â",
+  "i\u0302": "î",
+  "o\u0302": "ô",
+  "u\u0302": "û",
+  "e\u0308": "ë",
+  "a\u0308": "ä",
+  "i\u0308": "ï",
+  "o\u0308": "ö",
+  "u\u0308": "ü",
+  "c\u0327": "ç",
+  "n\u0303": "ñ",
+};
+
 // Optionally avoid sending individual, or very few, text chunks to reduce
 // `postMessage` overhead with ReadableStream (see issue 13962).
 //
@@ -3898,6 +3923,7 @@ class PartialEvaluator {
     const chars = [];
     let objects = [];
     let pathRect = null;
+    const normalizedCharCache = new Map();
     if (!seqCounter || !Number.isFinite(seqCounter.value)) {
       seqCounter = { value: 0 };
     }
@@ -3907,12 +3933,19 @@ class PartialEvaluator {
       if (!r) {
         return [x, y, x, y];
       }
-      return [
-        Math.min(r[0], x),
-        Math.min(r[1], y),
-        Math.max(r[2], x),
-        Math.max(r[3], y),
-      ];
+      if (x < r[0]) {
+        r[0] = x;
+      }
+      if (y < r[1]) {
+        r[1] = y;
+      }
+      if (x > r[2]) {
+        r[2] = x;
+      }
+      if (y > r[3]) {
+        r[3] = y;
+      }
+      return r;
     };
 
     /**
@@ -3951,6 +3984,8 @@ class PartialEvaluator {
     const preprocessor = new EvaluatorPreprocessor(stream, xref, stateManager);
     const timeSlotManager = new TimeSlotManager();
     const showSpacedTextBuffer = [];
+    const moduleTextTransform = [0, 0, 0, 0, 0, 0];
+    const moduleGlyphRect = [0, 0, 0, 0];
 
     let textState;
 
@@ -3966,45 +4001,23 @@ class PartialEvaluator {
       textState.fontName = translated.loadedName;
     }
 
-    function getCurrentTextTransform() {
-      const font = textState.font;
-      const tsm = [
-        textState.fontSize * textState.textHScale,
-        0,
-        0,
-        textState.fontSize,
-        0,
-        textState.textRise,
-      ];
-
-      if (
-        font.isType3Font &&
-        (textState.fontSize <= 1 || font.isCharBBox) &&
-        !isArrayEqual(textState.fontMatrix, FONT_IDENTITY_MATRIX)
-      ) {
-        const glyphHeight = font.bbox[3] - font.bbox[1];
-        if (glyphHeight > 0) {
-          tsm[3] *= glyphHeight * textState.fontMatrix[3];
-        }
-      }
-
-      return Util.transform(
-        textState.ctm,
-        Util.transform(textState.textMatrix, tsm),
-      );
-    }
-
     function closestStandardAngle(degrees) {
-      const standardAngles = [0, 90, 180, 270];
-      let closestAngle = standardAngles[0];
-      let minDifference = Math.abs(degrees - closestAngle);
+      let closestAngle = 0;
+      let minDifference = Math.abs(degrees);
 
-      for (let i = 1; i < standardAngles.length; i++) {
-        const difference = Math.abs(degrees - standardAngles[i]);
-        if (difference < minDifference) {
-          minDifference = difference;
-          closestAngle = standardAngles[i];
-        }
+      let difference = Math.abs(degrees - 90);
+      if (difference < minDifference) {
+        minDifference = difference;
+        closestAngle = 90;
+      }
+      difference = Math.abs(degrees - 180);
+      if (difference < minDifference) {
+        minDifference = difference;
+        closestAngle = 180;
+      }
+      difference = Math.abs(degrees - 270);
+      if (difference < minDifference) {
+        closestAngle = 270;
       }
 
       return closestAngle;
@@ -4024,35 +4037,29 @@ class PartialEvaluator {
     }
 
     function normalizeChar(char) {
-      let normalizedChar = char.normalize("NFKD");
-      const specialCases = {
-        "e\u0301": "é",
-        "a\u0301": "á",
-        "i\u0301": "í",
-        "o\u0301": "ó",
-        "u\u0301": "ú",
-        "e\u0300": "è",
-        "a\u0300": "à",
-        "i\u0300": "ì",
-        "o\u0300": "ò",
-        "u\u0300": "ù",
-        "e\u0302": "ê",
-        "a\u0302": "â",
-        "i\u0302": "î",
-        "o\u0302": "ô",
-        "u\u0302": "û",
-        "e\u0308": "ë",
-        "a\u0308": "ä",
-        "i\u0308": "ï",
-        "o\u0308": "ö",
-        "u\u0308": "ü",
-        "c\u0327": "ç",
-        "n\u0303": "ñ",
-      };
-      if (specialCases[normalizedChar]) {
-        return specialCases[normalizedChar];
+      if (char.length === 1 && char.charCodeAt(0) < 0x80) {
+        return char;
       }
+      if (normalizedCharCache.has(char)) {
+        return normalizedCharCache.get(char);
+      }
+      let normalizedChar = char.normalize("NFKD");
+      if (MODULE_NORMALIZED_CHAR_SPECIAL_CASES[normalizedChar]) {
+        normalizedChar = MODULE_NORMALIZED_CHAR_SPECIAL_CASES[normalizedChar];
+      }
+      normalizedCharCache.set(char, normalizedChar);
       return normalizedChar;
+    }
+
+    function setModuleTextTransform(output) {
+      const ctm = textState.ctm;
+      const tm = textState.textMatrix;
+      output[0] = ctm[0] * tm[0] + ctm[2] * tm[1];
+      output[1] = ctm[1] * tm[0] + ctm[3] * tm[1];
+      output[2] = ctm[0] * tm[2] + ctm[2] * tm[3];
+      output[3] = ctm[1] * tm[2] + ctm[3] * tm[3];
+      output[4] = ctm[0] * tm[4] + ctm[2] * tm[5] + ctm[4];
+      output[5] = ctm[1] * tm[4] + ctm[3] * tm[5] + ctm[5];
     }
 
     function buildCharItems(charsList, extraSpacing = 0) {
@@ -4062,7 +4069,67 @@ class PartialEvaluator {
       }
 
       const glyphs = font.charsToGlyphs(charsList);
-      const scale = textState.fontMatrix[0] * textState.fontSize;
+      const fontSizeValue = textState.fontSize;
+      const fontVertical = font.vertical;
+      const textHScale = textState.textHScale;
+      const textRise = textState.textRise;
+      const wordSpacing = textState.wordSpacing;
+      const baseCharSpacing = textState.charSpacing;
+      const ctm = textState.ctm;
+      const isIdentityCtm =
+        ctm[0] === 1 &&
+        ctm[1] === 0 &&
+        ctm[2] === 0 &&
+        ctm[3] === 1 &&
+        ctm[4] === 0 &&
+        ctm[5] === 0;
+      const scale = textState.fontMatrix[0] * fontSizeValue;
+      const fontName = textState.font.name;
+      const fontBold = font.bold;
+      const fontItalic = font.italic;
+      const fontIsMonospace = !!font.isMonospace;
+      const isType3WithFontMatrix =
+        font.isType3Font &&
+        !isArrayEqual(textState.fontMatrix, FONT_IDENTITY_MATRIX);
+      const glyphHeight = isType3WithFontMatrix
+        ? font.bbox[3] - font.bbox[1]
+        : 0;
+      const fontMatrixY = textState.fontMatrix[3];
+      const type3RectAdjustment = fontSizeValue <= 1 && glyphHeight > 0;
+      const type3RectMin = type3RectAdjustment ? font.bbox[1] * fontMatrixY : 0;
+      const type3RectMax = type3RectAdjustment ? font.bbox[3] * fontMatrixY : 0;
+      let fontScaleY = fontSizeValue;
+      if (
+        isType3WithFontMatrix &&
+        (fontSizeValue <= 1 || font.isCharBBox) &&
+        glyphHeight > 0
+      ) {
+        fontScaleY *= glyphHeight * fontMatrixY;
+      }
+
+      let ascent = font.ascent;
+      let descent = font.descent;
+      if (descent > 0) {
+        descent = -descent;
+      }
+      if (ascent && descent) {
+        if (ascent > 1) {
+          ascent = 0.75;
+        }
+        if (descent < -0.5) {
+          descent = -0.25;
+        }
+      }
+      else {
+        ascent = 0.75;
+        descent = -0.25;
+      }
+
+      if (font.capHeight && font.capHeight < ascent && font.capHeight > 0) {
+        ascent = font.capHeight;
+      }
+      const rectDescent = fontSizeValue * descent;
+      const rectAscent = fontSizeValue * ascent;
 
       for (let i = 0, ii = glyphs.length; i < ii; i++) {
         const glyph = glyphs[i];
@@ -4073,33 +4140,34 @@ class PartialEvaluator {
         }
 
         let glyphWidth = glyph.width;
-        if (font.vertical) {
+        if (fontVertical) {
           glyphWidth = glyph.vmetric ? glyph.vmetric[0] : -glyphWidth;
         }
 
         let scaledDim = glyphWidth * scale;
         let charSpacing =
-          textState.charSpacing + (i + 1 === ii ? extraSpacing : 0);
+          baseCharSpacing + (i + 1 === ii ? extraSpacing : 0);
 
         if (category?.isWhitespace) {
-          if (!font.vertical) {
-            charSpacing += scaledDim + textState.wordSpacing;
+          if (!fontVertical) {
+            charSpacing += scaledDim + wordSpacing;
             textState.translateTextMatrix(
-              charSpacing * textState.textHScale,
+              charSpacing * textHScale,
               0,
             );
           }
           else {
-            charSpacing += -scaledDim + textState.wordSpacing;
+            charSpacing += -scaledDim + wordSpacing;
             textState.translateTextMatrix(0, -charSpacing);
           }
           continue;
         }
 
-        const m = Util.transform(textState.ctm, textState.textMatrix);
+        setModuleTextTransform(moduleTextTransform);
+        const m = moduleTextTransform;
 
-        if (!font.vertical) {
-          scaledDim *= textState.textHScale;
+        if (!fontVertical) {
+          scaledDim *= textHScale;
           textState.translateTextMatrix(scaledDim, 0);
         }
         else {
@@ -4115,71 +4183,35 @@ class PartialEvaluator {
             (charCode >= 0x7f && charCode <= 0x9f)
           )
         ) {
-          const rect = (() => {
-            let ascent = font.ascent;
-            let descent = font.descent;
-            if (descent > 0) {
-              descent = -descent;
-            }
-            if (ascent && descent) {
-              if (ascent > 1) {
-                ascent = 0.75;
-              }
-              if (descent < -0.5) {
-                descent = -0.25;
-              }
+          const r = moduleGlyphRect;
+          if (!fontVertical) {
+            r[0] = 0;
+            r[1] = rectDescent;
+            r[2] = scaledDim;
+            r[3] = rectAscent;
+          }
+          else {
+            const y0 = Math.min(0, scaledDim);
+            const y1 = Math.max(0, scaledDim);
+            r[0] = rectDescent;
+            r[1] = y0;
+            r[2] = rectAscent;
+            r[3] = y1;
+          }
+
+          if (type3RectAdjustment) {
+            if (!fontVertical) {
+              r[1] = type3RectMin;
+              r[3] = type3RectMax;
             }
             else {
-              ascent = 0.75;
-              descent = -0.25;
+              r[0] = type3RectMin;
+              r[2] = type3RectMax;
             }
+          }
 
-            if (font.capHeight && font.capHeight < ascent && font.capHeight > 0) {
-              ascent = font.capHeight;
-            }
-
-            let r;
-            if (!font.vertical) {
-              r = [
-                0,
-                textState.fontSize * descent,
-                scaledDim,
-                textState.fontSize * ascent,
-              ];
-            }
-            else {
-              const y0 = Math.min(0, scaledDim);
-              const y1 = Math.max(0, scaledDim);
-              r = [
-                textState.fontSize * descent,
-                y0,
-                textState.fontSize * ascent,
-                y1,
-              ];
-            }
-
-            if (
-              font.isType3Font &&
-              textState.fontSize <= 1 &&
-              !isArrayEqual(textState.fontMatrix, FONT_IDENTITY_MATRIX)
-            ) {
-              const glyphHeight = font.bbox[3] - font.bbox[1];
-              if (glyphHeight > 0) {
-                if (!font.vertical) {
-                  r[1] = font.bbox[1] * textState.fontMatrix[3];
-                  r[3] = font.bbox[3] * textState.fontMatrix[3];
-                }
-                else {
-                  r[0] = font.bbox[1] * textState.fontMatrix[3];
-                  r[2] = font.bbox[3] * textState.fontMatrix[3];
-                }
-              }
-            }
-
-            const transformed = [Infinity, Infinity, -Infinity, -Infinity];
-            Util.axialAlignedBoundingBox(r, m, transformed);
-            return transformed;
-          })();
+          const rect = [Infinity, Infinity, -Infinity, -Infinity];
+          Util.axialAlignedBoundingBox(r, m, rect);
 
           let rotation = matrixToDegrees(m);
           const diagonal = rotation % 90 !== 0;
@@ -4188,33 +4220,60 @@ class PartialEvaluator {
             rotation = 270;
           }
 
-          const baselineRect = [Infinity, Infinity, -Infinity, -Infinity];
-          Util.axialAlignedBoundingBox([0, 0, 0, 0], m, baselineRect);
           let baseline = 0;
           if (rotation === 0 || rotation === 180) {
-            baseline = baselineRect[1];
+            baseline = m[5];
           }
           else if (rotation === 90 || rotation === 270) {
-            baseline = baselineRect[0];
+            baseline = m[4];
           }
 
-          const p1 = [0, 0];
-          const p2 = [0, 1];
-          Util.applyTransform(p1, getCurrentTextTransform());
-          Util.applyTransform(p2, getCurrentTextTransform());
-          const fontSize = Math.hypot(p1[0] - p2[0], p1[1] - p2[1]);
+          const textMatrix = textState.textMatrix;
+          let fontSize;
+          if (isIdentityCtm && textRise === 0 && textMatrix[2] === 0) {
+            fontSize = Math.abs(
+              textMatrix[5] - (textMatrix[3] * fontScaleY + textMatrix[5]),
+            );
+          }
+          else if (isIdentityCtm && textRise === 0 && textMatrix[3] === 0) {
+            fontSize = Math.abs(
+              textMatrix[4] - (textMatrix[2] * fontScaleY + textMatrix[4]),
+            );
+          }
+          else if (isIdentityCtm) {
+            const full4 = textMatrix[2] * textRise + textMatrix[4];
+            const full5 = textMatrix[3] * textRise + textMatrix[5];
+            fontSize = Math.hypot(
+              full4 - (textMatrix[2] * fontScaleY + full4),
+              full5 - (textMatrix[3] * fontScaleY + full5),
+            );
+          }
+          else {
+            const inner2 = textMatrix[2] * fontScaleY;
+            const inner3 = textMatrix[3] * fontScaleY;
+            const inner4 = textMatrix[2] * textRise + textMatrix[4];
+            const inner5 = textMatrix[3] * textRise + textMatrix[5];
+            const full2 = ctm[0] * inner2 + ctm[2] * inner3;
+            const full3 = ctm[1] * inner2 + ctm[3] * inner3;
+            const full4 = ctm[0] * inner4 + ctm[2] * inner5 + ctm[4];
+            const full5 = ctm[1] * inner4 + ctm[3] * inner5 + ctm[5];
+            fontSize = Math.hypot(
+              full4 - (full2 + full4),
+              full5 - (full3 + full5),
+            );
+          }
 
-            if (fontSize !== 0) {
-              chars.push({
-                seq: nextSeq(),
-                u: glyphUnicode.length === 1 ? glyphUnicode : glyph.unicode,
-                c: normalizeChar(glyphUnicode),
-                rect,
+          if (fontSize !== 0) {
+            chars.push({
+              seq: nextSeq(),
+              u: glyphUnicode.length === 1 ? glyphUnicode : glyph.unicode,
+              c: normalizeChar(glyphUnicode),
+              rect,
               fontSize,
-              fontName: textState.font.name,
-              bold: font.bold,
-              italic: font.italic,
-              isMonospace: !!font.isMonospace,
+              fontName,
+              bold: fontBold,
+              italic: fontItalic,
+              isMonospace: fontIsMonospace,
               glyphWidth,
               baseline,
               rotation,
@@ -4224,9 +4283,9 @@ class PartialEvaluator {
         }
 
         if (charSpacing) {
-          if (!font.vertical) {
+          if (!fontVertical) {
             textState.translateTextMatrix(
-              charSpacing * textState.textHScale,
+              charSpacing * textHScale,
               0,
             );
           }

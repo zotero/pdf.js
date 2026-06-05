@@ -1,4 +1,4 @@
-import { applyParagraphBreakAfterCompat } from "./paragraph-break-compat.js";
+import { applyParagraphBreakAfterCompat, getLineMetrics } from "./paragraph-break-compat.js";
 
 // NOTE: Do not modify this file as it can affect all other analyzer parts
 
@@ -479,7 +479,7 @@ function isRTL(char) {
 
 // The function is adapted from Xpdf https://www.xpdfreader.com/opensource.html
 // Original copyright: 1996-2019 Glyph & Cog, LLC.
-function computeWordSpacingThreshold(chars) {
+function computeWordSpacingThreshold(chars, from = 0, to = chars.length - 1) {
   // Inter-character spacing that varies by less than this multiple of
   // font size is assumed to be equivalent.
   let uniformSpacing = 0.07;
@@ -500,10 +500,11 @@ function computeWordSpacingThreshold(chars) {
   minGap = maxGap = 0;
   minAdjGap = minSpGap = 1;
   maxAdjGap = maxSpGap = 0;
-  for (i = 0; i < chars.length; ++i) {
+  let length = to - from + 1;
+  for (i = from; i <= to; ++i) {
     char = chars[i];
     avgFontSize += char.fontSize;
-    if (i < chars.length - 1) {
+    if (i < to) {
       char2 = chars[i + 1];
       gap = getSpaceBetweenChars(char, char2);
       if (char.spaceAfter) {
@@ -526,7 +527,7 @@ function computeWordSpacingThreshold(chars) {
       else if (gap > maxAdjGap) {
         maxAdjGap = gap;
       }
-      if (i == 0 || gap < minGap) {
+      if (i == from || gap < minGap) {
         minGap = gap;
       }
       if (gap > maxGap) {
@@ -534,7 +535,7 @@ function computeWordSpacingThreshold(chars) {
       }
     }
   }
-  avgFontSize /= chars.length;
+  avgFontSize /= length;
   if (minGap < 0) {
     minGap = 0;
   }
@@ -586,7 +587,7 @@ function getSpaceBetweenChars(char, char2) {
 }
 
 function overlaps(rect1, rect2, rotation) {
-  if ([0, 180].includes(rotation)) {
+  if (rotation === 0 || rotation === 180) {
     return (rect1[1] <= rect2[1] && rect2[1] <= rect1[3]
       || rect2[1] <= rect1[1] && rect1[1] <= rect2[3]);
   }
@@ -602,24 +603,21 @@ const dashChars = new Set([
   '\u2E17', '\u2E1A', '\u2E3A', '\u2E3B', '\u301C', '\u3030',
   '\u30A0', '\uFE31', '\uFE32', '\uFE58', '\uFE63', '\uFF0D'
 ]);
+const punctuationChars = '?.,;!¡¿。、·(){}[]/$:';
 
 function charHeight(char) {
-  return ([0, 180].includes(char.rotation) && char.rect[3] - char.rect[1]
-    || [90, 270].includes(char.rotation) && char.rect[2] - char.rect[0]);
-}
-
-function getBoundingRect(objs, from, to) {
-  let objs2 = objs.slice(from, to + 1);
-  return [
-    Math.min(...objs2.map(x => x.rect[0])),
-    Math.min(...objs2.map(x => x.rect[1])),
-    Math.max(...objs2.map(x => x.rect[2])),
-    Math.max(...objs2.map(x => x.rect[3])),
-  ];
+  return ((char.rotation === 0 || char.rotation === 180) && char.rect[3] - char.rect[1]
+    || (char.rotation === 90 || char.rotation === 270) && char.rect[2] - char.rect[0]);
 }
 
 function medianFinite(values) {
-  const arr = values.filter(Number.isFinite).slice().sort((a, b) => a - b);
+  const arr = [];
+  for (let i = 0; i < values.length; i++) {
+    if (Number.isFinite(values[i])) {
+      arr.push(values[i]);
+    }
+  }
+  arr.sort((a, b) => a - b);
   if (!arr.length) {
     return NaN;
   }
@@ -630,8 +628,8 @@ function medianFinite(values) {
 function charPerpCenter(char) {
   // "Perpendicular to writing direction" center used to detect sup/sub shifts.
   // For horizontal text (0/180) this is Y center; for vertical (90/270) this is X center.
-  return ([0, 180].includes(char.rotation) && (char.rect[1] + char.rect[3]) / 2
-    || [90, 270].includes(char.rotation) && (char.rect[0] + char.rect[2]) / 2);
+  return ((char.rotation === 0 || char.rotation === 180) && (char.rect[1] + char.rect[3]) / 2
+    || (char.rotation === 90 || char.rotation === 270) && (char.rect[0] + char.rect[2]) / 2);
 }
 
 function classifySupSubForLine(chars, from, to, {
@@ -640,15 +638,20 @@ function classifySupSubForLine(chars, from, to, {
   supMinOffset = 0.25,      // min (cPerp - cRef)/hMed for superscript (PDF coords: up/right is +)
   subMinOffset = 0.20       // min (cRef - cPerp)/hMed for subscript
 } = {}) {
-  const items = [];
+  const count = to - from + 1;
+  const heights = new Array(count);
+  const perpCenters = new Array(count);
+  let itemIndex = 0;
   for (let i = from; i <= to; i++) {
     const ch = chars[i];
     const h = charHeight(ch);
     const cPerp = charPerpCenter(ch);
-    items.push({ i, ch, h, cPerp });
+    heights[itemIndex] = h;
+    perpCenters[itemIndex] = cPerp;
+    itemIndex++;
   }
 
-  const hMed = medianFinite(items.map(x => x.h));
+  const hMed = medianFinite(heights);
   if (!Number.isFinite(hMed) || hMed <= 0) {
     for (let i = from; i <= to; i++) {
       chars[i].sup = false;
@@ -660,26 +663,44 @@ function classifySupSubForLine(chars, from, to, {
   const lo = (1 - normalHeightBand) * hMed;
   const hi = (1 + normalHeightBand) * hMed;
 
-  const normalCandidates = items.filter(x => x.h >= lo && x.h <= hi);
-  const refPool = normalCandidates.length >= 3 ? normalCandidates : items;
-  const cRef = medianFinite(refPool.map(x => x.cPerp));
+  const normalCenters = [];
+  for (let i = 0; i < count; i++) {
+    if (heights[i] >= lo && heights[i] <= hi) {
+      normalCenters.push(perpCenters[i]);
+    }
+  }
+  const cRef = medianFinite(normalCenters.length >= 3 ? normalCenters : perpCenters);
 
-  for (const it of items) {
-    const sizeRatio = it.h / hMed;
-    const offset = (it.cPerp - cRef) / hMed; // + => above (horizontal) / right (vertical)
+  for (let i = 0; i < count; i++) {
+    const sizeRatio = heights[i] / hMed;
+    const offset = (perpCenters[i] - cRef) / hMed; // + => above (horizontal) / right (vertical)
 
     const isSmall = sizeRatio <= smallMaxRatio;
     const sup = isSmall && offset >= supMinOffset;
     const sub = isSmall && offset <= -subMinOffset;
 
-    it.ch.sup = sup;
-    it.ch.sub = sub;
+    const ch = chars[from + i];
+    ch.sup = sup;
+    ch.sub = sub;
   }
+}
+
+function compareCharsByVisualOrder(a, b) {
+  let { rotation } = a;
+  let x1 = a.rect[0] + a.rect[2];
+  let x2 = b.rect[0] + b.rect[2];
+  let y1 = a.rect[1] + a.rect[3];
+  let y2 = b.rect[1] + b.rect[3];
+
+  return !rotation && x1 - x2
+    || rotation === 90 && y1 - y2
+    || rotation === 180 && x2 - x1
+    || rotation === 270 && y2 - y1
 }
 
 function split(chars, reflowRTL) {
   if (!chars.length) {
-    return [];
+    return { chars: [], lineMetrics: [] };
   }
 
   let hasRTL = false;
@@ -695,52 +716,59 @@ function split(chars, reflowRTL) {
   for (let i = 1; i < chars.length; i++) {
     let char = chars[i - 1];
     let char2 = chars[i];
+    let baselineDiff = Math.abs(char.baseline - char2.baseline);
     if (
       // Caret jumps to the next line start for non-RTL text and baseline isn't the same.
       // (characters can sometimes even jump back in the same line)
-      !hasRTL && Math.abs(char.baseline - char2.baseline) > 0.01 && (
+      !hasRTL && baselineDiff > 0.01 && (
         !char2.rotation && char.rect[0] - 10 > char2.rect[0]
         || char2.rotation === 90 && char.rect[1] > char2.rect[1]
         || char2.rotation === 180 && char.rect[0] < char2.rect[0]
         || char2.rotation === 270 && char.rect[1] < char2.rect[1]
       )
-      || hasRTL && Math.abs(char.baseline - char2.baseline) > 0.01
+      || hasRTL && baselineDiff > 0.01
       // Rotation changes
       || char.rotation !== char2.rotation
       // Chars aren't in the same line
       || !overlaps(char.rect, char2.rect, char2.rotation)
       // Large baseline jump always indicates a new line (handles code blocks
       // where consecutive lines have similar x-positions)
-      || Math.abs(char.baseline - char2.baseline) > Math.max(char.fontSize, char2.fontSize || char.fontSize) * 0.8
+      || baselineDiff > Math.max(char.fontSize, char2.fontSize || char.fontSize) * 0.8
       // Line's first char is more than 2x larger than the following char, to put drop cap into a separate line
-      || lineBreaks.find(x => x === i - 1) && charHeight(char) > charHeight(char2) * 2
+      || lineBreaks[lineBreaks.length - 1] === i - 1 && charHeight(char) > charHeight(char2) * 2
     ) {
       lineBreaks.push(i);
     }
   }
 
-  lineBreaks = [0, ...lineBreaks, chars.length];
+  lineBreaks.unshift(0);
+  lineBreaks.push(chars.length);
 
   // Sort characters in lines by their visual order. That fixes some RTL lines
   // and weird cases when caret jumps back in the same line for LTR text
   for (let i = 0; i < lineBreaks.length - 1; i++) {
     let from = lineBreaks[i];
     let to = lineBreaks[i + 1] - 1;
+    let sorted = true;
+    for (let j = from + 1; j <= to; j++) {
+      if (compareCharsByVisualOrder(chars[j - 1], chars[j]) > 0) {
+        sorted = false;
+        break;
+      }
+    }
+    if (sorted && !hasRTL) {
+      continue;
+    }
     let lineChars = chars.slice(from, to + 1);
-    lineChars.sort((a, b) => {
-      let { rotation } = a;
-      let x1 = a.rect[0] + (a.rect[2] - a.rect[0]) / 2;
-      let x2 = b.rect[0] + (b.rect[2] - b.rect[0]) / 2;
-      let y1 = a.rect[1] + (a.rect[3] - a.rect[1]) / 2;
-      let y2 = b.rect[1] + (b.rect[3] - b.rect[1]) / 2;
-
-      return !rotation && x1 - x2
-        || rotation === 90 && y1 - y2
-        || rotation === 180 && x2 - x1
-        || rotation === 270 && y2 - y1
-    });
-    bidi(lineChars, -1, false);
-    chars.splice(from, to - from + 1, ...lineChars);
+    if (!sorted) {
+      lineChars.sort(compareCharsByVisualOrder);
+    }
+    if (hasRTL) {
+      bidi(lineChars, -1, false);
+    }
+    for (let j = 0; j < lineChars.length; j++) {
+      chars[from + j] = lineChars[j];
+    }
   }
 
   // Detect superscripts/subscripts per line (sets char.sup / char.sub).
@@ -756,31 +784,25 @@ function split(chars, reflowRTL) {
   for (let i = 0; i < lineBreaks.length - 1; i++) {
     let from = lineBreaks[i];
     let to = lineBreaks[i + 1] - 1;
-    let wordSp = computeWordSpacingThreshold(chars.slice(from, to + 1));
-    let spaces = [];
+    let wordSp = computeWordSpacingThreshold(chars, from, to);
     for (let j = from + 1; j <= to; j++) {
-      let sp = wordSp - 1;
-
       let char = chars[j - 1];
       let char2 = chars[j];
 
-      let rtl = isRTL(char.c) && isRTL(char2.c);
-      sp = rtl ? (char.rect[0] - char2.rect[2]) : getSpaceBetweenChars(char, char2);
+      let rtl = hasRTL && isRTL(char.c) && isRTL(char2.c);
+      let sp = rtl ? (char.rect[0] - char2.rect[2]) : getSpaceBetweenChars(char, char2);
       if (sp > wordSp || sp < -char.fontSize) {
         wordSpaces.push(j);
         wordBreaks.push(j);
-        spaces.push({index: j, width: sp});
         continue;
       }
-
-      let punctuation = '?.,;!¡¿。、·(){}[]/$:';
 
       if (
         //char.fontName !== char2.fontName // Can't use this because the same
         // word can have a bit different subuversion for international characters
         // Math.abs(char.fontSize - char2.fontSize) > 0.01
         Math.abs(char.baseline - char2.baseline) > 0.01
-        || punctuation.includes(char.c) || punctuation.includes(char2.c)
+        || punctuationChars.includes(char.c) || punctuationChars.includes(char2.c)
       ) {
         wordBreaks.push(j);
       }
@@ -790,14 +812,17 @@ function split(chars, reflowRTL) {
     }
   }
 
-
+  let lineMetrics = [];
   for (let i = 1; i < lineBreaks.length; i++) {
     let lineStart = lineBreaks[i - 1];
     let lineEnd = lineBreaks[i] - 1;
     chars[lineEnd].lineBreakAfter = true;
 
-    let lineRect = getBoundingRect(chars, lineStart, lineEnd);
-    let vertical = [90, 270].includes(chars[lineStart].rotation);
+    let lineMetric = getLineMetrics(chars, { start: lineStart, end: lineEnd });
+    lineMetrics.push(lineMetric);
+    let lineRect = lineMetric.rect;
+    let rotation = chars[lineStart].rotation;
+    let vertical = rotation === 90 || rotation === 270;
     for (let j = lineStart; j <= lineEnd; j++) {
       let char = chars[j];
       char.inlineRect = char.rect.slice();
@@ -825,22 +850,44 @@ function split(chars, reflowRTL) {
     }
   }
 
-  return chars;
+  return { chars, lineMetrics };
 }
 
 export function getStructuredChars(chars) {
-  let chars2 = [];
-  let fingerprints = new Set();
+  let chars2 = new Array(chars.length);
+  let chars2Length = 0;
+  let fingerprints = new Map();
   for (let char of chars) {
     // Some PDF files have their text layer characters repeated many times, therefore deduplicate chars
-    let fingerprint = char.c + char.rect.join('');
-    if (!fingerprints.has(fingerprint)) {
-      fingerprints.add(fingerprint);
-      chars2.push(char);
+    let rect = char.rect;
+    let byX0 = fingerprints.get(char.c);
+    if (!byX0) {
+      byX0 = new Map();
+      fingerprints.set(char.c, byX0);
+    }
+    let byY0 = byX0.get(rect[0]);
+    if (!byY0) {
+      byY0 = new Map();
+      byX0.set(rect[0], byY0);
+    }
+    let byX1 = byY0.get(rect[1]);
+    if (!byX1) {
+      byX1 = new Map();
+      byY0.set(rect[1], byX1);
+    }
+    let byY1 = byX1.get(rect[2]);
+    if (!byY1) {
+      byY1 = new Set();
+      byX1.set(rect[2], byY1);
+    }
+    if (!byY1.has(rect[3])) {
+      byY1.add(rect[3]);
+      chars2[chars2Length++] = char;
     }
   }
-  let structuredChars = split(chars2);
-  applyParagraphBreakAfterCompat(structuredChars);
+  chars2.length = chars2Length;
+  let { chars: structuredChars, lineMetrics } = split(chars2);
+  applyParagraphBreakAfterCompat(structuredChars, lineMetrics);
 
   // Validate isMonospace flags using actual rendered character widths.
   // PDF.js's heuristic can false-positive when a font subset has uniform glyph widths.

@@ -15,58 +15,43 @@ function median(values) {
   return (values[half - 1] + values[half]) / 2;
 }
 
-function getLineBottom(chars, line) {
-  const values = [];
-  for (let i = line.start; i <= line.end; i++) {
-    const char = chars[i];
-    if (char.rotation === 0) {
-      values.push(char.rect[1]);
-    } else if (char.rotation === 90) {
-      values.push(char.rect[2]);
-    } else if (char.rotation === 180) {
-      values.push(char.rect[3]);
-    } else if (char.rotation === 270) {
-      values.push(char.rect[0]);
-    }
-  }
-  return median(values);
-}
-
-function getLineTop(chars, line) {
-  const values = [];
-  for (let i = line.start; i <= line.end; i++) {
-    const char = chars[i];
-    if (char.rotation === 0) {
-      values.push(char.rect[3]);
-    } else if (char.rotation === 90) {
-      values.push(char.rect[0]);
-    } else if (char.rotation === 180) {
-      values.push(char.rect[1]);
-    } else if (char.rotation === 270) {
-      values.push(char.rect[2]);
-    }
-  }
-  return median(values);
-}
-
-function getBoundingRect(chars, line) {
-  const lineChars = chars.slice(line.start, line.end + 1);
-  return [
-    Math.min(...lineChars.map(x => x.rect[0])),
-    Math.min(...lineChars.map(x => x.rect[1])),
-    Math.max(...lineChars.map(x => x.rect[2])),
-    Math.max(...lineChars.map(x => x.rect[3])),
-  ];
-}
-
-function mostCommonFontName(chars, line) {
+function getLineMetrics(chars, line) {
+  const bottomValues = [];
+  const topValues = [];
   const fontCount = Object.create(null);
+  let x0 = Infinity;
+  let y0 = Infinity;
+  let x1 = -Infinity;
+  let y1 = -Infinity;
 
-  // Match the legacy `chars.slice(line.start, line.end)` call, where `end`
-  // was accidentally treated as exclusive.
-  for (let i = line.start; i < line.end; i++) {
-    const fontName = chars[i].fontName;
-    fontCount[fontName] = (fontCount[fontName] || 0) + 1;
+  for (let i = line.start; i <= line.end; i++) {
+    const char = chars[i];
+    const rect = char.rect;
+    if (rect[0] < x0) x0 = rect[0];
+    if (rect[1] < y0) y0 = rect[1];
+    if (rect[2] > x1) x1 = rect[2];
+    if (rect[3] > y1) y1 = rect[3];
+
+    if (char.rotation === 0) {
+      bottomValues.push(rect[1]);
+      topValues.push(rect[3]);
+    } else if (char.rotation === 90) {
+      bottomValues.push(rect[2]);
+      topValues.push(rect[0]);
+    } else if (char.rotation === 180) {
+      bottomValues.push(rect[3]);
+      topValues.push(rect[1]);
+    } else if (char.rotation === 270) {
+      bottomValues.push(rect[0]);
+      topValues.push(rect[2]);
+    }
+
+    // Match the legacy `chars.slice(line.start, line.end)` call, where `end`
+    // was accidentally treated as exclusive.
+    if (i < line.end) {
+      const fontName = char.fontName;
+      fontCount[fontName] = (fontCount[fontName] || 0) + 1;
+    }
   }
 
   let mostCommonFont = null;
@@ -78,7 +63,17 @@ function mostCommonFontName(chars, line) {
     }
   }
 
-  return mostCommonFont;
+  const top = median(topValues);
+  const bottom = median(bottomValues);
+  return {
+    start: line.start,
+    end: line.end,
+    top,
+    bottom,
+    height: top - bottom,
+    rect: [x0, y0, x1, y1],
+    fontName: mostCommonFont,
+  };
 }
 
 function getLines(chars) {
@@ -93,7 +88,7 @@ function getLines(chars) {
   return lines;
 }
 
-function applyParagraphBreakAfterCompat(chars) {
+function applyParagraphBreakAfterCompat(chars, lineMetrics = null) {
   for (const char of chars) {
     delete char.paragraphBreakAfter;
   }
@@ -102,19 +97,11 @@ function applyParagraphBreakAfterCompat(chars) {
     return chars;
   }
 
-  const lines = getLines(chars);
+  const lines = lineMetrics || getLines(chars);
+  const metrics = lineMetrics || lines.map(line => getLineMetrics(chars, line));
   const lineSpacings = [];
   for (let i = 0; i < lines.length - 1; i++) {
-    const currentLineBottom = getLineBottom(chars, lines[i]);
-    const nextLineTop = getLineTop(chars, lines[i + 1]);
-    lineSpacings.push(currentLineBottom - nextLineTop);
-  }
-
-  const lineHeights = [];
-  for (const line of lines) {
-    const lineTop = getLineTop(chars, line);
-    const lineBottom = getLineBottom(chars, line);
-    lineHeights.push(lineTop - lineBottom);
+    lineSpacings.push(metrics[i].bottom - metrics[i + 1].top);
   }
 
   const MAX_LINE_SPACING = 5;
@@ -124,13 +111,14 @@ function applyParagraphBreakAfterCompat(chars) {
 
   for (let i = 0; i < lines.length - 1; i++) {
     const currentLine = lines[i];
-    const nextLine = lines[i + 1];
-    const currentRect = getBoundingRect(chars, currentLine);
-    const nextRect = getBoundingRect(chars, nextLine);
+    const currentMetrics = metrics[i];
+    const nextMetrics = metrics[i + 1];
+    const currentRect = currentMetrics.rect;
+    const nextRect = nextMetrics.rect;
     const currentLineSpacing = lineSpacings[i];
     const nextLineSpacing = lineSpacings[i + 1];
-    const currentLineHeight = lineHeights[i];
-    const nextLineHeight = lineHeights[i + 1];
+    const currentLineHeight = currentMetrics.height;
+    const nextLineHeight = nextMetrics.height;
 
     let allowGap = false;
     if (isGapValid(currentLineSpacing) && !isGapValid(nextLineSpacing)) {
@@ -145,12 +133,10 @@ function applyParagraphBreakAfterCompat(chars) {
       }
     }
 
-    const currentLineFontName = mostCommonFontName(chars, currentLine);
-    const nextLineFontName = mostCommonFontName(chars, nextLine);
     if (
       !allowGap ||
       !(currentRect[1] > nextRect[3]) ||
-      (currentLineFontName !== nextLineFontName &&
+      (currentMetrics.fontName !== nextMetrics.fontName &&
         currentRect[2] < nextRect[2] - 10) ||
       Math.abs(currentLineHeight - nextLineHeight) > 2
     ) {
@@ -162,4 +148,4 @@ function applyParagraphBreakAfterCompat(chars) {
   return chars;
 }
 
-export { applyParagraphBreakAfterCompat };
+export { applyParagraphBreakAfterCompat, getLineMetrics };

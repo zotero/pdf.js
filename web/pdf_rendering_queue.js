@@ -39,6 +39,11 @@ class PDFRenderingQueue {
 
   onIdle = null;
 
+  // When set, no new rendering is started (in-progress rendering is
+  // unaffected). Used to keep hidden views from re-rendering after their
+  // rendered pages have been discarded to reclaim memory.
+  paused = false;
+
   printing = false;
 
   constructor() {
@@ -75,6 +80,9 @@ class PDFRenderingQueue {
    * @param {Object} currentlyVisiblePages
    */
   renderHighestPriority(currentlyVisiblePages) {
+    if (this.paused) {
+      return;
+    }
     if (this.#idleTimeout) {
       clearTimeout(this.#idleTimeout);
       this.#idleTimeout = null;

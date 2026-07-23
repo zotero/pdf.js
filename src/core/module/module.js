@@ -65,7 +65,7 @@ export class Module {
       char.pageIndex = pageIndex;
     }
 
-    return { chars, objects: data.objects };
+    return { chars, objects: data.objects, forms: data.forms };
   }
 
   async getPageChars(pageIndex) {

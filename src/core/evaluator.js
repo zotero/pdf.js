@@ -3901,6 +3901,7 @@ class PartialEvaluator {
                          seenStyles = new Set(),
                          prevRefs = null,
                          seqCounter = null,
+                         formXObjectSeqs = [],
                        }) {
     const objId = stream.dict?.objId;
     const seenRefs = new RefSet(prevRefs);
@@ -3922,7 +3923,10 @@ class PartialEvaluator {
 
     const chars = [];
     let objects = [];
+    const forms = [];
     let pathRect = null;
+    let paintRect = null;
+    let paintObjectCount = 0;
     const normalizedCharCache = new Map();
     if (!seqCounter || !Number.isFinite(seqCounter.value)) {
       seqCounter = { value: 0 };
@@ -3981,6 +3985,38 @@ class PartialEvaluator {
       return transformed;
     };
 
+    const clipRect = (rect, clipBounds) => {
+      if (!rect || clipBounds === false) {
+        return null;
+      }
+      if (!clipBounds) {
+        return rect.slice();
+      }
+      const intersection = Util.intersect(rect, clipBounds);
+      return intersection &&
+        intersection[2] > intersection[0] &&
+        intersection[3] > intersection[1]
+        ? intersection
+        : null;
+    };
+
+    const recordPaint = (rect, clipBounds = null, objectCount = 0) => {
+      const visibleRect = clipRect(rect, clipBounds);
+      if (
+        !Array.isArray(visibleRect) ||
+        visibleRect.length !== 4 ||
+        !visibleRect.every(Number.isFinite)
+      ) {
+        return;
+      }
+      if (paintRect) {
+        Util.rectBoundingBox(...visibleRect, paintRect);
+      } else {
+        paintRect = visibleRect;
+      }
+      paintObjectCount += objectCount;
+    };
+
     const preprocessor = new EvaluatorPreprocessor(stream, xref, stateManager);
     const timeSlotManager = new TimeSlotManager();
     const showSpacedTextBuffer = [];
@@ -3988,6 +4024,31 @@ class PartialEvaluator {
     const moduleGlyphRect = [0, 0, 0, 0];
 
     let textState;
+
+    const finishPath = painted => {
+      if (!pathRect) {
+        return;
+      }
+      if (pathRect[2] - pathRect[0] < 1) {
+        pathRect[2] = pathRect[0] + 1;
+      }
+      if (pathRect[3] - pathRect[1] < 1) {
+        pathRect[3] = pathRect[1] + 1;
+      }
+      const rect = computeTransformedAABB(pathRect, textState.ctm);
+      if (painted) {
+        recordPaint(rect, textState.clipBounds, 1);
+      }
+      objects.push({
+        seq: nextSeq(),
+        type: "path",
+        rect,
+        strokeWidth: Array.isArray(textState.raw.w)
+          ? textState.raw.w[0]
+          : textState.raw.w,
+      });
+      pathRect = null;
+    };
 
     async function handleSetFont(fontName, fontRef) {
       const translated = await self.loadFont(
@@ -4264,6 +4325,23 @@ class PartialEvaluator {
           }
 
           if (fontSize !== 0) {
+            const fillStrokeMode =
+              textState.textRenderingMode & TextRenderingMode.FILL_STROKE_MASK;
+            const isTextPainted =
+              fillStrokeMode !== TextRenderingMode.INVISIBLE;
+            if (isTextPainted) {
+              recordPaint(rect, textState.clipBounds);
+            }
+            if (
+              textState.textRenderingMode & TextRenderingMode.ADD_TO_PATH_FLAG
+            ) {
+              const pending = textState.pendingTextClipBounds;
+              if (pending) {
+                Util.rectBoundingBox(...rect, pending);
+              } else {
+                textState.pendingTextClipBounds = rect.slice();
+              }
+            }
             chars.push({
               seq: nextSeq(),
               u: glyphUnicode.length === 1 ? glyphUnicode : glyph.unicode,
@@ -4271,6 +4349,7 @@ class PartialEvaluator {
               rect,
               fontSize,
               fontName,
+              paintGlyph: glyph.operatorListId ?? glyph.fontChar,
               bold: fontBold,
               italic: fontItalic,
               isMonospace: fontIsMonospace,
@@ -4278,6 +4357,9 @@ class PartialEvaluator {
               baseline,
               rotation,
               diagonal,
+              ...(formXObjectSeqs.length && {
+                formXObjectSeqs,
+              }),
             });
           }
         }
@@ -4390,6 +4472,23 @@ class PartialEvaluator {
             case OPS.closePath:
               break;
 
+            case OPS.clip:
+            case OPS.eoClip: {
+              if (!pathRect || textState.clipBounds === false) {
+                break;
+              }
+              const pathClipBounds = computeTransformedAABB(
+                pathRect,
+                textState.ctm
+              );
+              if (!pathClipBounds) {
+                break;
+              }
+              textState.clipBounds =
+                clipRect(pathClipBounds, textState.clipBounds) || false;
+              break;
+            }
+
             // Path painting -> collect path object
             case OPS.stroke:
             case OPS.closeStroke:
@@ -4398,26 +4497,12 @@ class PartialEvaluator {
             case OPS.fillStroke:
             case OPS.eoFillStroke:
             case OPS.closeFillStroke:
-            case OPS.closeEOFillStroke:
+            case OPS.closeEOFillStroke: {
+              finishPath(true);
+              break;
+            }
             case OPS.endPath: {
-              if (pathRect) {
-                if (pathRect[2] - pathRect[0] < 1) {
-                  pathRect[2] = pathRect[0] + 1;
-                }
-                if (pathRect[3] - pathRect[1] < 1) {
-                  pathRect[3] = pathRect[1] + 1;
-                }
-                const tm = textState.ctm;
-                objects.push({
-                  seq: nextSeq(),
-                  type: "path",
-                  rect: computeTransformedAABB(pathRect, tm),
-                  strokeWidth: Array.isArray(textState.raw.w)
-                    ? textState.raw.w[0]
-                    : textState.raw.w,
-                });
-              }
-              pathRect = null;
+              finishPath(false);
               break;
             }
 
@@ -4484,6 +4569,23 @@ class PartialEvaluator {
             case OPS.beginText:
               textState.textMatrix = IDENTITY_MATRIX.slice();
               textState.textLineMatrix = IDENTITY_MATRIX.slice();
+              textState.pendingTextClipBounds = null;
+              break;
+            case OPS.endText:
+              if (
+                textState.pendingTextClipBounds &&
+                textState.clipBounds !== false
+              ) {
+                textState.clipBounds =
+                  clipRect(
+                    textState.pendingTextClipBounds,
+                    textState.clipBounds
+                  ) || false;
+              }
+              textState.pendingTextClipBounds = null;
+              break;
+            case OPS.setTextRenderingMode:
+              textState.textRenderingMode = args[0];
               break;
 
             // Text showing
@@ -4652,18 +4754,10 @@ class PartialEvaluator {
                 else {
                   bbox = null;
                 }
-                const tm = textState.ctm;
+                const seq = nextSeq();
+                const formPath = [...formXObjectSeqs, seq];
 
-                // Push the wrapping xobject first
-                const xobjectEntry = {
-                  seq: nextSeq(),
-                  type: "xobject",
-                  rect: computeTransformedAABB(bbox, tm),
-                  refName: name
-                };
-                objects.push(xobjectEntry);
-
-                // Recursively process the Form XObject
+                // Apply the Form's matrix before transforming its BBox.
                 const currentState = stateManager.state.clone();
                 const xObjStateManager = new StateManager(currentState);
 
@@ -4672,6 +4766,26 @@ class PartialEvaluator {
                   xObjStateManager.transform(matrix);
                 }
 
+                // Push the wrapping xobject first
+                const xobjectEntry = {
+                  seq,
+                  type: "xobject",
+                  rect: computeTransformedAABB(
+                    bbox,
+                    xObjStateManager.state.ctm
+                  ),
+                  refName: name,
+                };
+                objects.push(xobjectEntry);
+                if (xobjectEntry.rect) {
+                  xObjStateManager.state.clipBounds =
+                    clipRect(
+                      xobjectEntry.rect,
+                      xObjStateManager.state.clipBounds
+                    ) || false;
+                }
+
+                // Recursively process the Form XObject
                 const localResources = dict.get("Resources");
 
                 next(
@@ -4686,8 +4800,21 @@ class PartialEvaluator {
                     seenStyles,
                     prevRefs: seenRefs,
                     seqCounter,
+                    formXObjectSeqs: formPath,
                   }).then(result => {
                     // Attach recursive results to the xobject entry
+                    recordPaint(
+                      result.paintRect,
+                      null,
+                      result.paintObjectCount,
+                    );
+                    forms.push({
+                      seq,
+                      paintRect: result.paintRect,
+                      paintObjectCount: result.paintObjectCount,
+                      textCharCount: result.chars.length,
+                      formXObjectSeqs: formPath,
+                    }, ...result.forms);
                     chars.push(...result.chars);
                     // xobjectEntry.chars = result.chars;
                     // xobjectEntry.objects = result.objects;
@@ -4706,10 +4833,12 @@ class PartialEvaluator {
               }
               else {
                 const tm = textState.ctm;
+                const rect = computeTransformedAABB([0, 0, 1, 1], tm);
+                recordPaint(rect, textState.clipBounds, 1);
                 objects.push({
                   seq: nextSeq(),
                   type: "image",
-                  rect: computeTransformedAABB([0, 0, 1, 1], tm),
+                  rect,
                   refName: name,
                 });
               }
@@ -4717,10 +4846,12 @@ class PartialEvaluator {
             }
             case OPS.endInlineImage: {
               const tm = textState.ctm;
+              const rect = computeTransformedAABB([0, 0, 1, 1], tm);
+              recordPaint(rect, textState.clipBounds, 1);
               objects.push({
                 seq: nextSeq(),
                 type: "inline-image",
-                rect: computeTransformedAABB([0, 0, 1, 1], tm),
+                rect,
               });
               break;
             }
@@ -4740,7 +4871,7 @@ class PartialEvaluator {
           return;
         }
 
-        resolve({ chars, objects });
+        resolve({ chars, objects, forms, paintRect, paintObjectCount });
       };
 
       try {
@@ -4754,7 +4885,7 @@ class PartialEvaluator {
           warn(
             `getTextContent - ignoring errors during "${task.name}" task: "${ex}".`,
           );
-          resolve({ chars, objects });
+          resolve({ chars, objects, forms, paintRect, paintObjectCount });
           return;
         }
         reject(ex);
@@ -6209,6 +6340,12 @@ class StateManager {
 class TextState {
   ctm = new Float32Array(IDENTITY_MATRIX);
 
+  clipBounds = null;
+
+  pendingTextClipBounds = null;
+
+  textRenderingMode = TextRenderingMode.FILL;
+
   fontName = null;
 
   fontSize = 0;
@@ -6274,6 +6411,12 @@ class TextState {
 
   clone() {
     const clone = Object.assign(Object.create(this), this);
+    if (Array.isArray(this.clipBounds)) {
+      clone.clipBounds = this.clipBounds.slice();
+    }
+    if (Array.isArray(this.pendingTextClipBounds)) {
+      clone.pendingTextClipBounds = this.pendingTextClipBounds.slice();
+    }
     clone.textMatrix = this.textMatrix.slice();
     clone.textLineMatrix = this.textLineMatrix.slice();
     clone.fontMatrix = this.fontMatrix.slice();

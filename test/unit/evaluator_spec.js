@@ -14,7 +14,7 @@
  */
 
 import { createIdFactory, XRefMock } from "./test_utils.js";
-import { Dict, Name } from "../../src/core/primitives.js";
+import { Dict, Name, RefSetCache } from "../../src/core/primitives.js";
 import { FormatError, OPS } from "../../src/shared/util.js";
 import { Stream, StringStream } from "../../src/core/stream.js";
 import { OperatorList } from "../../src/core/operator_list.js";
@@ -49,6 +49,25 @@ describe("evaluator", function () {
     return operatorList;
   }
 
+  async function runPageContentCheck(evaluator, stream, resources) {
+    const task = new WorkerTask("PageContentCheck");
+    return evaluator.getPageContent({
+      stream,
+      task,
+      resources,
+    });
+  }
+
+  function addSimpleFont(resources) {
+    const fontDict = new Dict();
+    fontDict.set("Type", Name.get("Font"));
+    fontDict.set("Subtype", Name.get("Type1"));
+    fontDict.set("BaseFont", Name.get("Helvetica"));
+    const fonts = new Dict();
+    fonts.set("F1", fontDict);
+    resources.set("Font", fonts);
+  }
+
   let partialEvaluator;
 
   beforeAll(function () {
@@ -57,6 +76,10 @@ describe("evaluator", function () {
       handler: new HandlerMock(),
       pageIndex: 0,
       idFactory: createIdFactory(/* pageIndex = */ 0),
+      fontCache: new RefSetCache(),
+      builtInCMapCache: new Map(),
+      standardFontDataCache: new Map(),
+      systemFontCache: new Map(),
     });
   });
 
@@ -194,6 +217,217 @@ describe("evaluator", function () {
       expect(result.argsArray[1].length).toEqual(1);
       expect(result.argsArray[1][0]).toEqual(false);
       expect(result.argsArray[2]).toEqual([OPS.endPath, [null], null]);
+    });
+  });
+
+  describe("getPageContent", function () {
+    it("does not count a non-painting endPath operation as paint", async function () {
+      const stream = new StringStream("0 0 10 10 re n 20 20 10 10 re f");
+      const result = await runPageContentCheck(
+        partialEvaluator,
+        stream,
+        Dict.empty
+      );
+
+      expect(result.objects.length).toEqual(2);
+      expect(result.objects[0]).toEqual(
+        jasmine.objectContaining({
+          seq: 0,
+          type: "path",
+          rect: [0, 0, 10, 10],
+        })
+      );
+      expect(result.objects[1]).toEqual(
+        jasmine.objectContaining({
+          seq: 1,
+          type: "path",
+          rect: [20, 20, 30, 30],
+        })
+      );
+      expect(result.paintObjectCount).toEqual(1);
+    });
+
+    it("applies a Form matrix to its bounds and painted content", async function () {
+      const formDict = new Dict();
+      formDict.set("Subtype", Name.get("Form"));
+      formDict.set("BBox", [0, 0, 10, 10]);
+      formDict.set("Matrix", [2, 0, 0, 3, 5, 7]);
+
+      const formStream = new StringStream("0 0 10 10 re f");
+      formStream.dict = formDict;
+
+      const xObjects = new Dict();
+      xObjects.set("Fm", formStream);
+      const resources = new Dict();
+      resources.set("XObject", xObjects);
+
+      const result = await runPageContentCheck(
+        partialEvaluator,
+        new StringStream("/Fm Do"),
+        resources
+      );
+
+      expect(result.objects[0].rect).toEqual([5, 7, 25, 37]);
+      expect(result.forms[0].paintRect).toEqual([5, 7, 25, 37]);
+    });
+
+    it("keeps an unpainted Form's paint bounds empty", async function () {
+      const formDict = new Dict();
+      formDict.set("Subtype", Name.get("Form"));
+      formDict.set("BBox", [0, 0, 10, 10]);
+
+      const formStream = new StringStream("");
+      formStream.dict = formDict;
+
+      const xObjects = new Dict();
+      xObjects.set("Fm", formStream);
+      const resources = new Dict();
+      resources.set("XObject", xObjects);
+
+      const result = await runPageContentCheck(
+        partialEvaluator,
+        new StringStream("/Fm Do"),
+        resources
+      );
+
+      expect(result.forms[0].paintRect).toEqual(null);
+      expect(result.forms[0].paintObjectCount).toEqual(0);
+    });
+
+    it("intersects Form paint bounds with the caller clip", async function () {
+      const formDict = new Dict();
+      formDict.set("Subtype", Name.get("Form"));
+      formDict.set("BBox", [0, 0, 10, 10]);
+
+      const clippedFormStream = new StringStream("0 0 10 10 re f");
+      clippedFormStream.dict = formDict;
+      const unclippedFormStream = new StringStream("0 0 10 10 re f");
+      unclippedFormStream.dict = formDict;
+
+      const xObjects = new Dict();
+      xObjects.set("Clipped", clippedFormStream);
+      xObjects.set("Unclipped", unclippedFormStream);
+      const resources = new Dict();
+      resources.set("XObject", xObjects);
+
+      const result = await runPageContentCheck(
+        partialEvaluator,
+        new StringStream("q 0 0 5 5 re W n /Clipped Do Q /Unclipped Do"),
+        resources
+      );
+
+      expect(result.forms.map(form => form.paintRect)).toEqual([
+        [0, 0, 5, 5],
+        [0, 0, 10, 10],
+      ]);
+    });
+
+    it("intersects Form paint bounds with its internal clip", async function () {
+      const formDict = new Dict();
+      formDict.set("Subtype", Name.get("Form"));
+      formDict.set("BBox", [0, 0, 10, 10]);
+
+      const formStream = new StringStream("0 0 5 5 re W n 0 0 10 10 re f");
+      formStream.dict = formDict;
+
+      const xObjects = new Dict();
+      xObjects.set("Fm", formStream);
+      const resources = new Dict();
+      resources.set("XObject", xObjects);
+
+      const result = await runPageContentCheck(
+        partialEvaluator,
+        new StringStream("/Fm Do"),
+        resources
+      );
+
+      expect(result.forms[0].paintRect).toEqual([0, 0, 5, 5]);
+      expect(result.forms[0].paintObjectCount).toEqual(1);
+    });
+
+    it("propagates a parent Form BBox to nested Forms", async function () {
+      const innerDict = new Dict();
+      innerDict.set("Subtype", Name.get("Form"));
+      innerDict.set("BBox", [0, 0, 10, 10]);
+      const innerStream = new StringStream("0 0 10 10 re f");
+      innerStream.dict = innerDict;
+
+      const outerXObjects = new Dict();
+      outerXObjects.set("Inner", innerStream);
+      const outerResources = new Dict();
+      outerResources.set("XObject", outerXObjects);
+      const outerDict = new Dict();
+      outerDict.set("Subtype", Name.get("Form"));
+      outerDict.set("BBox", [0, 0, 5, 5]);
+      outerDict.set("Resources", outerResources);
+      const outerStream = new StringStream("/Inner Do");
+      outerStream.dict = outerDict;
+
+      const pageXObjects = new Dict();
+      pageXObjects.set("Outer", outerStream);
+      const pageResources = new Dict();
+      pageResources.set("XObject", pageXObjects);
+
+      const result = await runPageContentCheck(
+        partialEvaluator,
+        new StringStream("/Outer Do"),
+        pageResources
+      );
+
+      expect(result.forms.map(form => form.paintRect)).toEqual([
+        [0, 0, 5, 5],
+        [0, 0, 5, 5],
+      ]);
+    });
+
+    it("extracts invisible text without adding it to paint bounds", async function () {
+      const formDict = new Dict();
+      formDict.set("Subtype", Name.get("Form"));
+      formDict.set("BBox", [0, 0, 100, 100]);
+      const formStream = new StringStream(
+        "BT /F1 10 Tf 3 Tr 10 10 Td (A) Tj ET 50 50 10 10 re f"
+      );
+      formStream.dict = formDict;
+
+      const xObjects = new Dict();
+      xObjects.set("Fm", formStream);
+      const resources = new Dict();
+      addSimpleFont(resources);
+      resources.set("XObject", xObjects);
+
+      const result = await runPageContentCheck(
+        partialEvaluator,
+        new StringStream("/Fm Do"),
+        resources
+      );
+
+      expect(result.chars.length).toEqual(1);
+      expect(result.forms[0].paintRect).toEqual([50, 50, 60, 60]);
+    });
+
+    it("applies a text clipping path to later paint", async function () {
+      const formDict = new Dict();
+      formDict.set("Subtype", Name.get("Form"));
+      formDict.set("BBox", [0, 0, 100, 100]);
+      const formStream = new StringStream(
+        "BT /F1 10 Tf 7 Tr 10 10 Td (A) Tj ET 0 0 100 100 re f"
+      );
+      formStream.dict = formDict;
+
+      const xObjects = new Dict();
+      xObjects.set("Fm", formStream);
+      const resources = new Dict();
+      addSimpleFont(resources);
+      resources.set("XObject", xObjects);
+
+      const result = await runPageContentCheck(
+        partialEvaluator,
+        new StringStream("/Fm Do"),
+        resources
+      );
+
+      expect(result.chars.length).toEqual(1);
+      expect(result.forms[0].paintRect).toEqual(result.chars[0].rect);
     });
   });
 

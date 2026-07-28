@@ -597,11 +597,12 @@ function overlaps(rect1, rect2, rotation) {
   );
 }
 
-const dashChars = new Set([
-  '\x2D', '\u058A', '\u05BE', '\u1400', '\u1806',
-  '\u2010', '\u2011', '\u2012', '\u2013', '\u2014', '\u2015',
-  '\u2E17', '\u2E1A', '\u2E3A', '\u2E3B', '\u301C', '\u3030',
-  '\u30A0', '\uFE31', '\uFE32', '\uFE58', '\uFE63', '\uFF0D'
+// Only hyphen-like characters can plausibly be layout-only hyphenation at a
+// line ending. Semantic dashes (figure dash, en dash, em dash, etc.) must stay
+// in the text when they happen to end a line.
+const lineBreakHyphenChars = new Set([
+  '\x2D', '\u058A', '\u1400', '\u1806', '\u2010',
+  '\u2E17', '\u2E1A', '\u30A0', '\uFE63', '\uFF0D'
 ]);
 const punctuationChars = '?.,;!¡¿。、·(){}[]/$:';
 
@@ -845,7 +846,7 @@ function split(chars, reflowRTL) {
   }
 
   for (let char of chars) {
-    if (char.lineBreakAfter && dashChars.has(char.c)) {
+    if (char.lineBreakAfter && lineBreakHyphenChars.has(char.c)) {
       char.ignorable = true;
     }
   }

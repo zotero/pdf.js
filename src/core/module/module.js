@@ -1,5 +1,37 @@
 import { getStructuredChars } from './structure.js';
 
+function rectsIntersect(rect1, rect2) {
+  return !(
+    rect2[0] > rect1[2]
+    || rect2[2] < rect1[0]
+    || rect2[1] > rect1[3]
+    || rect2[3] < rect1[1]
+  );
+}
+
+// Filter raw characters before assigning word and line boundaries. Otherwise,
+// a clipped character can remain the owner of a boundary needed by visible text.
+export function filterCharsToPageView(chars, viewRect) {
+  if (!Array.isArray(chars) || !Array.isArray(viewRect) || viewRect.length !== 4) {
+    return chars;
+  }
+  if (!viewRect.every(Number.isFinite)) {
+    return chars;
+  }
+
+  return chars.filter(char => {
+    const rect = char?.rect;
+    if (!Array.isArray(rect) || rect.length !== 4 || !rect.every(Number.isFinite)) {
+      return true;
+    }
+    return rectsIntersect(rect, viewRect);
+  });
+}
+
+export function getStructuredPageChars(chars, viewRect) {
+  return getStructuredChars(filterCharsToPageView(chars, viewRect));
+}
+
 export class Module {
   constructor(pdfDocument) {
     this._pdfDocument = pdfDocument;
@@ -38,7 +70,7 @@ export class Module {
       chars.push(...item.chars);
     }
 
-    chars = getStructuredChars(chars);
+    chars = getStructuredPageChars(chars, page.view);
 
     for (let char of chars) {
       char.pageIndex = pageIndex;
@@ -60,7 +92,7 @@ export class Module {
       task,
     });
 
-    let chars = getStructuredChars(data.chars);
+    let chars = getStructuredPageChars(data.chars, page.view);
     for (let char of chars) {
       char.pageIndex = pageIndex;
     }

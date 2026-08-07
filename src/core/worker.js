@@ -959,20 +959,24 @@ class WorkerMessageHandler {
     handler.on("GetPageContent", async function (data) {
       const { pageIndex } = data;
 
-      let page = await pdfManager.getPage(pageIndex);
+      const page = await pdfManager.getPage(pageIndex);
       const task = new WorkerTask("GetPageContent: page " + pageIndex);
       startWorkerTask(task);
-      let res = await page.getPageContent({ handler, task });
-      finishWorkerTask(task);
-      return res;
+      try {
+        return await page.getPageContent({ handler, task });
+      } finally {
+        finishWorkerTask(task);
+      }
     });
 
     handler.on("GetPageData", async function (data) {
-      let task = new WorkerTask('GetPageData: ' + data.pageIndex);
+      const task = new WorkerTask("GetPageData: " + data.pageIndex);
       startWorkerTask(task);
-      let pageData = await pdfManager.pdfDocument.module.getPageData(data);
-      finishWorkerTask(task);
-      return pageData;
+      try {
+        return await pdfManager.pdfDocument.module.getPageData(data);
+      } finally {
+        finishWorkerTask(task);
+      }
     });
 
     handler.on("GetStructTree", function (data) {

@@ -405,6 +405,25 @@ describe("evaluator", function () {
       expect(result.forms[0].paintRect).toEqual([50, 50, 60, 60]);
     });
 
+    it("continues after an invalid XObject when errors are ignored", async function () {
+      const xObjects = new Dict();
+      xObjects.set("Broken", new Dict());
+      const resources = new Dict();
+      addSimpleFont(resources);
+      resources.set("XObject", xObjects);
+
+      const result = await runPageContentCheck(
+        partialEvaluator.clone({ ignoreErrors: true }),
+        new StringStream(
+          "BT /F1 10 Tf (before) Tj ET /Broken Do " +
+            "BT /F1 10 Tf (after) Tj ET"
+        ),
+        resources
+      );
+
+      expect(result.chars.map(char => char.u).join("")).toEqual("beforeafter");
+    });
+
     it("applies a text clipping path to later paint", async function () {
       const formDict = new Dict();
       formDict.set("Subtype", Name.get("Form"));

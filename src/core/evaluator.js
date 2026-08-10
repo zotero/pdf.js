@@ -4725,9 +4725,15 @@ class PartialEvaluator {
               }
               const xobjs = resources.get("XObject") || Dict.empty;
               const isValidName = args[0] instanceof Name;
-              const name = args[0].name;
+              const name = isValidName ? args[0].name : null;
 
               if (!isValidName) {
+                if (self.options.ignoreErrors) {
+                  warn(
+                    "getPageContent - ignoring XObject that is not referred to by name."
+                  );
+                  break;
+                }
                 throw new FormatError("XObject must be referred to by name.");
               }
 
@@ -4737,12 +4743,22 @@ class PartialEvaluator {
               }
 
               if (!(xobj instanceof BaseStream)) {
+                if (self.options.ignoreErrors) {
+                  warn(`getPageContent - ignoring invalid XObject: /${name}.`);
+                  break;
+                }
                 throw new FormatError("XObject should be a stream");
               }
 
               const { dict } = xobj;
               const type = dict.get("Subtype");
               if (!(type instanceof Name)) {
+                if (self.options.ignoreErrors) {
+                  warn(
+                    `getPageContent - ignoring XObject without a subtype: /${name}.`
+                  );
+                  break;
+                }
                 throw new FormatError("XObject should have a Name subtype");
               }
 

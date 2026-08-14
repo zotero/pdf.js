@@ -626,9 +626,14 @@ function medianFinite(values) {
   return arr.length % 2 ? arr[half] : (arr[half - 1] + arr[half]) / 2;
 }
 
+function charAscentBaseline(char) {
+  // Normalize the baseline coordinate so a positive shift is always in the
+  // font's ascent direction, regardless of text rotation.
+  const direction = char.rotation === 0 || char.rotation === 270 ? 1 : -1;
+  return char.baseline * direction;
+}
+
 function charPerpCenter(char) {
-  // "Perpendicular to writing direction" center used to detect sup/sub shifts.
-  // For horizontal text (0/180) this is Y center; for vertical (90/270) this is X center.
   return ((char.rotation === 0 || char.rotation === 180) && (char.rect[1] + char.rect[3]) / 2
     || (char.rotation === 90 || char.rotation === 270) && (char.rect[0] + char.rect[2]) / 2);
 }
@@ -636,19 +641,21 @@ function charPerpCenter(char) {
 function classifySupSubForLine(chars, from, to, {
   normalHeightBand = 0.15,  // +/- 15% around median height for "normal candidates"
   smallMaxRatio = 0.85,     // max height ratio to be considered small (sup/sub)
-  supMinOffset = 0.25,      // min (cPerp - cRef)/hMed for superscript (PDF coords: up/right is +)
-  subMinOffset = 0.20       // min (cRef - cPerp)/hMed for subscript
+  supMinOffset = 0.25,      // min ascent-direction baseline shift for superscript
+  subMinOffset = 0.20       // min perpendicular-center shift for subscript
 } = {}) {
   const count = to - from + 1;
   const heights = new Array(count);
+  const baselines = new Array(count);
   const perpCenters = new Array(count);
   let itemIndex = 0;
   for (let i = from; i <= to; i++) {
     const ch = chars[i];
     const h = charHeight(ch);
-    const cPerp = charPerpCenter(ch);
+    const baseline = charAscentBaseline(ch);
     heights[itemIndex] = h;
-    perpCenters[itemIndex] = cPerp;
+    baselines[itemIndex] = baseline;
+    perpCenters[itemIndex] = charPerpCenter(ch);
     itemIndex++;
   }
 
@@ -664,21 +671,29 @@ function classifySupSubForLine(chars, from, to, {
   const lo = (1 - normalHeightBand) * hMed;
   const hi = (1 + normalHeightBand) * hMed;
 
+  const normalBaselines = [];
   const normalCenters = [];
   for (let i = 0; i < count; i++) {
     if (heights[i] >= lo && heights[i] <= hi) {
+      normalBaselines.push(baselines[i]);
       normalCenters.push(perpCenters[i]);
     }
   }
-  const cRef = medianFinite(normalCenters.length >= 3 ? normalCenters : perpCenters);
+  const baselineRef = medianFinite(normalBaselines.length >= 3 ? normalBaselines : baselines);
+  const centerRef = medianFinite(normalCenters.length >= 3 ? normalCenters : perpCenters);
 
   for (let i = 0; i < count; i++) {
     const sizeRatio = heights[i] / hMed;
-    const offset = (perpCenters[i] - cRef) / hMed; // + => above (horizontal) / right (vertical)
+    const baselineOffset = (baselines[i] - baselineRef) / hMed;
+    const centerOffset = (perpCenters[i] - centerRef) / hMed;
+    const rotation = chars[from + i].rotation;
+    const supOffset = rotation === 0
+      ? baselineOffset
+      : centerOffset;
 
     const isSmall = sizeRatio <= smallMaxRatio;
-    const sup = isSmall && offset >= supMinOffset;
-    const sub = isSmall && offset <= -subMinOffset;
+    const sup = isSmall && supOffset >= supMinOffset;
+    const sub = !sup && isSmall && centerOffset <= -subMinOffset;
 
     const ch = chars[from + i];
     ch.sup = sup;

@@ -793,6 +793,7 @@ class PDFPageView extends BasePDFPageView {
     this.#computeScale();
 
     if (this.canvas) {
+      this.canvas.style = "";
       const onlyCssZoom =
         this.#hasRestrictedScaling && this.#needsRestrictedScaling;
       const postponeDrawing = drawingDelay >= 0 && drawingDelay < 1000;
@@ -1152,6 +1153,9 @@ class PDFPageView extends BasePDFPageView {
 
     const recordImages =
       this.imagesRightClickMinSize !== -1 && !this.imageCoordinates;
+
+    canvas.style.width = floorToDivide(calcRound(width), sfx[1]) + "px";
+    canvas.style.height = floorToDivide(calcRound(height), sfy[1]) + "px";
 
     // Rendering area
     const transform = outputScale.scaled

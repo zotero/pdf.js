@@ -1778,7 +1778,9 @@ class CanvasGraphics {
 
     if (isPatternFill) {
       const dims = this.current.tilingPatternDims;
-      const tileIdx = dims && fillColor.canSkipPatternCanvas(dims);
+      // Theme blending requires the pattern canvas.
+      const tileIdx =
+        !this.blender && dims && fillColor.canSkipPatternCanvas(dims);
       if (tileIdx) {
         // Draw the tile directly, skipping the pattern canvas.
         fillColor.drawPattern(this, path, this.pendingEOFill, tileIdx, opIdx);
@@ -2793,7 +2795,9 @@ class CanvasGraphics {
       warn("Knockout groups not supported.");
     }
 
+    // Theme blending requires a separate group canvas.
     if (
+      !this.blender &&
       !group.needsIsolation &&
       currentCtx.globalAlpha === 1 &&
       currentCtx.globalCompositeOperation === "source-over" &&

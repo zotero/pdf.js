@@ -244,7 +244,7 @@ class BasePDFPageView extends RenderableView {
     }
     this.renderingState = RenderingStates.FINISHED;
 
-    onFinish(renderTask);
+    onFinish(renderTask, error);
 
     if (error) {
       throw error;

@@ -45,6 +45,7 @@ import {
 } from "./pattern_helper.js";
 import { convertBlackAndWhiteToRGBA } from "../shared/image_utils.js";
 import { Blender } from './blender/blender.js';
+import { TextColoring } from "./text_coloring.js";
 
 // <canvas> contexts store most of the state we need natively.
 // However, PDF needs a bit more state, which we store here.
@@ -690,6 +691,7 @@ class CanvasGraphics {
     viewport,
     transparency = false,
     background = null,
+    textColorRegions = null,
   }) {
     // window.theme = window.theme || {
     //   background: '#F4ECD8',
@@ -718,6 +720,7 @@ class CanvasGraphics {
 
     const savedFillStyle = this.ctx.fillStyle;
     this.ctx.fillStyle = background || "#ffffff";
+    const pageBackground = this.ctx.fillStyle;
     this.ctx.fillRect(0, 0, width, height);
     this.ctx.fillStyle = savedFillStyle;
 
@@ -744,6 +747,9 @@ class CanvasGraphics {
     this.viewportScale = viewport.scale;
 
     this.baseTransform = getCurrentTransform(this.ctx);
+    this.textColoring = textColorRegions?.length
+      ? new TextColoring(this, textColorRegions, pageBackground)
+      : null;
   }
 
   executeOperatorList(
@@ -1539,6 +1545,7 @@ class CanvasGraphics {
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     // Only blit the dirty box region — the rest of the scratch canvas is
     // still transparent from the clearRect in compose().
+    this.textColoring?.recordPaint(layerBox, null, null, ctx);
     ctx.drawImage(
       layerCtx.canvas,
       layerOffsetX,
@@ -1719,6 +1726,13 @@ class CanvasGraphics {
     // stroking alpha.
     ctx.globalAlpha = this.current.strokeAlpha;
     if (this.contentVisible) {
+      this.textColoring?.recordPaint(
+        this.current.getClippedPathBoundingBox(
+          PathType.STROKE,
+          getCurrentTransform(ctx)
+        ),
+        this.current.patternStroke ? null : ctx.strokeStyle
+      );
       if (typeof strokeColor === "object" && strokeColor?.getPattern) {
         const baseTransform = strokeColor.isModifyingCurrentTransform()
           ? ctx.getTransform()
@@ -1773,6 +1787,10 @@ class CanvasGraphics {
     const isPatternFill = this.current.patternFill;
     let needRestore = false;
     const intersect = this.current.getClippedPathBoundingBox();
+    this.textColoring?.recordPaint(
+      intersect,
+      isPatternFill ? null : ctx.fillStyle
+    );
 
     this.dependencyTracker?.recordDependencies(opIdx, Dependencies.fill);
 
@@ -1863,6 +1881,7 @@ class CanvasGraphics {
   }
 
   rawFillPath(opIdx, path) {
+    this.textColoring?.recordPaint(this.current.getClippedPathBoundingBox());
     this.ctx.fill(path);
     this.dependencyTracker
       ?.recordDependencies(opIdx, Dependencies.rawFillPath)
@@ -2239,6 +2258,7 @@ class CanvasGraphics {
 
     const current = this.current;
     const font = current.font;
+    const textColoring = this.textColoring?.beginText(glyphs);
     if (font.isType3Font) {
       this.showType3Text(opIdx, glyphs);
       this.dependencyTracker?.recordShowTextOperation(opIdx);
@@ -2339,10 +2359,19 @@ class CanvasGraphics {
       ctx.strokeStyle = pattern;
     }
 
+    const textColorTransform = textColoring?.getTextTransform();
     if (font.isInvalidPDFjsFont) {
       const chars = [];
       let width = 0;
       for (const glyph of glyphs) {
+        if (textColorTransform && !glyph.isSpace) {
+          textColoring.matchRegion(
+            textColorTransform,
+            ((width + glyph.width / 2) * widthAdvanceScale) / fontSizeScale,
+            0,
+            false
+          );
+        }
         chars.push(glyph.unicode);
         width += glyph.width;
       }
@@ -2367,6 +2396,8 @@ class CanvasGraphics {
       return undefined;
     }
 
+    const canColorText =
+      textColorTransform && textColoring.canColorText(font, fontDirection);
     let x = 0,
       i;
     for (i = 0; i < glyphsLength; ++i) {
@@ -2398,6 +2429,18 @@ class CanvasGraphics {
 
       let measure;
 
+      let textColorRegion;
+      if (textColorTransform && !glyph.isSpace) {
+        // The baseline lies inside the extracted character boxes. Display-side
+        // ascent/descent can be missing or differ from extraction's metrics.
+        textColorRegion = textColoring.matchRegion(
+          textColorTransform,
+          scaledX + (width * widthAdvanceScale) / fontSizeScale / 2,
+          scaledY,
+          canColorText && (glyph.isInFont || font.missingFile)
+        );
+      }
+
       if (font.remeasure && width > 0) {
         measure = ctx.measureText(character);
 
@@ -2421,6 +2464,10 @@ class CanvasGraphics {
       // Only attempt to draw the glyph if it is actually in the embedded font
       // file or if there isn't a font file so the fallback font is shown.
       if (this.contentVisible && (glyph.isInFont || font.missingFile)) {
+        if (textColorRegion) {
+          ctx.save();
+          ctx.fillStyle = textColorRegion.color;
+        }
         if (simpleFillText && !accent) {
           // common case
           ctx.fillText(character, scaledX, scaledY);
@@ -2458,6 +2505,9 @@ class CanvasGraphics {
               patternStrokeTransform
             );
           }
+        }
+        if (textColorRegion) {
+          ctx.restore();
         }
       }
 
@@ -2683,6 +2733,7 @@ class CanvasGraphics {
       opIdx
     );
 
+    this.textColoring?.recordPaint(this.current.clipBox);
     const inv = getCurrentTransformInverse(ctx);
     if (inv) {
       const { width, height } = ctx.canvas;
@@ -2996,6 +3047,7 @@ class CanvasGraphics {
         currentMtx,
         dirtyBox
       );
+      this.textColoring?.recordPaint(dirtyBox);
       this.ctx.drawImage(groupCtx.canvas, 0, 0);
       this.ctx.restore();
       this.canvasFactory.destroy({
@@ -3108,6 +3160,12 @@ class CanvasGraphics {
     // The mask is drawn with the transform applied. Reset the current
     // transform to draw to the identity.
     ctx.setTransform(1, 0, 0, 1, 0, 0);
+    this.textColoring?.recordPaint([
+      mask.offsetX,
+      mask.offsetY,
+      mask.offsetX + maskCanvas.width,
+      mask.offsetY + maskCanvas.height,
+    ]);
     ctx.drawImage(maskCanvas, mask.offsetX, mask.offsetY);
     this.dependencyTracker
       ?.resetBBox(opIdx)
@@ -3169,6 +3227,12 @@ class CanvasGraphics {
 
       // Here we want to apply the transform at the origin,
       // hence no additional computation is necessary.
+      this.textColoring?.recordImage(
+        trans[4],
+        trans[5],
+        mask.canvas.width,
+        mask.canvas.height
+      );
       ctx.drawImage(mask.canvas, trans[4], trans[5]);
       this.dependencyTracker?.recordBBox(
         opIdx,
@@ -3229,6 +3293,7 @@ class CanvasGraphics {
       ctx.save();
       ctx.transform(...transform);
       ctx.scale(1, -1);
+      this.textColoring?.recordImage(0, -1, 1, 1);
       drawImageAtIntegerCoords(
         ctx,
         maskCanvas.canvas,
@@ -3375,6 +3440,7 @@ class CanvasGraphics {
       );
     }
 
+    this.textColoring?.recordImage(0, -height, width, height);
     drawImageAtIntegerCoords(
       ctx,
       scaled.img,
@@ -3422,6 +3488,7 @@ class CanvasGraphics {
       ctx.save();
       ctx.transform(...entry.transform);
       ctx.scale(1, -1);
+      this.textColoring?.recordImage(0, -1, 1, 1);
       drawImageAtIntegerCoords(
         ctx,
         imgToPaint,
@@ -3453,6 +3520,11 @@ class CanvasGraphics {
       .recordBBox(opIdx, this.ctx, 0, 1, 0, 1)
       .recordDependencies(opIdx, Dependencies.fill)
       .recordOperation(opIdx);
+    this.textColoring?.recordPaint(
+      [0, 0, 1, 1],
+      this.ctx.fillStyle,
+      getCurrentTransform(this.ctx)
+    );
     this.ctx.fillRect(0, 0, 1, 1);
     this.compose();
   }

@@ -4,6 +4,8 @@
  * Interface for storing and processing sRGB colors in CIELAB
  * Adapted from => https://github.com/LeaVerou/color.js
  */
+import { MathClamp } from "../../shared/math_clamp.js";
+
 export default class Color {
   constructor(...args) {
     if (Array.isArray(args[0])) {
@@ -58,6 +60,23 @@ export default class Color {
 
   get alpha() {
     return this._alpha ?? 1;
+  }
+
+  get luminance() {
+    if (this._luminance !== undefined) {
+      return this._luminance;
+    }
+    const [r, g, b] = this.rgb.map(component => {
+      const c = MathClamp(component, 0, 1);
+      return c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+    });
+    return (this._luminance = 0.2126 * r + 0.7152 * g + 0.0722 * b);
+  }
+
+  contrast(color) {
+    const a = this.luminance + 0.05;
+    const b = color.luminance + 0.05;
+    return Math.max(a, b) / Math.min(a, b);
   }
 
   deltaE(color) {

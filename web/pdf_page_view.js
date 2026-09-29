@@ -28,6 +28,7 @@ import {
   AnnotationMode,
   OutputScale,
   PixelsPerInch,
+  RenderingCancelledException,
   setLayerDimensions,
   shadow,
   TextLayerImages,
@@ -136,6 +137,12 @@ const LAYERS_ORDER = new Map([
 ]);
 
 class PDFPageView extends BasePDFPageView {
+  #requestedTextColorRegions = [];
+
+  #displayedCanvas = null;
+
+  #textColorTask = null;
+
   #abortSignal = null;
 
   #annotationMode = AnnotationMode.ENABLE_FORMS;
@@ -377,6 +384,7 @@ class PDFPageView extends BasePDFPageView {
   }
 
   setPdfPage(pdfPage) {
+    this.#requestedTextColorRegions = [];
     if (
       (typeof PDFJSDev === "undefined" || PDFJSDev.test("GENERIC")) &&
       this._isStandalone &&
@@ -611,6 +619,7 @@ class PDFPageView extends BasePDFPageView {
   _resetCanvas() {
     super._resetCanvas();
     this.#originalViewport = null;
+    this.#displayedCanvas = null;
   }
 
   reset({
@@ -760,6 +769,8 @@ class PDFPageView extends BasePDFPageView {
       this.rotation = rotation; // The rotation may be zero.
     }
     if (optionalContentConfigPromise instanceof Promise) {
+      this.#textColorTask?.cancel();
+      this.#textColorTask = null;
       this._optionalContentConfigPromise = optionalContentConfigPromise;
 
       // Ensure that the thumbnails always display the *initial* document state,
@@ -901,6 +912,8 @@ class PDFPageView extends BasePDFPageView {
     keepTextLayer = false,
     cancelExtraDelay = 0,
   } = {}) {
+    this.#textColorTask?.cancel();
+    this.#textColorTask = null;
     super.cancelRendering({ cancelExtraDelay });
 
     if (this.textLayer && (!keepTextLayer || !this.textLayer.div)) {
@@ -1024,7 +1037,85 @@ class PDFPageView extends BasePDFPageView {
       isEditing: this.#isEditing,
       recordOperations,
       recordImages,
+      textColorRegions: this.#requestedTextColorRegions,
     };
+  }
+
+  // Regions in the displayed canvas, not a pending coloring request.
+  get coloredTextRegions() {
+    return this.#displayedCanvas?.colored || [];
+  }
+
+  // Includes partially colored regions that still need an overlay fallback.
+  get renderedTextColorRegions() {
+    return this.#displayedCanvas?.context.textColorRegions || [];
+  }
+
+  setTextColorRegions(regions) {
+    if (
+      JSON.stringify(regions) ===
+      JSON.stringify(this.#requestedTextColorRegions)
+    ) {
+      return;
+    }
+    this.#requestedTextColorRegions = regions;
+    this.#textColorTask?.cancel();
+    this.#textColorTask = null;
+    this.#renderTextColors();
+  }
+
+  async #renderTextColors() {
+    if (
+      !this.#displayedCanvas ||
+      this.renderingState !== RenderingStates.FINISHED ||
+      this.#textColorTask ||
+      JSON.stringify(this.renderedTextColorRegions) ===
+        JSON.stringify(this.#requestedTextColorRegions)
+    ) {
+      return;
+    }
+    // Use the displayed canvas's viewport/scale, also during CSS-only zoom.
+    // A separate render leaves selection and annotation DOM completely alone.
+    const previousCanvas = this.canvas;
+    const canvas = previousCanvas.cloneNode(false);
+    const context = {
+      ...this.#displayedCanvas.context,
+      canvas,
+      recordOperations: false,
+      recordImages: false,
+      textColorRegions: this.#requestedTextColorRegions,
+    };
+    let task;
+    try {
+      task = this.#textColorTask = this.pdfPage.render(context);
+      await task.promise;
+      if (task !== this.#textColorTask || this.canvas !== previousCanvas) {
+        return;
+      }
+      // A detail canvas drawn with old regions must not cover the new page.
+      this.detailView?.reset();
+      // CSS-only zoom/rotation may have changed while this render was pending.
+      canvas.style.cssText = previousCanvas.style.cssText;
+      canvas.append(...previousCanvas.childNodes);
+      previousCanvas.replaceWith(canvas);
+      previousCanvas.width = previousCanvas.height = 0;
+      this.canvas = canvas;
+      this.#displayedCanvas = { context, colored: task.coloredTextRegions };
+      this.#textColorTask = null;
+      this.dispatchPageRendered(false, false);
+      this.renderingQueue?.renderHighestPriority();
+    } catch (error) {
+      if (!(error instanceof RenderingCancelledException)) {
+        console.error("Unable to color page text:", error);
+      }
+    } finally {
+      if (this.canvas !== canvas) {
+        canvas.width = canvas.height = 0;
+      }
+      if (task === this.#textColorTask) {
+        this.#textColorTask = null;
+      }
+    }
   }
 
   async draw() {
@@ -1038,6 +1129,10 @@ class PDFPageView extends BasePDFPageView {
       this.renderingState = RenderingStates.FINISHED;
       throw new Error("pdfPage is not loaded");
     }
+
+    // Use prepared regions without delaying page rendering.
+    this.#requestedTextColorRegions =
+      window.getPageTextColorRegions?.(this) || this.#requestedTextColorRegions;
 
     this.renderingState = RenderingStates.RUNNING;
 
@@ -1157,13 +1252,29 @@ class PDFPageView extends BasePDFPageView {
     const transform = outputScale.scaled
       ? [outputScale.sx, 0, 0, outputScale.sy, 0, 0]
       : null;
+    const renderContext = this._getRenderingContext(
+      canvas,
+      transform,
+      recordBBoxes,
+      recordImages
+    );
     const resultPromise = this._drawCanvas(
-      this._getRenderingContext(canvas, transform, recordBBoxes, recordImages),
+      renderContext,
       () => {
         prevCanvas?.remove();
         this._resetCanvas();
       },
-      renderTask => {
+      (renderTask, error) => {
+        if (
+          !error &&
+          JSON.stringify(this.renderedTextColorRegions) !==
+            JSON.stringify(renderContext.textColorRegions)
+        ) {
+          this.detailView?.reset();
+        }
+        this.#displayedCanvas = error
+          ? null
+          : { context: renderContext, colored: renderTask.coloredTextRegions };
         // Ensure that the thumbnails won't become partially (or fully) blank,
         // for documents that contain interactive form elements.
         this.#useThumbnailCanvas.regularAnnotations =
@@ -1173,6 +1284,9 @@ class PDFPageView extends BasePDFPageView {
           /* cssTransform */ false,
           /* isDetailView */ false
         );
+        if (!error) {
+          this.#renderTextColors();
+        }
       }
     ).then(async () => {
       if (this.renderingState !== RenderingStates.FINISHED) {
@@ -1269,7 +1383,10 @@ class PDFPageView extends BasePDFPageView {
   get thumbnailCanvas() {
     const { directDrawing, initialOptionalContent, regularAnnotations } =
       this.#useThumbnailCanvas;
-    return directDrawing && initialOptionalContent && regularAnnotations
+    return directDrawing &&
+      initialOptionalContent &&
+      regularAnnotations &&
+      !this.renderedTextColorRegions.length
       ? this.canvas
       : null;
   }

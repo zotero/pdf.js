@@ -165,7 +165,13 @@ class Blender {
   calcStyle(color) {
     if (color.chroma > 10) {
       if (this.dark) {
-        return this.adjustColorForVisibility(this.foreground, color.hex);
+        const [, a, b] = color.lab;
+        const scale = Math.max(1.2, 20 / color.chroma);
+        // Keep the established brightness, but respect dim foregrounds.
+        return new Color(
+          [Math.min(80, this.foreground.lightness), a * scale, b * scale],
+          "lab"
+        );
       }
       return color;
     }
@@ -247,39 +253,6 @@ class Blender {
     return Math.round(avg / 10_000); // scale back to 0 … 255
   }
 
-  getTransformedBoundingBox(ctx, dx, dy, dWidth, dHeight) {
-    // Helper function to transform points using the canvas transform matrix
-    function transformPoint(matrix, x, y) {
-      return {
-        x: matrix.a * x + matrix.c * y + matrix.e,
-        y: matrix.b * x + matrix.d * y + matrix.f,
-      };
-    }
-
-    // Get the current transformation matrix
-    const transform = ctx.getTransform();
-
-    // Define the original corners of the image
-    const topLeft = transformPoint(transform, dx, dy); // Top-left corner
-    const topRight = transformPoint(transform, dx + dWidth, dy); // Top-right corner
-    const bottomLeft = transformPoint(transform, dx, dy + dHeight); // Bottom-left corner
-    const bottomRight = transformPoint(transform, dx + dWidth, dy + dHeight); // Bottom-right corner
-
-    // Find the min and max x and y values
-    const minX = Math.min(topLeft.x, topRight.x, bottomLeft.x, bottomRight.x);
-    const maxX = Math.max(topLeft.x, topRight.x, bottomLeft.x, bottomRight.x);
-    const minY = Math.min(topLeft.y, topRight.y, bottomLeft.y, bottomRight.y);
-    const maxY = Math.max(topLeft.y, topRight.y, bottomLeft.y, bottomRight.y);
-
-    // Return the bounding box
-    return {
-      x: minX,
-      y: minY,
-      width: maxX - minX,
-      height: maxY - minY,
-    };
-  }
-
   customDrawImage(args) {
     this.hasBackgrounds = true;
     delete this.cachedImage;
@@ -312,8 +285,12 @@ class Blender {
     const pageWidth = this.pageWidth || this.ctx.canvas.width;
     const pageHeight = this.pageHeight || this.ctx.canvas.height;
 
-    const { width, height } = this.getTransformedBoundingBox(this.ctx, dx, dy, dWidth, dHeight);
-    const entirePage = Math.abs(pageWidth * pageHeight - width * height) < pageWidth * pageHeight * 0.25;
+    const { a, b, c, d } = this.ctx.getTransform();
+    const imageWidth = Math.abs(a * dWidth) + Math.abs(c * dHeight);
+    const imageHeight = Math.abs(b * dWidth) + Math.abs(d * dHeight);
+    const pageArea = pageWidth * pageHeight;
+    const entirePage =
+      Math.abs(pageArea - imageWidth * imageHeight) < pageArea * 0.25;
 
     const offCanvas = document.createElement("canvas");
     offCanvas.width = sWidth;
@@ -518,28 +495,6 @@ class Blender {
       data[index + 2] / 255,
     ];
     return new Color(rgb);
-  }
-
-  adjustColorForVisibility(background, color) {
-    const bg = new Color(background);
-    const fg = new Color(color);
-
-    // Get original color's properties
-    const [origL, origA, origB] = fg.lab;
-    const origChroma = Math.sqrt(origA ** 2 + origB ** 2);
-    const hue = origChroma > 0 ? Math.atan2(origB, origA) : 0;
-
-    const targetL =
-      bg.lightness < 50
-        ? 50 + (100 - bg.lightness) * 0.3
-        : 25 + bg.lightness * 0.3;
-
-    const targetChroma = Math.max(origChroma * 1.2, 20);
-    const targetA = Math.cos(hue) * targetChroma;
-    const targetB = Math.sin(hue) * targetChroma;
-
-    const newColor = new Color([targetL, targetA, targetB], "lab");
-    return newColor;
   }
 }
 

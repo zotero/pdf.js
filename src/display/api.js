@@ -1240,6 +1240,9 @@ class PDFDocumentProxy {
  *   boxes of all PDF operations that render onto the canvas.
  * @property {OperationsFilter} [operationsFilter] - If provided, only
  *   run for which this function returns `true`.
+ * @property {Array<{rect: Array<number>, color: string}>} [textColorRegions] -
+ *   PDF-space rectangles and fill colors to attempt during this render.
+ *   Unsupported text retains its original appearance.
  */
 
 /**
@@ -1469,6 +1472,7 @@ class PDFPageProxy {
     recordImages = false,
     recordOperations = false,
     operationsFilter = null,
+    textColorRegions = null,
   }) {
     this._stats?.time("Overall");
 
@@ -1559,6 +1563,8 @@ class PDFPageProxy {
           reason: error instanceof Error ? error : new Error(error),
         });
       } else {
+        internalRenderTask.coloredTextRegions =
+          internalRenderTask.gfx?.textColoring?.coloredRegions || [];
         internalRenderTask.capability.resolve();
       }
 
@@ -1600,6 +1606,7 @@ class PDFPageProxy {
         viewport,
         transform,
         background,
+        textColorRegions,
       },
       objs: this.objs,
       commonObjs: this.commonObjs,
@@ -3197,6 +3204,12 @@ class RenderTask {
     return this._internalRenderTask.capability.promise;
   }
 
+  // Regions with colored text and no detected unsupported glyphs. Published
+  // only after success; not proof of visibility after clipping or occlusion.
+  get coloredTextRegions() {
+    return this._internalRenderTask.coloredTextRegions || [];
+  }
+
   /**
    * Cancels the rendering task. If the task is currently rendering it will
    * not be cancelled until graphics pauses with a timeout. The promise that
@@ -3349,6 +3362,7 @@ class InternalRenderTask {
       viewport,
       transparency,
       background,
+      textColorRegions: this.params.textColorRegions,
     });
     this.operatorListIdx = 0;
     this.graphicsReady = true;

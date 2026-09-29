@@ -191,6 +191,8 @@ class PDFPageDetailView extends BasePDFPageView {
       transform,
       false
     );
+    // Follow the visible page, never a pending coloring request.
+    baseContext.textColorRegions = this.pageView.renderedTextColorRegions;
     const recordedBBoxes = this.pdfPage.recordedBBoxes;
 
     if (!recordedBBoxes || !this.enableOptimizedPartialRendering) {

@@ -995,6 +995,8 @@ async function startBrowser({
       "print.printer_PDF.print_to_filename": printFile,
       // Disable gpu acceleration
       "gfx.canvas.accelerated": false,
+      // Zotero 10 uses Gecko 140, which cannot compile Relaxed SIMD.
+      "javascript.options.wasm_relaxed_simd": false,
       // It's helpful to see where the caret is.
       "accessibility.browsewithcaret": true,
       // Disable the newtabpage stuff.

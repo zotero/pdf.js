@@ -3345,8 +3345,8 @@ class PartialEvaluator {
             rect,
             fontSize,
             fontName: textState.font.name,
-            bold: textState.font.bold,
-            italic: textState.font.italic,
+            bold: textState.font.isBold,
+            italic: textState.font.isItalic,
             isMonospace: !!textState.font.isMonospace,
             glyphWidth,
             baseline,
@@ -4146,8 +4146,8 @@ class PartialEvaluator {
         ctm[5] === 0;
       const scale = textState.fontMatrix[0] * fontSizeValue;
       const fontName = textState.font.name;
-      const fontBold = font.bold;
-      const fontItalic = font.italic;
+      const fontBold = font.isBold;
+      const fontItalic = font.isItalic;
       const fontIsMonospace = !!font.isMonospace;
       const isType3WithFontMatrix =
         font.isType3Font &&
